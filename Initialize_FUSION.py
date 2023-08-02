@@ -206,6 +206,7 @@ class LayoutHandler:
                                                 html.Div(id='cell-graphic-name')
                                             ],md=6)
                                         ],align='center'),
+                                        html.Hr(),
                                         dbc.Row([
                                             html.Div(
                                                 id='cell-vis-graphic',
