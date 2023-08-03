@@ -79,7 +79,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self,cell_types, center_point, map_dict, spot_dict, slide_properties, run_type, tile_size, map_bounds = None, cli_list = None):
+    def gen_vis_layout(self,cell_types, center_point, map_dict, spot_dict, slide_properties, tile_size, map_bounds = None, cli_list = None):
 
         # Main visualization layout, used in initialization and when switching to the viewer
 
@@ -530,7 +530,7 @@ class LayoutHandler:
         self.layout_dict['vis'] = vis_content
         self.description_dict['vis'] = vis_description
 
-    def gen_builder_layout(self, dataset_handler,run_type):
+    def gen_builder_layout(self, dataset_handler):
 
         # This builds the layout for the Dataset Builder functionality, 
         # allowing users to select which datasets/slides are incorporated into their 
@@ -1313,7 +1313,7 @@ class DownloadHandler:
         except OSError as e:
             print(f'OSError removing FUSION_Download directory: {e.strerror}')
 
-    def extract_annotations(self, slide, format, run_type):
+    def extract_annotations(self, slide, format):
         
         # Extracting annotations from the current slide object
         annotations = slide.geojson_ftus
