@@ -409,7 +409,9 @@ class SlideHeatVis:
              Input('cli-run','n_clicks')],
             [Output('cli-descrip','children'),
              Output('cli-run','disabled'),
-             Output('cli-results','children')],
+             Output('cli-current-image','children'),
+             Output('cli-results','children'),
+             Output('cli-results-followup','children')],
              prevent_initial_call = True
         )(self.run_analysis)
 
@@ -730,6 +732,9 @@ class SlideHeatVis:
         else:
             bounds_box = shapely.geometry.box(*bounds)
 
+        # Storing current slide boundaries
+        self.current_slide_bounds = bounds_box
+
         # Getting a dictionary containing all the intersecting spots with this current ROI
         intersecting_ftus = {}
         if 'Spots' in self.current_ftu_layers:
@@ -1017,7 +1022,7 @@ class SlideHeatVis:
                         {'data': {'source': 'one', 'target': 'two'}}
                     ]
         cell_state_droptions = []
-        cell_name = html.H2('Default Cell')
+        cell_name = html.H3('Default Cell')
 
         # Getting cell_val from the clicked location in the nephron diagram
         if not cell_clickData is None:
@@ -1031,7 +1036,7 @@ class SlideHeatVis:
             
             if len(intersecting_cell)>0:
                 cell_val = self.cell_graphics_key[intersecting_cell[0]]['full']
-                cell_name = html.H2(cell_val)
+                cell_name = html.H3(cell_val)
                 if self.cell_names_key[cell_val] in self.cell_graphics_key:
                     cell_graphic = self.cell_graphics_key[self.cell_names_key[cell_val]]['graphic']
                     cell_hierarchy = self.gen_cyto(self.cell_names_key[cell_val])
@@ -1286,9 +1291,9 @@ class SlideHeatVis:
                 # Getting slide item id
                 slide_id = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]['_id']
                 # Getting all the mapping info
-                map_bounds, base_dims, image_dims, tile_size, geojson_annotations, tile_url = self.dataset_handler.get_resource_map_data(slide_id)
+                map_bounds, base_dims, image_dims, tile_size, geojson_annotations, x_scale, y_scale, tile_url = self.dataset_handler.get_resource_map_data(slide_id)
 
-        new_slide = DSASlide(slide_name,slide_id,tile_url,geojson_annotations,image_dims,base_dims)
+        new_slide = DSASlide(slide_name,slide_id,tile_url,geojson_annotations,image_dims,base_dims,x_scale,y_scale)
 
         pre_slide_properties = new_slide.properties_list
 
@@ -1901,13 +1906,36 @@ class SlideHeatVis:
 
             # Get description for cli
             cli_results = 'Click "Run Job!" to do the damn thing!'
-        
+
+            # Getting current image region:
+            print(self.current_slide_bounds)
+            print(list(self.current_slide_bounds.exterior.coords))
+            test = np.array(self.wsi.convert_map_coords(list(self.current_slide_bounds.exterior.coords)))
+            print(f'converted coordinates: {test}')
+            min_x = np.min(test[:,0])
+            min_y = np.min(test[:,1])
+            max_x = np.max(test[:,0])
+            max_y = np.max(test[:,1])
+            print(f'min_x: {min_x}, min_y: {min_y}, max_x: {max_x}, max_y: {max_y}')
+            image_region = self.dataset_handler.get_image_region(self.wsi.item_id,[min_x,min_y,max_x,max_y])
+            print(f'shape of image region: {np.shape(image_region)}')
+
+            current_image_region = html.Div(
+                dcc.Graph(figure = go.Figure(px.imshow(image_region)))
+            )
+
+            cli_results_followup = html.Div()
+
         elif ctx.triggered_id=='cli-run':
             
             # Running job:
             cli_results = 'And then the job would run'
+
+            cli_results_followup = html.Div(
+                dbc.Button('And this would tell you what to do next')
+            )
         
-        return cli_description, cli_butt_disable, cli_results
+        return cli_description, cli_butt_disable, current_image_region, cli_results, cli_results_followup
 
     def update_upload_requirements(self,collection,new_collect,upload_type):
         
@@ -2089,7 +2117,7 @@ def app(*args):
     asct_b_table = pd.read_csv(dsa_url+f'item/{asct_b_table_id}/download?token={token}',skiprows=list(range(10)))
 
     print(f'first slide: {initial_collection_contents[0]["name"]}')
-    map_bounds, base_dims, image_dims, tile_size, geojson_annotations, slide_url = dataset_handler.get_resource_map_data(resource=initial_collection_contents[0]['_id'])
+    map_bounds, base_dims, image_dims, tile_size, geojson_annotations, x_scale, y_scale, slide_url = dataset_handler.get_resource_map_data(resource=initial_collection_contents[0]['_id'])
     print(f'map_bounds: {map_bounds}')
     print(f'base_dims: {base_dims}')
     print(f'image_dims: {image_dims}')
@@ -2100,7 +2128,7 @@ def app(*args):
     slide_item_id = initial_collection_contents[0]['_id']
     slide_names = [i['name'] for i in initial_collection_contents if 'largeImage' in i]
 
-    wsi = DSASlide(slide_name,slide_item_id,slide_url,geojson_annotations,image_dims,base_dims)
+    wsi = DSASlide(slide_name,slide_item_id,slide_url,geojson_annotations,image_dims,base_dims,x_scale,y_scale)
     center_point = [0,0]
 
     pre_slide_properties = wsi.properties_list

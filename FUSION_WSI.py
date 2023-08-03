@@ -23,6 +23,8 @@ class DSASlide:
                  geojson_annotations,
                  image_dims,
                  base_dims,
+                 x_scale,
+                 y_scale,
                  manual_rois = [],
                  marked_ftus = []):
 
@@ -36,9 +38,8 @@ class DSASlide:
         self.marked_ftus = marked_ftus
 
         # Initializing conversion scales
-        self.x_scale = self.image_dims[0]/self.base_dims[0]
-        self.y_scale = self.image_dims[1]/self.base_dims[1]
-        self.y_scale *=-1
+        self.x_scale = x_scale
+        self.y_scale = y_scale
 
         # Processing geojson_annotations:
         self.ftu_names = np.unique([f['properties']['name'] for f in self.geojson_annotations['features']])
@@ -113,12 +114,15 @@ class DSASlide:
             raise ValueError
         
     def convert_map_coords(self, input_coords):
+        
+        print(f'x_scale: {self.x_scale}')
+        print(f'y_scale: {self.y_scale}')
 
         # Convert map coordinates to slide coordinates
         # input_coords are in terms of the tile map and returned coordinates are relative to the slide pixel dimensions
         return_coords = []
         for i in input_coords:
-            return_coords.append([i[0]*self.x_scale,i[1]*self.y_scale])
+            return_coords.append([i[0]/self.x_scale,i[1]/self.y_scale])
 
         return return_coords
 

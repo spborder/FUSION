@@ -161,9 +161,8 @@ class LayoutHandler:
                 'label':'data(label)',
                 'width':45,
                 'height':45,
-                'background-color':'white',
+                'background-color':'rgba(255,255,255,0)',
                 'background-fit':'cover',
-                'background-clip':'none',
                 'background-image-opacity':1,
                 'background-image':'data(url)',
                 }
@@ -182,14 +181,15 @@ class LayoutHandler:
         neph_figure.update_traces(hoverinfo='none',hovertemplate=None)
         neph_figure.update_xaxes(showticklabels=False)
         neph_figure.update_yaxes(showticklabels=False)
-        neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0})
+        neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0},
+                                  title=dict(text='Nephron Diagram',font=dict(size=20),yref='paper'))
 
         cell_graphic_tab = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col([
-                        dbc.Label('Cell State:',html_for = 'cell-vis-drop'),
-                        dcc.Dropdown(['Cell States'],placeholder='Available Cell States', id = 'cell-vis-drop')
+                        #dbc.Label('Cell State:',html_for = 'cell-vis-drop'),
+                        dcc.Dropdown(['Cell States'],placeholder='Cell States', id = 'cell-vis-drop')
                     ],md=4),
                     dbc.Col([
                         html.Div(id='cell-graphic-name')
@@ -221,7 +221,12 @@ class LayoutHandler:
                             cyto.Cytoscape(
                                 id = 'cell-hierarchy',
                                 layout = {'name':'preset'},
-                                style = {'width':'100%','height':'100%'},
+                                style = {
+                                    'width':'100%',
+                                    'height':'400px',
+                                    'display':'inline-block',
+                                    'margin':'auto',
+                                    'background-color':'rgb(221,221,221)'},
                                 minZoom=0.5,
                                 maxZoom=3,
                                 stylesheet=cyto_style,
@@ -245,8 +250,13 @@ class LayoutHandler:
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col([
-                        dcc.Graph(id='neph-img',figure = neph_figure),
-                        dcc.Tooltip(id='neph-tooltip',loading_text='')
+                        dbc.Row([
+                            html.H2('Nephron Diagram')
+                        ]),
+                        dbc.Row([
+                            dcc.Graph(id='neph-img',figure=neph_figure),
+                            dcc.Tooltip(id='neph-tooltip',loading_text='')
+                        ])
                     ],md=5),
                     dbc.Col([
                         dbc.Tabs([
@@ -440,11 +450,22 @@ class LayoutHandler:
                     dbc.Label('CLI Description:',html_for='cli-descrip'),
                     html.Div(id='cli-descrip')
                 ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Label('Current Image Region',html_for='cli-current-image'),
+                    html.Div(id = 'cli-current-image')
+                ]),
+                html.Hr(),
                 dbc.Row([
                     dbc.Button('Run Job!',color='primary',id='cli-run',disabled=True)
                 ]),
+                html.Hr(),
                 dbc.Row([
                     dcc.Loading(html.Div(id='cli-results'))
+                ]),
+                html.B(),
+                dbc.Row([
+                    html.Div(id = 'cli-results-followup')
                 ])
             ])
         ])
@@ -1118,7 +1139,7 @@ class GirderHandler:
                     final_ann['features'].append(f_dict)
 
 
-        return final_ann
+        return final_ann, base_x_scale*x_scale, base_y_scale*y_scale
 
     def get_resource_map_data(self,resource):
         # Getting all of the necessary materials for loading a new slide
@@ -1159,13 +1180,13 @@ class GirderHandler:
         annotations = self.get_annotations(item_id)
 
         # Step 6: Converting Histomics/large-image annotations to GeoJSON
-        geojson_annotations = self.convert_json(annotations,image_dims,base_dims,map_bounds)
+        geojson_annotations, x_scale, y_scale = self.convert_json(annotations,image_dims,base_dims,map_bounds)
 
         # Step 7: Getting user token and tile url
         user_token = self.get_token()
         tile_url = self.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+user_token
 
-        return map_bounds, base_dims, image_dims, tile_dims[0],geojson_annotations, tile_url
+        return map_bounds, base_dims, image_dims, tile_dims[0],geojson_annotations, x_scale, y_scale, tile_url
 
     def get_cli_list(self):
         # Get a list of possible CLIs available for current user
