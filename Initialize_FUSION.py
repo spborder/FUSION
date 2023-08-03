@@ -184,6 +184,63 @@ class LayoutHandler:
         neph_figure.update_yaxes(showticklabels=False)
         neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0})
 
+        cell_graphic_tab = dbc.Card([
+            dbc.CardBody([
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Label('Cell State:',html_for = 'cell-vis-drop'),
+                        dcc.Dropdown(['Cell States'],placeholder='Available Cell States', id = 'cell-vis-drop')
+                    ],md=4),
+                    dbc.Col([
+                        html.Div(id='cell-graphic-name')
+                    ],md=8)
+                ],align = 'center',style={'marginBottom':'10px'}),
+                html.Hr(),
+                dbc.Row([
+                    html.Div(
+                        id = 'cell-vis-graphic',
+                        children = [
+                            html.Img(
+                                id = 'cell-graphic',
+                                src = './assets/cell_graphics/default_cell_graphic.png',
+                                height = '100%',
+                                width = '100%'
+                            )
+                        ]
+                    )
+                ],align='center',style={'marginBottom':'10px'})
+
+            ])
+        ])
+
+        cell_hierarchy_tab = dbc.Card([
+            dbc.CardBody([
+                dbc.Row(
+                    dbc.Col([
+                        html.Div(
+                            cyto.Cytoscape(
+                                id = 'cell-hierarchy',
+                                layout = {'name':'preset'},
+                                style = {'width':'100%','height':'100%'},
+                                minZoom=0.5,
+                                maxZoom=3,
+                                stylesheet=cyto_style,
+                                elements = [
+                                    {'data': {'id': 'one', 'label': 'Node 1'}, 'position': {'x': 75, 'y': 75}},
+                                    {'data': {'id': 'two', 'label': 'Node 2'}, 'position': {'x': 200, 'y': 200}},
+                                    {'data': {'source': 'one', 'target': 'two'}}
+                                ]
+                            )
+                        )
+                    ],md=12)
+                ,align='center'),
+                dbc.Row(self.gen_info_button('Pan and click nodes with the mouse for more information!')),
+                dbc.Row(html.Div(id = 'label-p')),
+                dbc.Row(html.Div(id='id-p')),
+                dbc.Row(html.Div(id='notes-p'))
+            ])
+        ])
+
         cell_card = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
@@ -192,67 +249,10 @@ class LayoutHandler:
                         dcc.Tooltip(id='neph-tooltip',loading_text='')
                     ],md=5),
                     dbc.Col([
-                        dbc.Row([
-                            dbc.Card([
-                                dbc.CardHeader('Cell Graphic'),
-                                dbc.CardBody([
-                                    dbc.Row([
-                                        dbc.Row([
-                                            dbc.Col([
-                                                dbc.Label('Cell States:',html_for='cell-vis-drop'),
-                                                dcc.Dropdown(['Cell States'],placeholder='Available Cell States',id='cell-vis-drop')
-                                            ],md=4),
-                                            dbc.Col([
-                                                html.Div(id='cell-graphic-name')
-                                            ],md=8)
-                                        ],align='center'),
-                                        html.Hr(),
-                                        dbc.Row([
-                                            html.Div(
-                                                id='cell-vis-graphic',
-                                                children = [
-                                                    html.Img(
-                                                        id = 'cell-graphic',
-                                                        src = './assets/cell_graphics/default_cell_graphic.png',
-                                                        height = '100%',
-                                                        width = '100%'
-                                                    )
-                                                ])
-                                        ])
-                                    ],align='center')
-                                ])
-                            ])
-                        ],align='center'),
-                        dbc.Row([
-                            dbc.Card([
-                                dbc.CardHeader('Cell Hierarchy'),
-                                dbc.CardBody([
-                                    dbc.Row(
-                                        dbc.Col([
-                                            html.Div(
-                                                cyto.Cytoscape(
-                                                    id = 'cell-hierarchy',
-                                                    layout = {'name':'preset'},
-                                                    style = {'width':'100%','height':'300px'},
-                                                    minZoom=0.5,
-                                                    maxZoom=3,
-                                                    stylesheet=cyto_style,
-                                                    elements = [
-                                                        {'data': {'id': 'one', 'label': 'Node 1'}, 'position': {'x': 75, 'y': 75}},
-                                                        {'data': {'id': 'two', 'label': 'Node 2'}, 'position': {'x': 200, 'y': 200}},
-                                                        {'data': {'source': 'one', 'target': 'two'}}
-                                                        ]
-                                                )
-                                            )
-                                        ],md=12)
-                                    ),
-                                    dbc.Row(self.gen_info_button('Pan and click nodes with the mouse for more information!')),
-                                    dbc.Row(html.Div(id = 'label-p')),
-                                    dbc.Row(html.Div(id='id-p')),
-                                    dbc.Row(html.Div(id='notes-p'))
-                                ])
-                            ])
-                        ],align='center')
+                        dbc.Tabs([
+                            dbc.Tab(cell_graphic_tab, label = 'Cell Graphic'),
+                            dbc.Tab(cell_hierarchy_tab, label = 'Cell Hierarchy')
+                        ])
                     ],md=7)
                 ],align='center')
             ]),

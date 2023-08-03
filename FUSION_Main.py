@@ -1017,7 +1017,7 @@ class SlideHeatVis:
                         {'data': {'source': 'one', 'target': 'two'}}
                     ]
         cell_state_droptions = []
-        cell_name = html.P('Default Cell')
+        cell_name = html.H2('Default Cell')
 
         # Getting cell_val from the clicked location in the nephron diagram
         if not cell_clickData is None:
@@ -1031,7 +1031,7 @@ class SlideHeatVis:
             
             if len(intersecting_cell)>0:
                 cell_val = self.cell_graphics_key[intersecting_cell[0]]['full']
-                cell_name = html.P(cell_name)
+                cell_name = html.H2(cell_val)
                 if self.cell_names_key[cell_val] in self.cell_graphics_key:
                     cell_graphic = self.cell_graphics_key[self.cell_names_key[cell_val]]['graphic']
                     cell_hierarchy = self.gen_cyto(self.cell_names_key[cell_val])
@@ -2157,8 +2157,8 @@ def app(*args):
 
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names)
-    layout_handler.gen_vis_layout(cell_names,center_point,map_dict,spot_dict,slide_properties,run_type,tile_size,map_bounds,cli_list)
-    layout_handler.gen_builder_layout(dataset_handler,run_type)
+    layout_handler.gen_vis_layout(cell_names,center_point,map_dict,spot_dict,slide_properties,tile_size,map_bounds,cli_list)
+    layout_handler.gen_builder_layout(dataset_handler)
     layout_handler.gen_uploader_layout(dataset_handler)
 
     download_handler = DownloadHandler(dataset_handler)
