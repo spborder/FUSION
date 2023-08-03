@@ -201,10 +201,10 @@ class LayoutHandler:
                                             dbc.Col([
                                                 dbc.Label('Cell States:',html_for='cell-vis-drop'),
                                                 dcc.Dropdown(['Cell States'],placeholder='Available Cell States',id='cell-vis-drop')
-                                            ],md=6),
+                                            ],md=4),
                                             dbc.Col([
                                                 html.Div(id='cell-graphic-name')
-                                            ],md=6)
+                                            ],md=8)
                                         ],align='center'),
                                         html.Hr(),
                                         dbc.Row([
