@@ -5,7 +5,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 color_key,
                 current_cell,
                 fillOpacity,
-                ftu_colors
+                ftu_color
             } = context.props.hideout;
 
             if (current_cell === 'cluster') {
@@ -60,6 +60,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 style.fillOpacity = 0.0;
             }
 
+            style.color = ftu_color;
             return style;
         }
 

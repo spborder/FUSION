@@ -181,8 +181,7 @@ class LayoutHandler:
         neph_figure.update_traces(hoverinfo='none',hovertemplate=None)
         neph_figure.update_xaxes(showticklabels=False)
         neph_figure.update_yaxes(showticklabels=False)
-        neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0},
-                                  title=dict(text='Nephron Diagram',font=dict(size=20),yref='paper'))
+        neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0})
 
         cell_graphic_tab = dbc.Card([
             dbc.CardBody([
@@ -1244,6 +1243,15 @@ class GirderHandler:
         image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
 
         return image_region
+
+    def upload_data(self,data,data_name,target_id,target_type):
+
+        # Trying to just upload the entire file at once?
+        self.gc.post('/file',data=data,parameters={'parentType':target_type,'parentId':target_id,'name':data_name})
+
+
+
+
     """
     def get_cli_input_list(self,cli_id):
         #TODO: figure out how to extract list of expected inputs & types for a given CLI from XML

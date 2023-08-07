@@ -51,6 +51,7 @@ from dash_extensions.javascript import assign, Namespace, arrow_function
 from dash_extensions.enrich import DashProxy, html, Input, Output, MultiplexerTransform, State
 from dash_extensions import Download
 
+
 from timeit import default_timer as timer
 #import diskcache
 
@@ -155,7 +156,7 @@ class SlideHeatVis:
         self.color_map = cm.get_cmap('jet',255)
         self.cell_vis_val = 0.5
         self.ftu_style_handle = assign("""function(feature,context){
-            const {color_key,current_cell,fillOpacity,ftu_colors} = context.props.hideout;
+            const {color_key,current_cell,fillOpacity,ftu_color} = context.props.hideout;
             
             if (current_cell==='cluster'){
                 if (current_cell in feature.properties){
@@ -209,6 +210,7 @@ class SlideHeatVis:
                 style.fillOpacity = 0.0;
             }
 
+            style.color = ftu_color;
             return style;
             }
             """
@@ -456,6 +458,16 @@ class SlideHeatVis:
               Output('new-collect-entry','disabled')],
              prevent_initial_call=True
         )(self.update_upload_requirements)
+
+        # Uploading data to DSA collection
+        self.app.callback(
+            [Input({'type':'wsi-upload','index':ALL},'contents'),
+             Input({'type':'omics-upload','index':ALL},'contents')],
+             [State({'type':'wsi-upload','index':ALL},'filename'),
+              State({'type':'omics-upload','index':ALL},'filename')],
+              [Output('slide-qc-results','children'),
+               Output('organ-type','disabled')]
+        )(self.upload_data)
 
         # Enabling components after upload is complete
 
@@ -894,18 +906,21 @@ class SlideHeatVis:
         raw_values_list = np.unique(raw_values_list)
         
         # Converting to RGB
-        if max(raw_values_list)<=1:
-            rgb_values = np.uint8(255*self.color_map(np.uint8(255*raw_values_list)))[:,0:3]
+        if len(raw_values_list)>0:
+            if max(raw_values_list)<=1:
+                rgb_values = np.uint8(255*self.color_map(np.uint8(255*raw_values_list)))[:,0:3]
+            else:
+                scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
+                rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
+
+            hex_list = []
+            for row in range(rgb_values.shape[0]):
+                hex_list.append('#'+"%02x%02x%02x" % (rgb_values[row,0],rgb_values[row,1],rgb_values[row,2]))
+
+            self.hex_color_key = {i:j for i,j in zip(raw_values_list,hex_list)}
+            #print(f'hex color key: {self.hex_color_key}')
         else:
-            scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
-            rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
-
-        hex_list = []
-        for row in range(rgb_values.shape[0]):
-            hex_list.append('#'+"%02x%02x%02x" % (rgb_values[row,0],rgb_values[row,1],rgb_values[row,2]))
-
-        self.hex_color_key = {i:j for i,j in zip(raw_values_list,hex_list)}
-        #print(f'hex color key: {self.hex_color_key}')
+            self.hex_color_key = {}
 
     def update_cell(self,cell_val,vis_val):
         
@@ -963,8 +978,8 @@ class SlideHeatVis:
                     struct: {
                         'geojson':{'type':'FeatureCollection','features':[i for i in self.wsi.geojson_ftus['features'] if i['properties']['name']==struct]},
                         'id': {'type':'ftu-bounds','index':self.wsi.ftu_names.index(struct)},
-                        'color':'',
-                        'hover_color':''
+                        'color':self.ftu_colors[struct],
+                        'hover_color':'#9caf00'
                     }
                     for struct in self.wsi.ftu_names
                 }
@@ -973,7 +988,7 @@ class SlideHeatVis:
             spot_dict = {
                 'geojson':self.wsi.geojson_spots,
                 'id':{'type':'ftu-bounds','index':len(self.wsi.ftu_names)},
-                'color':'#dffa00',
+                'color':self.ftu_colors["Spots"],
                 'hover_color':'#9caf00'
             }
 
@@ -981,7 +996,7 @@ class SlideHeatVis:
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=vis_val, ftu_colors = self.ftu_colors),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=vis_val, ftu_color = map_dict['FTUs'][struct]['color']),
                                     hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'],dashArray='')))
                     ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
                 )
@@ -991,7 +1006,7 @@ class SlideHeatVis:
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(style = self.ftu_style_handle),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = vis_val, ftu_colors = self.ftu_colors),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = vis_val, ftu_color = spot_dict['color']),
                                     hoverStyle = arrow_function(dict(weight=5,color=spot_dict['hover_color'],dashArray='')))
                     ),name = 'Spots', checked = False, id = self.wsi.item_id+'_Spots'
                 )
@@ -1002,7 +1017,7 @@ class SlideHeatVis:
                     dl.Overlay(
                         dl.LayerGroup(
                             dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle),
-                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = vis_val, ftu_colors = self.ftu_colors),
+                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = vis_val, ftu_color = 'white'),
                                         hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'],dashArray='')))
                         ), name = f'Manual ROI {m_idx}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
                     )
@@ -1310,14 +1325,8 @@ class SlideHeatVis:
 
         self.wsi = new_slide
 
-        if not self.current_cell in ['max','cluster']:
-            self.update_hex_color_key('cell_value')
-        elif self.current_cell == 'max':
-            self.update_hex_color_key('max_cell')
-        elif self.current_cell == 'cluster':
-            self.update_hex_color_key('cluster')
-        else:
-            self.update_hex_color_key(self.current_cell)
+        # Updating overlays colors according to the current cell
+        self.update_hex_color_key(self.current_cell)
 
         # map_dict contains ftu geojson information
         map_dict = {
@@ -1451,7 +1460,8 @@ class SlideHeatVis:
 
         img_list = []
         for idx,s in enumerate(sample_info):
-            # openslide needs min_x, min_y, width, height
+            #TODO: Make this part not require coordinates in the properties
+            print(f's: {s}')
             min_x = int(s['Min_x_coord'])
             min_y = int(s['Min_y_coord'])
             max_x = int(s['Max_x_coord'])
@@ -1459,7 +1469,7 @@ class SlideHeatVis:
 
             # Pulling image region using provided coordinates
             # Have to find the slide id for this particular sample
-            image_region = self.dataset_handler.get_image_region(s['item_id'],[min_x,min_y,max_x,max_y])
+            image_region = self.dataset_handler.get_image_region(s['slide_id'],[min_x,min_y,max_x,max_y])
             img_list.append(resize(np.array(image_region),output_shape=(512,512,3)))
 
 
@@ -1908,17 +1918,12 @@ class SlideHeatVis:
             cli_results = 'Click "Run Job!" to do the damn thing!'
 
             # Getting current image region:
-            print(self.current_slide_bounds)
-            print(list(self.current_slide_bounds.exterior.coords))
-            test = np.array(self.wsi.convert_map_coords(list(self.current_slide_bounds.exterior.coords)))
-            print(f'converted coordinates: {test}')
-            min_x = np.min(test[:,0])
-            min_y = np.min(test[:,1])
-            max_x = np.max(test[:,0])
-            max_y = np.max(test[:,1])
-            print(f'min_x: {min_x}, min_y: {min_y}, max_x: {max_x}, max_y: {max_y}')
+            wsi_coords = np.array(self.wsi.convert_map_coords(list(self.current_slide_bounds.exterior.coords)))
+            min_x = np.min(wsi_coords[:,0])
+            min_y = np.min(wsi_coords[:,1])
+            max_x = np.max(wsi_coords[:,0])
+            max_y = np.max(wsi_coords[:,1])
             image_region = self.dataset_handler.get_image_region(self.wsi.item_id,[min_x,min_y,max_x,max_y])
-            print(f'shape of image region: {np.shape(image_region)}')
 
             current_image_region = html.Div(
                 dcc.Graph(figure = go.Figure(px.imshow(image_region)))
@@ -1934,6 +1939,8 @@ class SlideHeatVis:
             cli_results_followup = html.Div(
                 dbc.Button('And this would tell you what to do next')
             )
+
+            current_image_region = html.Div()
         
         return cli_description, cli_butt_disable, current_image_region, cli_results, cli_results_followup
 
@@ -1945,14 +1952,14 @@ class SlideHeatVis:
             if not collection=='New Collection':
 
                 # Getting the collection id
-                collection_id = self.dataset_handler.get_resource_id(f'/collection/{collection}')
+                self.upload_collection_id = self.dataset_handler.get_resource_id(f'/collection/{collection}')
 
             else:
                 if new_collect is not None:
 
                     # Creating a new collection with this name
                     self.dataset_handler.gc.post('/collection',parameters={'name':new_collect})
-                    collection_id = self.dataset_handler.get_resource_id(f'/collection/{new_collect}')
+                    self.upload_collection_id = self.dataset_handler.get_resource_id(f'/collection/{new_collect}')
             
             upload_style = {
                 'width':'100%',
@@ -1993,6 +2000,8 @@ class SlideHeatVis:
                     ])
                 ])
             
+                self.upload_check = {'WSI':False,'Omics':False}
+
             elif upload_type=='CODEX':
 
                 upload_reqs = html.Div([
@@ -2009,6 +2018,8 @@ class SlideHeatVis:
                         html.Div(id={'type':'wsi-upload-contents','index':1})
                     ])
                 ])
+
+                self.upload_check = {'WSI':False}
 
             else:
                 upload_reqs = html.Div(
@@ -2048,6 +2059,70 @@ class SlideHeatVis:
         else:
             raise exceptions.PreventUpdate
 
+    def upload_data(self,wsi_file,omics_file,wsi_name,omics_name):
+
+        # Posting contents based on the ctx.triggered_id
+        if ctx.triggered_id['type']=='wsi-upload':
+            
+            self.dataset_handler.upload_data(wsi_file,wsi_name,self.upload_collection_id,'collection')
+
+        elif ctx.triggered_id['type']=='omics-upload':
+
+            self.dataset_handler.upload_data(omics_file,omics_name,self.upload_collection_id,'collection')
+
+        # Checking the upload check
+        if all([self.upload_check[i] for i in self.upload_check]):
+            print('All set!')
+
+            slide_qc_table = self.slide_qc(self.upload_collection_id)
+
+            slide_qc_results = dash_table.DataTable(
+                id = {'type':'slide-qc-table','index':0},
+                columns = [{'name':i, 'id': i, 'deletable':False, 'selectable':True} for i in slide_qc_results],
+                data = slide_qc_table.to_dict('records'),
+                editable=False,
+                filter_action='native',
+                sort_action='native',
+                sort_mode='multi',
+                column_selectable = 'single',
+                row_selectable = 'multi',
+                row_deletable = False,
+                selected_columns = [],
+                selected_rows = [],
+                page_action = 'native',
+                page_current = 0,
+                page_size = 10,
+                style_cell = {
+                    'overflow':'hidden',
+                    'textOverflow':'ellipsis',
+                    'maxWidth':0
+                },
+                tooltip_data = [
+                    {
+                        column:{'value':str(value), 'type':'markdown'}
+                        for column,value in row.items()
+                    } for row in slide_qc_table.to_dict('records')
+                ],
+                tooltip_duration = None
+            )
+
+            organ_type_disabled = False
+
+            return slide_qc_results, organ_type_disabled
+        
+        else:
+            raise exceptions.PreventUpdate
+
+    def slide_qc(self, upload_collection_id):
+
+        collection_contents = self.dataset_handler.get_collection_items(upload_collection_id)
+
+        #TODO: Activate the HistoQC plugin from here and return some metrics
+        histo_qc_output = pd.DataFrame.from_records(collection_contents)
+
+        return histo_qc_output
+
+
 #if __name__ == '__main__':
 def app(*args):
 
@@ -2075,10 +2150,8 @@ def app(*args):
     # Initial collection TODO: get some default image as a placeholder in the visualization
     initial_collection = '/collection/10X_Visium/FFPE Cohort/Histology/Reference'
     path_type = 'folder'
-    #setattr(dataset_handler,'current_collection_path',initial_collection)
     print(f'initial collection: {initial_collection}')
     initial_collection_id = dataset_handler.gc.get('resource/lookup',parameters={'path':initial_collection})
-    #setattr(dataset_handler,'current_collection_id',initial_collection_id)
     
     # Saving & organizing relevant id's in GirderHandler
     dataset_handler.initialize_folder_structure(initial_collection,path_type)
@@ -2086,7 +2159,6 @@ def app(*args):
     print(f'found initial collection: {initial_collection_id}')
     # Contents of folder
     initial_collection_contents = dataset_handler.gc.get(f'resource/{initial_collection_id["_id"]}/items',parameters={'type':path_type})
-    #print(f'contents: {initial_collection_contents}')
     initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
 
     # Loading metadata for initial collection
@@ -2098,7 +2170,8 @@ def app(*args):
             for e in g['annotation']['elements']:
                 if 'user' not in e:
                     e['user'] = {}
-                e['user']['item_id'] = i['_id']
+                e['user']['slide_id'] = i['_id']
+                e['user']['annotation_id'] = e['id']
                 metadata.append(e['user'])
 
     # Getting graphics_reference.json from the FUSION Assets folder
@@ -2129,7 +2202,7 @@ def app(*args):
     slide_names = [i['name'] for i in initial_collection_contents if 'largeImage' in i]
 
     wsi = DSASlide(slide_name,slide_item_id,slide_url,geojson_annotations,image_dims,base_dims,x_scale,y_scale)
-    center_point = [0,0]
+    center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),-0.5*(map_bounds[0][1]+map_bounds[1][1])]
 
     pre_slide_properties = wsi.properties_list
     slide_properties = []
@@ -2146,14 +2219,21 @@ def app(*args):
             if main_p in visualization_properties:
                 slide_properties.append(p.replace(cell_abbrev,cell_graphics_key[cell_abbrev]['full']))
 
+    ftu_colors = {
+        'Glomeruli':'#390191',
+        'Tubules':'#e71d1d',
+        'Arterioles':'#b6d7a8',
+        'Spots':'#dffa00'
+    }
+
     map_dict = {
         'url':slide_url,
         'FTUs':{
             struct : {
                 'geojson':{'type':'FeatureCollection','features':[i for i in wsi.geojson_annotations['features'] if i['properties']['name']==struct]},
                 'id':{'type':'ftu-bounds','index':wsi.ftu_names.index(struct)},
-                'color':'',
-                'hover_color':''
+                'color':ftu_colors[struct],
+                'hover_color':'#9caf00'
             }
             for struct in wsi.ftu_names
         }
@@ -2161,7 +2241,7 @@ def app(*args):
     spot_dict = {
         'geojson':{'type':'FeatureCollection','features':[i for i in wsi.geojson_annotations['features'] if i['properties']['name']=='Spots']},
         'id':{'type':'ftu-bounds','index':len(wsi.ftu_names)},
-        'color':'#dffa00',
+        'color':ftu_colors["Spots"],
         'hover_color':'#9caf00'
     }
 
@@ -2179,6 +2259,9 @@ def app(*args):
             cli_dict['disabled'] = True
         
         cli_list.append(cli_dict)
+
+    # Adding functionality that is specifically implemented in FUSION
+    fusion_cli = ['Segment Anything Model (SAM)','Contrastive Language-Image Pre-training (CLIP)']
 
 
     external_stylesheets = [dbc.themes.LUX,dbc.icons.BOOTSTRAP]
