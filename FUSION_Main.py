@@ -49,7 +49,6 @@ import dash_leaflet as dl
 import dash_leaflet.express as dlx
 from dash_extensions.javascript import assign, Namespace, arrow_function
 from dash_extensions.enrich import DashProxy, html, Input, Output, MultiplexerTransform, State
-from dash_extensions import Download
 
 
 from timeit import default_timer as timer
@@ -1726,7 +1725,7 @@ class SlideHeatVis:
                     dcc.Loading(
                         children = html.Div([
                             dbc.Button('Download Annotations',color='primary',id={'type':'download-butt','index':options_idx}),
-                            Download(id={'type':'download-data','index':options_idx})
+                            dcc.Download(id={'type':'download-data','index':options_idx})
                             ])
                     )                    
                 ])
@@ -1754,7 +1753,7 @@ class SlideHeatVis:
                     dcc.Loading(
                         children = [
                             dbc.Button('Download Slide Data',color='primary',id={'type':'download-butt','index':options_idx}),
-                            Download(id={'type':'download-data','index':options_idx})
+                            dcc.Download(id={'type':'download-data','index':options_idx})
                         ]
                     )                    
                 ])
@@ -1785,7 +1784,7 @@ class SlideHeatVis:
                     dcc.Loading(
                         children = [
                             dbc.Button('Download Cell Type Data',color='primary',id={'type':'download-butt','index':options_idx}),
-                            Download(id={'type':'download-data','index':options_idx})
+                            dcc.Download(id={'type':'download-data','index':options_idx})
                         ]
                     )                    
                 ])
@@ -1818,7 +1817,7 @@ class SlideHeatVis:
                     dcc.Loading(
                         children = [
                             dbc.Button('Download Selected FTUs Data',color='primary',id={'type':'download-butt','index':options_idx}),
-                            Download(id={'type':'download-data','index':options_idx})
+                            dcc.Download(id={'type':'download-data','index':options_idx})
                         ]
                     )
                 ])
@@ -1851,7 +1850,7 @@ class SlideHeatVis:
                     dcc.Loading(
                         children = [
                             dbc.Button('Download Manual ROI Data', color = 'primary', id = {'type':'download-butt','index':options_idx}),
-                            Download(id={'type':'download-data','index':options_idx})
+                            dcc.Download(id={'type':'download-data','index':options_idx})
                         ]
                     )                    
                 ])    
