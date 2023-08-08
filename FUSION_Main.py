@@ -466,7 +466,8 @@ class SlideHeatVis:
              [State({'type':'wsi-upload','index':ALL},'filename'),
               State({'type':'omics-upload','index':ALL},'filename')],
               [Output('slide-qc-results','children'),
-               Output('organ-type','disabled')]
+               Output('organ-type','disabled')],
+            prevent_initial_call=True
         )(self.upload_data)
 
         # Enabling components after upload is complete
