@@ -81,6 +81,17 @@ class DSASlide:
                         f_prop_list.append(f_k)
             
             self.properties_list.extend(f_prop_list)
+
+        s_prop_list = []
+        for s in self.spot_props:
+            s_keys = list(s.keys())
+            for s_k in s_keys:
+                if type(s[s_k])==dict:
+                    s_prop_list.extend([f'{s_k} --> {i}' for i in list(s[s_k].keys())])
+                else:
+                    s_prop_list.append(s_k)
+        
+        self.properties_list.extend(s_prop_list)
         
         self.properties_list = np.unique(self.properties_list)
 
