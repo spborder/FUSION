@@ -346,6 +346,7 @@ class SlideHeatVis:
              Output('slide-map','center'),
              Output('slide-map','bounds'),
              Output('slide-tile','tileSize'),
+             Output('slide-map','maxZoom'),
              Output('feature-group','children'),
              Output('cell-drop','options')],
             Input('slide-select','value'),
@@ -450,12 +451,10 @@ class SlideHeatVis:
 
         # Creating upload components depending on omics type
         self.app.callback(
-            [Input('collect-select','value'),
-             Input('new-collect-entry','value'),
-             Input('upload-type','value')],
-             [Output('upload-requirements','children'),
-              Output('new-collect-entry','disabled')],
-             prevent_initial_call=True
+            Input('upload-type','value'),
+            [Output('upload-requirements','children'),
+            Output('new-collect-entry','disabled')],
+            prevent_initial_call=True
         )(self.update_upload_requirements)
 
         # Uploading data to DSA collection
@@ -743,6 +742,8 @@ class SlideHeatVis:
             bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
         else:
             bounds_box = shapely.geometry.box(*bounds)
+
+        print(f'current viewport bounds: {bounds}')
 
         # Storing current slide boundaries
         self.current_slide_bounds = bounds_box
@@ -1306,7 +1307,7 @@ class SlideHeatVis:
                 # Getting slide item id
                 slide_id = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]['_id']
                 # Getting all the mapping info
-                map_bounds, base_dims, image_dims, tile_size, geojson_annotations, x_scale, y_scale, tile_url = self.dataset_handler.get_resource_map_data(slide_id)
+                map_bounds, base_dims, image_dims, tile_size, zoom_levels, geojson_annotations, x_scale, y_scale, tile_url = self.dataset_handler.get_resource_map_data(slide_id)
 
         new_slide = DSASlide(slide_name,slide_id,tile_url,geojson_annotations,image_dims,base_dims,x_scale,y_scale)
 
@@ -1385,7 +1386,7 @@ class SlideHeatVis:
             )
 
         new_url = tile_url
-        center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),-0.5*(map_bounds[0][1]+map_bounds[1][1])]
+        center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
 
 
         self.current_ftus = self.wsi.ftu_names+['Spots']
@@ -1400,7 +1401,7 @@ class SlideHeatVis:
             draw = dict(line=False,circle=False,circlemarker=False)
             )
 
-        return new_url, new_children, center_point, map_bounds, tile_size, new_edit_control, slide_properties
+        return new_url, new_children, center_point, map_bounds, tile_size, zoom_levels,new_edit_control, slide_properties
 
     def update_graph(self,ftu,plot,label):
         
@@ -1944,99 +1945,77 @@ class SlideHeatVis:
         
         return cli_description, cli_butt_disable, current_image_region, cli_results, cli_results_followup
 
-    def update_upload_requirements(self,collection,new_collect,upload_type):
+    def update_upload_requirements(self,upload_type):
         
         input_disabled = True
         # Creating an upload div specifying which files are needed for a given upload type
-        if ctx.triggered_id=='upload-type':
-            if not collection=='New Collection':
+        # Getting the collection id
+        upload_style = {
+            'width':'100%',
+            'height':'40px',
+            'lineHeight':'40px',
+            'borderWidth':'1px',
+            'borderStyle':'dashed',
+            'borderRadius':'5px',
+            'textAlign':'center',
+            'margin':'10px'
+        }
 
-                # Getting the collection id
-                self.upload_collection_id = self.dataset_handler.get_resource_id(f'/collection/{collection}')
-
-            else:
-                if new_collect is not None:
-
-                    # Creating a new collection with this name
-                    self.dataset_handler.gc.post('/collection',parameters={'name':new_collect})
-                    self.upload_collection_id = self.dataset_handler.get_resource_id(f'/collection/{new_collect}')
-            
-            upload_style = {
-                'width':'100%',
-                'height':'40px',
-                'lineHeight':'40px',
-                'borderWidth':'1px',
-                'borderStyle':'dashed',
-                'borderRadius':'5px',
-                'textAlign':'center',
-                'margin':'10px'
-            }
-
-            if upload_type=='Visium':
-                upload_reqs = html.Div([
-                    dbc.Row([
-                        dcc.Upload(
-                            id={'type':'wsi-upload','index':0},
-                            children = html.Div([
-                                'Drag and Drop or ',
-                                html.A('Select WSI File')
-                            ]),
-                            style = upload_style,
-                            multiple=False
-                        ),
-                        html.Div(id={'type':'wsi-upload-contents','index':0})
-                    ]),
-                    dbc.Row([
-                        dcc.Upload(
-                            id={'type':'omics-upload','index':0},
-                            children = html.Div([
-                                'Drag and Drop or ',
-                                html.A('Select Omics File')
-                            ]),
-                            style = upload_style,
-                            multiple = False
-                        ),
-                        html.Div(id={'type':'omics-upload-contents','index':0})
-                    ])
+        if upload_type=='Visium':
+            upload_reqs = html.Div([
+                dbc.Row([
+                    dcc.Upload(
+                        id={'type':'wsi-upload','index':0},
+                        children = html.Div([
+                            'Drag and Drop or ',
+                            html.A('Select WSI File')
+                        ]),
+                        style = upload_style,
+                        multiple=False
+                    ),
+                    html.Div(id={'type':'wsi-upload-contents','index':0})
+                ]),
+                dbc.Row([
+                    dcc.Upload(
+                        id={'type':'omics-upload','index':0},
+                        children = html.Div([
+                            'Drag and Drop or ',
+                            html.A('Select Omics File')
+                        ]),
+                        style = upload_style,
+                        multiple = False
+                    ),
+                    html.Div(id={'type':'omics-upload-contents','index':0})
                 ])
-            
-                self.upload_check = {'WSI':False,'Omics':False}
-
-            elif upload_type=='CODEX':
-
-                upload_reqs = html.Div([
-                    dbc.Row([
-                        dcc.Upload(
-                            id={'type':'wsi-upload','index':1},
-                            children = html.Div([
-                                'Drag and Drop or ',
-                                html.A('Select qptiff File')
-                            ]),
-                            style = upload_style,
-                            multiple = False
-                        ),
-                        html.Div(id={'type':'wsi-upload-contents','index':1})
-                    ])
-                ])
-
-                self.upload_check = {'WSI':False}
-
-            else:
-                upload_reqs = html.Div(
-                    'You should not have done that'
-                )
-            
-            return upload_reqs, input_disabled
+            ])
         
-        elif ctx.triggered_id=='collect_select':
-            if collection=='New Collection':
-                input_disabled = False
-            else:
-                input_disabled = True
-            
-            return html.Div(),input_disabled
+            self.upload_check = {'WSI':False,'Omics':False}
+
+        elif upload_type=='CODEX':
+
+            upload_reqs = html.Div([
+                dbc.Row([
+                    dcc.Upload(
+                        id={'type':'wsi-upload','index':1},
+                        children = html.Div([
+                            'Drag and Drop or ',
+                            html.A('Select qptiff File')
+                        ]),
+                        style = upload_style,
+                        multiple = False
+                    ),
+                    html.Div(id={'type':'wsi-upload-contents','index':1})
+                ])
+            ])
+
+            self.upload_check = {'WSI':False}
+
         else:
-            raise exceptions.PreventUpdate
+            upload_reqs = html.Div(
+                'You should not have done that'
+            )
+        
+        return upload_reqs, input_disabled
 
     def girder_login(self,username,pword,p_butt):
 
@@ -2062,13 +2041,19 @@ class SlideHeatVis:
     def upload_data(self,wsi_file,omics_file,wsi_name,omics_name):
 
         # Posting contents based on the ctx.triggered_id
-        if ctx.triggered_id['type']=='wsi-upload':
+        print(f'wsi_file: {wsi_name}')
+        print(f'omics_file: {omics_name}')
+        wsi_file = wsi_file[0]
+        omics_file = omics_file[0]
+        wsi_name = wsi_name[0]
+        omics_name = omics_name[0]
+        if ctx.triggered_id['type']=='wsi-upload' and not wsi_file is None:
             
-            self.dataset_handler.upload_data(wsi_file,wsi_name,self.upload_collection_id,'collection')
+            self.dataset_handler.upload_data(wsi_file,wsi_name,self.upload_collection_id)
 
-        elif ctx.triggered_id['type']=='omics-upload':
+        elif ctx.triggered_id['type']=='omics-upload' and not omics_file is None:
 
-            self.dataset_handler.upload_data(omics_file,omics_name,self.upload_collection_id,'collection')
+            self.dataset_handler.upload_data(omics_file,omics_name,self.upload_collection_id)
 
         # Checking the upload check
         if all([self.upload_check[i] for i in self.upload_check]):
@@ -2161,6 +2146,9 @@ def app(*args):
     initial_collection_contents = dataset_handler.gc.get(f'resource/{initial_collection_id["_id"]}/items',parameters={'type':path_type})
     initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
 
+    # For testing
+    #initial_collection_contents = [initial_collection_contents[0],initial_collection_contents[-3]]
+
     # Loading metadata for initial collection
     print('Loading Metadata')
     metadata = []
@@ -2190,7 +2178,7 @@ def app(*args):
     asct_b_table = pd.read_csv(dsa_url+f'item/{asct_b_table_id}/download?token={token}',skiprows=list(range(10)))
 
     print(f'first slide: {initial_collection_contents[0]["name"]}')
-    map_bounds, base_dims, image_dims, tile_size, geojson_annotations, x_scale, y_scale, slide_url = dataset_handler.get_resource_map_data(resource=initial_collection_contents[0]['_id'])
+    map_bounds, base_dims, image_dims, tile_size, zoom_levels, geojson_annotations, x_scale, y_scale, slide_url = dataset_handler.get_resource_map_data(resource=initial_collection_contents[0]['_id'])
     print(f'map_bounds: {map_bounds}')
     print(f'base_dims: {base_dims}')
     print(f'image_dims: {image_dims}')
@@ -2202,7 +2190,7 @@ def app(*args):
     slide_names = [i['name'] for i in initial_collection_contents if 'largeImage' in i]
 
     wsi = DSASlide(slide_name,slide_item_id,slide_url,geojson_annotations,image_dims,base_dims,x_scale,y_scale)
-    center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),-0.5*(map_bounds[0][1]+map_bounds[1][1])]
+    center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
 
     pre_slide_properties = wsi.properties_list
     slide_properties = []
@@ -2268,7 +2256,7 @@ def app(*args):
 
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names)
-    layout_handler.gen_vis_layout(cell_names,center_point,map_dict,spot_dict,slide_properties,tile_size,map_bounds,cli_list)
+    layout_handler.gen_vis_layout(cell_names,center_point,zoom_levels,map_dict,spot_dict,slide_properties,tile_size,map_bounds,cli_list)
     layout_handler.gen_builder_layout(dataset_handler)
     layout_handler.gen_uploader_layout(dataset_handler)
 
