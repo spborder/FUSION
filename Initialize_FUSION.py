@@ -79,7 +79,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self,cell_types, center_point, map_dict, spot_dict, slide_properties, tile_size, map_bounds = None, cli_list = None):
+    def gen_vis_layout(self,cell_types, center_point, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds, cli_list = None):
 
         # Main visualization layout, used in initialization and when switching to the viewer
 
@@ -114,7 +114,7 @@ class LayoutHandler:
 
 
         map_children = [
-            dl.TileLayer(url = map_dict['url'], noWrap=True, tileSize = tile_size,id = 'slide-tile'),
+            dl.TileLayer(url = map_dict['url'], tileSize = tile_size, id = 'slide-tile'),
             dl.FeatureGroup(id='feature-group',
                             children = [
                                 dl.EditControl(id = {'type':'edit_control','index':0},
@@ -126,7 +126,7 @@ class LayoutHandler:
         ]
 
         map_layer = dl.Map(
-            center = center_point, zoom = 2, minZoom = 0, maxZoom = 7, crs='Simple',bounds = map_bounds,
+            center = center_point, zoom = 3, minZoom = 0, maxZoom = zoom_levels, crs='Simple',bounds = map_bounds,
             style = {'width':'100%','height':'80vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             children = map_children
@@ -658,17 +658,17 @@ class LayoutHandler:
             dbc.CardHeader('File Uploads'),
             dbc.CardBody([
                 dbc.Row([
-                    dbc.Col([
-                        dbc.Label('Select Collection or Make New Collection',html_for='collect-select'),
-                        dcc.Dropdown(collection_list,placeholder='Collections',id='collect-select'),
-                        html.B(),
-                        dcc.Input(type='text',placeholder='New Collection Name',id='new-collect-entry',disabled=True,style={'marginTop':'2px'})
-                    ],md=2),
+                    #dbc.Col([
+                    #    dbc.Label('Select Collection or Make New Collection',html_for='collect-select'),
+                    #    dcc.Dropdown(collection_list,placeholder='Collections',id='collect-select'),
+                    #    html.B(),
+                    #    dcc.Input(type='text',placeholder='New Collection Name',id='new-collect-entry',disabled=True,style={'marginTop':'2px'})
+                    #],md=2),
                     dbc.Col([
                         dbc.Label('Select Upload type:',html_for='upload-type'),
                         dcc.Dropdown(upload_types, placeholder = 'Select Spatial -omics method', id = 'upload-type')
-                    ],md=4),
-                    dbc.Col(html.Div(id='upload-requirements'),md=6)
+                    ],md=6,style={'marginRight':'20px'}),
+                    dbc.Col(html.Div(id='upload-requirements'),md=6,style={'marginLeft':'20px'})
                 ],align='center')
             ])
         ])
@@ -1078,22 +1078,26 @@ class GirderHandler:
 
         return annotations
     
-    def convert_json(self,annotations,image_dims,base_dims,target_crs):
+    def convert_json(self,annotations,image_dims,base_dims,tile_dims):
 
         # Top left and bottom right should be in (x,y) or (lng,lat) format
-        top_left = target_crs[0]
-        bottom_right = target_crs[1]
+        #top_left = [0,tile_dims[0]]
+        #bottom_right = [0,tile_dims[1]]
 
         # Translation step
-        base_x_scale = base_dims[0]/(bottom_right[0]-top_left[0])
-        base_y_scale = base_dims[1]/(bottom_right[1]-top_left[1])
+        #base_x_scale = base_dims[0]/(bottom_right[0]-top_left[0])
+        #base_y_scale = base_dims[1]/(bottom_right[1]-top_left[1])
+        base_x_scale = base_dims[0]/tile_dims[0]
+        base_y_scale = base_dims[1]/tile_dims[1]
 
         # image bounds [maxX, maxY]
         # bottom_right[0]-top_left[0] --> range of x values in target crs
         # bottom_right[1]-top_left[1] --> range of y values in target crs
         # scaling values so they fall into the current map (pixels)
-        x_scale = (bottom_right[0]-top_left[0])/(image_dims[0])
-        y_scale = (bottom_right[1]-top_left[1])/(image_dims[1])
+        #x_scale = (bottom_right[0]-top_left[0])/(image_dims[0])
+        #y_scale = (bottom_right[1]-top_left[1])/(image_dims[1])
+        x_scale = tile_dims[0]/image_dims[0]
+        y_scale = tile_dims[1]/image_dims[1]
         y_scale*=-1
         # y_scale has to be inverted because y is measured upward in these maps
 
@@ -1152,10 +1156,11 @@ class GirderHandler:
 
         # Step 2: get resource tile metadata
         tile_metadata = self.get_tile_metadata(item_id)
-
+        print(f'tile_metadata: {tile_metadata}')
         # Step 3: get tile, base, zoom, etc.
         # Number of zoom levels for an image
         zoom_levels = tile_metadata['levels']
+        print(f'zoom_levels: {zoom_levels}')
         # smallest level dimensions used to generate initial tiles
         base_dims = [
             tile_metadata['sizeX']/(2**(zoom_levels-1)),
@@ -1172,20 +1177,29 @@ class GirderHandler:
             tile_metadata['sizeY']
         ]
 
+        print(f'base_dims: {base_dims}')
+        print(f'tile_dims: {tile_dims}')
+        print(f'image_dims: {image_dims}')
+
         # Step 4: Defining bounds of map
-        map_bounds = [[0,0],tile_dims]
+        map_bounds = [[0,image_dims[1]],[0,image_dims[0]]]
 
         # Step 5: Getting annotations for a resource
         annotations = self.get_annotations(item_id)
 
         # Step 6: Converting Histomics/large-image annotations to GeoJSON
-        geojson_annotations, x_scale, y_scale = self.convert_json(annotations,image_dims,base_dims,map_bounds)
+        geojson_annotations, x_scale, y_scale = self.convert_json(annotations,image_dims,base_dims,tile_dims)
+
+        map_bounds[0][1]*=x_scale
+        map_bounds[1][1]*=y_scale
+
+        print(f'map_bounds: {map_bounds}')
 
         # Step 7: Getting user token and tile url
         user_token = self.get_token()
         tile_url = self.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+user_token
 
-        return map_bounds, base_dims, image_dims, tile_dims[0],geojson_annotations, x_scale, y_scale, tile_url
+        return map_bounds, base_dims, image_dims, tile_dims[0], zoom_levels-1, geojson_annotations, x_scale, y_scale, tile_url
 
     def get_cli_list(self):
         # Get a list of possible CLIs available for current user
@@ -1244,10 +1258,10 @@ class GirderHandler:
 
         return image_region
 
-    def upload_data(self,data,data_name,target_id,target_type):
+    def upload_data(self,data,data_name,target_id):
 
         # Trying to just upload the entire file at once?
-        self.gc.post('/file',data=data,parameters={'parentType':target_type,'parentId':target_id,'name':data_name})
+        self.gc.post('/file',data=data,parameters={'parentType':'folder','parentId':target_id,'name':data_name})
 
 
 
