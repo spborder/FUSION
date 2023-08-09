@@ -334,7 +334,8 @@ class SlideHeatVis:
         """
 
         self.app.callback(
-            Output('mini-label','children'),
+            [Output('mini-label','children'),
+             Output({'type':'ftu-popup','index':ALL},'children')],
             [Input({'type':'ftu-bounds','index':ALL},'click_feature'),
             Input('mini-drop','value')],
             prevent_initial_call=True
@@ -1107,6 +1108,7 @@ class SlideHeatVis:
             
             if len(click_data)>0:
                 mini_chart_list = []
+                popup_list = []
                 for c in click_data:
                     chart_coords = np.mean(np.squeeze(c['geometry']['coordinates']),axis=0)
                     chart_dict_data = c['properties']
@@ -1119,7 +1121,6 @@ class SlideHeatVis:
                         # For clusters and morphometrics just show main cell types
                         chart_dict_data = chart_dict_data['Main_Cell_Types']
                     
-
                     chart_labels = list(chart_dict_data.keys())
                     chart_data = [chart_dict_data[j] for j in chart_labels]
 
@@ -1138,13 +1139,29 @@ class SlideHeatVis:
 
                         mini_chart_list.append(mini_pie_chart)
 
-                return mini_chart_list
+                        # popup div
+                        popup_df = pd.DataFrame.from_dict({'Values':chart_data,'Labels':chart_labels})
+                        popup_div = html.Div([
+                            dbc.Card([
+                                dbc.CardHeader('FTU Popup'),
+                                dbc.CardBody([
+                                    dbc.Row([
+                                        dcc.Graph(figure=px.pie(popup_df,values='Values',names='Labels',title='Cell Type Pie'))
+                                    ])
+                                ])
+                            ])
+                        ])
+
+                        popup_list.append(popup_div)
+
+                    print(f'len mini_chart_list: {len(mini_chart_list)}')
+                    print(f'len popup_list: {len(popup_list)}')
+                return mini_chart_list, popup_list
             else:
-                #return []
-                raise exceptions.PreventUpdate
+                return [],[]
+                #raise exceptions.PreventUpdate
         else:
-            #return []
-            raise exceptions.PreventUpdate
+            return [],[]
                     
     def gen_cyto(self,cell_val):
 
@@ -2147,8 +2164,8 @@ def app(*args):
     initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
 
     # For testing
-    #initial_collection_contents = [initial_collection_contents[0],initial_collection_contents[-3]]
-
+    #initial_collection_contents = [initial_collection_contents[-2],initial_collection_contents[-1]]
+    initial_collection_contents = [initial_collection_contents[0]]
     # Loading metadata for initial collection
     print('Loading Metadata')
     metadata = []
@@ -2220,6 +2237,7 @@ def app(*args):
             struct : {
                 'geojson':{'type':'FeatureCollection','features':[i for i in wsi.geojson_annotations['features'] if i['properties']['name']==struct]},
                 'id':{'type':'ftu-bounds','index':wsi.ftu_names.index(struct)},
+                'popup_id':{'type':'ftu-popup','index':wsi.ftu_names.index(struct)},
                 'color':ftu_colors[struct],
                 'hover_color':'#9caf00'
             }
@@ -2229,6 +2247,7 @@ def app(*args):
     spot_dict = {
         'geojson':{'type':'FeatureCollection','features':[i for i in wsi.geojson_annotations['features'] if i['properties']['name']=='Spots']},
         'id':{'type':'ftu-bounds','index':len(wsi.ftu_names)},
+        'popup_id':{'type':'ftu-bounds','index':len(wsi.ftu_names)},
         'color':ftu_colors["Spots"],
         'hover_color':'#9caf00'
     }

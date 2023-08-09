@@ -99,7 +99,7 @@ class LayoutHandler:
             dl.Overlay(
                 dl.LayerGroup(
                     dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(color = map_dict['FTUs'][struct]['color']),
-                        hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'], dashArray = '')))),
+                        hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'], dashArray = '')),children=[dl.Popup(id = map_dict['FTUs'][struct]['popup_id'])])),
                 name = struct, checked = True, id = struct)
         for struct in map_dict['FTUs']
         ] 
@@ -108,7 +108,7 @@ class LayoutHandler:
             dl.Overlay(
                 dl.LayerGroup(
                     dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(color = spot_dict['color']),
-                        hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray = '')))),
+                        hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray = '')),children = [dl.Popup(id=spot_dict['popup_id'])])),
                 name = 'Spots', checked = False, id = 'Spots')
         ]
 
@@ -502,7 +502,7 @@ class LayoutHandler:
                                 html.Div(
                                     id='mini-select-div',
                                     children=[
-                                        dcc.Dropdown(mini_options,mini_options[0],id='mini-drop')
+                                        dcc.Dropdown(mini_options,mini_options[0],id='mini-drop',disabled=False)
                                     ]
                                 )
                             ])
