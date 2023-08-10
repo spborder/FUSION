@@ -33,6 +33,7 @@ from dash import dcc, ctx, Dash, dash_table
 import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 import dash_leaflet as dl
+import dash_mantine_components as dmc
 
 from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function
@@ -149,6 +150,10 @@ class LayoutHandler:
         # Cell type proportions and cell state distributions
         roi_pie = dbc.Card([
             dbc.CardBody([
+                dbc.Row([
+                    html.P('This tab displays the cell type and state proportions for cell types contained within specific FTU & Spot boundaries')
+                ]),
+                html.Hr(),
                 html.Div(id = 'roi-pie-holder')
             ])
         ])
@@ -248,6 +253,10 @@ class LayoutHandler:
         cell_card = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
+                    html.P('Use this tab for graphical selection of specific cell types along the nephron')
+                ]),
+                html.Hr(),
+                dbc.Row([
                     dbc.Col([
                         dbc.Row([
                             html.H2('Nephron Diagram')
@@ -281,6 +290,10 @@ class LayoutHandler:
         labels = ['Cluster','image_id']+cell_types.copy()
         # Cluster viewer tab
         cluster_card = dbc.Card([
+            dbc.Row([
+                html.P('Use this tab to dynamically view clustering results of morphological properties for select FTUs')
+            ]),
+            html.Hr(),
             dbc.Row([
                 dbc.Col([
                     dbc.Card(
@@ -424,6 +437,10 @@ class LayoutHandler:
         extract_card = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
+                    html.P('Use this tab for exporting data from current views')
+                ]),
+                html.Hr(),
+                dbc.Row([
                     dbc.Label('Select data for download',html_for = 'data-select'),
                     dcc.Dropdown(self.data_options,placeholder = 'Select Data for Download',multi=True,id='data-select')
                 ]),
@@ -439,6 +456,10 @@ class LayoutHandler:
         available_clis = cli_list
         cli_tab = dbc.Card([
             dbc.CardBody([
+                dbc.Row([
+                    html.P('Use this tab for running custom plugins')
+                ]),
+                html.Hr(),
                 dbc.Row([
                     dbc.Label('Select CLI to run:',html_for='cli-drop'),
                     html.B(),
@@ -469,62 +490,100 @@ class LayoutHandler:
             ])
         ])
 
+        # Overlays control tab
+        overlays_tab = dbc.Card([
+            dbc.CardBody([
+                dbc.Row([
+                    html.P('Use this tab for controlling properties of FTU & Spot overlays')
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        html.H6("Select Cell for Overlaid Heatmap Viewing",className="cell-select"),
+                        self.gen_info_button('Select a cell type or metadata property to change FTU overlay colors'),
+                        html.Div(
+                            id = 'cell-select-div',
+                            children=[
+                                dcc.Dropdown(cell_types_list,cell_types_list[0]['value'],id='cell-drop')
+                            ]
+                        )
+                    ])
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Label(
+                            "Adjust Transparency of Heatmap",
+                            html_for="vis-slider"
+                        ),
+                        self.gen_info_button('Change transparency of overlaid FTU colors between 0(fully see-through) to 100 (fully opaque)'),
+                        dcc.Slider(
+                            id='vis-slider',
+                            min=0,
+                            max=100,
+                            step=10,
+                            value=50
+                        )
+                    ])
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Label(
+                            'FTU Boundary Color Picker',
+                            html_for = 'ftu-bound-opts'
+                        )
+                    ])
+                ]),
+                dbc.Row([
+                    dbc.Tabs(
+                        id = 'ftu-bound-opts',
+                        children = [
+                            dbc.Tab(
+                                children = [
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Row(dbc.Label('Boundary Width')),
+                                            dbc.Row(dcc.Input(type='number',min=0,max=10,step=1,id={'type':'ftu-bound','index':idx}))
+                                        ],md=6),
+                                        dbc.Col([
+                                            html.Div(
+                                                dmc.ColorPicker(
+                                                    id =  {'type':'ftu-color','index':idx},
+                                                    format = 'hex',
+                                                    value = map_dict['FTUs'][struct]['color'],
+                                                    fullWidth=True
+                                                ),
+                                                style = {'width':'25vh'}
+                                            )
+                                        ],md=6)
+                                    ])
+                                ], label = struct
+                            )
+                            for idx,struct in enumerate(list(map_dict['FTUs'].keys()))
+                        ]
+                    )
+                ])
+            ])
+        ])
+
+        # List of all tools tabs
         tool_tabs = [
+            dbc.Tab(overlays_tab, label = 'Overlays'),
             dbc.Tab(roi_pie, label = "Cell Composition"),
             dbc.Tab(cell_card,label = "Cell Card"),
             dbc.Tab(cluster_card,label = 'Morphological Clustering'),
             dbc.Tab(extract_card,label = 'Download Data'),
-            dbc.Tab(cli_tab,label = 'Run Analyses')
+            dbc.Tab(cli_tab,label = 'Run Analyses'),
         ]
         
-
-        mini_options = ['All Main Cell Types','Cell States for Current Cell Type','None']
         tools = [
             dbc.Card(
                 id='tools-card',
                 children=[
                     dbc.CardHeader("Tools"),
                     dbc.CardBody([
-                        dbc.Row([
-                            dbc.Col([
-                                html.H6("Select Cell for Overlaid Heatmap Viewing",className="cell-select"),
-                                self.gen_info_button('Select a cell type or metadata property to change FTU overlay colors'),
-                                html.Div(
-                                    id = 'cell-select-div',
-                                    children=[
-                                        dcc.Dropdown(cell_types_list,cell_types_list[0]['value'],id='cell-drop')
-                                    ]
-                                )
-                            ],md=6),
-                            dbc.Col([
-                                html.H6("Options for Overlaid Minicharts",className='mini-select'),
-                                self.gen_info_button('Select an option to change what information is presented in overlaid pie charts'),
-                                html.Div(
-                                    id='mini-select-div',
-                                    children=[
-                                        dcc.Dropdown(mini_options,mini_options[0],id='mini-drop',disabled=False)
-                                    ]
-                                )
-                            ])
-                        ]),
-                        html.Hr(),
                         dbc.Form([
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Label(
-                                        "Adjust Transparency of Heatmap",
-                                        html_for="vis-slider"
-                                    ),
-                                    self.gen_info_button('Change transparency of overlaid FTU colors between 0(fully see-through) to 100 (fully opaque)'),
-                                    dcc.Slider(
-                                        id='vis-slider',
-                                        min=0,
-                                        max=100,
-                                        step=10,
-                                        value=50
-                                    )
-                                ])
-                            ]),
                             dbc.Row([
                                 dbc.Tabs(tool_tabs)
                             ])

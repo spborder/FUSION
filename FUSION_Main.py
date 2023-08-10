@@ -333,6 +333,7 @@ class SlideHeatVis:
         )(self.get_hover)
         """
 
+        """
         self.app.callback(
             [Output('mini-label','children'),
              Output({'type':'ftu-popup','index':ALL},'children')],
@@ -340,6 +341,18 @@ class SlideHeatVis:
             Input('mini-drop','value')],
             prevent_initial_call=True
         )(self.get_click)
+        """
+        self.app.callback(
+            Output({'type':'ftu-popup','index':MATCH},'children'),
+            Input({'type':'ftu-bounds','index':MATCH},'click_feature'),
+            prevent_initial_call = True
+        )(self.get_click_popup)
+
+        self.app.callback(
+            Output({'type':'popup-state-fig','index':MATCH},'figure'),
+            Input({'type':'popup-state-drop','index':MATCH},'value'),
+            prevent_initial_call = True
+        )(self.update_state_popup)
 
         self.app.callback(
             [Output('slide-tile','url'),
@@ -453,8 +466,7 @@ class SlideHeatVis:
         # Creating upload components depending on omics type
         self.app.callback(
             Input('upload-type','value'),
-            [Output('upload-requirements','children'),
-            Output('new-collect-entry','disabled')],
+            Output('upload-requirements','children'),
             prevent_initial_call=True
         )(self.update_upload_requirements)
 
@@ -1100,6 +1112,7 @@ class SlideHeatVis:
 
         return hover_text
     """
+    """
     def get_click(self,ftu_click,mini_specs):
         
         print(f'Number of ftu_bounds to get_click: {len(ftu_click)}')
@@ -1162,7 +1175,148 @@ class SlideHeatVis:
                 #raise exceptions.PreventUpdate
         else:
             return [],[]
-                    
+    """
+    def get_click_popup(self,ftu_click):
+
+        if not ftu_click is None:
+            self.clicked_ftu = ftu_click
+
+            if 'Main_Cell_Types' in ftu_click['properties']:
+
+                # Getting the main cell type data (only using top-n)
+                main_cell_types = ftu_click['properties']['Main_Cell_Types']
+                chart_data = [main_cell_types[i] for i in main_cell_types]
+
+                if not len(chart_data)==0:
+
+                    # Only keeping the first self.plot_cell_n
+                    top_idx = np.argsort(chart_data)[::-1][0:self.plot_cell_types_n]
+                    chart_data = [chart_data[i] for i in top_idx]
+                    chart_labels = [list(main_cell_types.keys())[i] for i in top_idx]
+                    chart_full_labels = [self.cell_graphics_key[i]['full'] for i in chart_labels]
+
+                    # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
+                    cell_states = ftu_click['properties']['Cell_States']
+                    print(f'cell_states: {cell_states}')
+                    cells_for_cell_states = list(cell_states.keys())
+                    initial_cell_states = cell_states[cells_for_cell_states[0]]
+                    cell_states_df = pd.DataFrame({'States':list(initial_cell_states.keys()),'Values':list(initial_cell_states.values())})
+
+                    # Getting other FTU/Spot properties
+                    all_properties = list(ftu_click['properties'].keys())
+                    all_properties = [i for i in all_properties if not type(ftu_click['properties'][i])==dict]
+                    all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties'][i] for i in all_properties]}
+                    all_properties_df = pd.DataFrame(all_props_dict)
+
+                    # popup div
+                    main_cells_df = pd.DataFrame.from_dict({'Values':chart_data,'Labels':chart_labels,'Full':chart_full_labels})
+                    popup_div = html.Div([
+                        dbc.Accordion([
+                            dbc.AccordionItem([
+                                html.Div([
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dcc.Graph(
+                                                figure=go.Figure(
+                                                    data = [
+                                                        go.Pie(
+                                                            name = '',
+                                                            values = main_cells_df['Values'],
+                                                            labels = main_cells_df['Labels'],
+                                                            customdata = main_cells_df['Full'],
+                                                            hovertemplate = "Cell: %{customdata}: <br>Proportion: %{value}</br>"
+                                                        )],
+                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0}}
+                                                )),
+                                            md='auto')
+                                        ],style={'height':'100%','width':'100%'})
+                                    ],style = {'height':'250px','width':'250px','display':'inline-block'})
+                                ], title = 'Main Cell Types'),
+                            dbc.AccordionItem([
+                                html.Div([
+                                    dbc.Row(dcc.Dropdown(cells_for_cell_states,cells_for_cell_states[0],id = {'type':'popup-state-drop','index':0})),
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dcc.Graph(
+                                                figure = go.Figure(
+                                                    data = [
+                                                        go.Pie(
+                                                            name = '',
+                                                            values = cell_states_df['Values'],
+                                                            labels = cell_states_df['States']
+                                                        )
+                                                    ],
+                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0}},
+                                                ),id = {'type':'popup-state-fig','index':0}
+                                            ),md='auto'
+                                        )
+                                    ],style={'height':'100%','width':'100%'})
+                                ],style = {'height':'250px','width':'250px','display':'inline-block'})
+                            ], title = 'Cell States'),
+                            dbc.AccordionItem([
+                                html.Div([
+                                    dash_table.DataTable(
+                                        id = 'popup-table',
+                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
+                                        data = all_properties_df.to_dict('records'),
+                                        editable=False,                                        sort_mode='multi',
+                                        page_current=0,
+                                        page_size=5,
+                                        style_cell = {
+                                            'overflow':'hidden',
+                                            'textOverflow':'ellipsis',
+                                            'maxWidth':0
+                                        },
+                                        tooltip_data = [
+                                            {
+                                                column: {'value':str(value),'type':'markdown'}
+                                                for column, value in row.items()
+                                            } for row in all_properties_df.to_dict('records')
+                                        ],
+                                        tooltip_duration = None
+                                    )
+                                ])
+                            ],title = 'Other Properties'),
+                            dbc.AccordionItem([
+                                html.Div([
+                                    dcc.Input(type='text',placeholder='Notes',id={'type':'popup-notes','index':0})
+                                ])
+                            ],title = 'Custom Properties')
+                        ])
+                    ],style={'height':'300px','width':'300px','display':'inline-block'})
+
+                    return popup_div
+                else:
+                    return html.Div([html.P('No cell type information')])
+            else:
+                return html.Div([html.P('No intersecting spots')])
+        else:
+            raise exceptions.PreventUpdate
+        
+    def update_state_popup(self,cell_type):
+        
+        if not cell_type is None:
+            # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
+            cell_states = self.clicked_ftu['properties']['Cell_States']
+            cells_for_cell_states = list(cell_states.keys())
+            initial_cell_states = cell_states[cells_for_cell_states[0]]
+            cell_states_df = pd.DataFrame({'States':list(initial_cell_states.keys()),'Values':list(initial_cell_states.values())})
+
+            cell_states_fig = go.Figure(
+                data = [
+                    go.Pie(
+                        name = '',
+                        values = cell_states_df['Values'],
+                        labels = cell_states_df['States']
+                    )                    
+                ],
+                layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0}}
+            )            
+
+            return [cell_states_fig]
+        else:
+            raise exceptions.PreventUpdate
+
     def gen_cyto(self,cell_val):
 
         cyto_elements = []
@@ -2247,7 +2401,7 @@ def app(*args):
     spot_dict = {
         'geojson':{'type':'FeatureCollection','features':[i for i in wsi.geojson_annotations['features'] if i['properties']['name']=='Spots']},
         'id':{'type':'ftu-bounds','index':len(wsi.ftu_names)},
-        'popup_id':{'type':'ftu-bounds','index':len(wsi.ftu_names)},
+        'popup_id':{'type':'ftu-popup','index':len(wsi.ftu_names)},
         'color':ftu_colors["Spots"],
         'hover_color':'#9caf00'
     }
