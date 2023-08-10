@@ -210,6 +210,7 @@ class SlideHeatVis:
             }
 
             style.color = ftu_color;
+                                       
             return style;
             }
             """
@@ -292,10 +293,13 @@ class SlideHeatVis:
     def vis_callbacks(self):
 
         self.app.callback(
-            [Output('layer-control','children'),Output('colorbar-div','children')],
-            [Input('cell-drop','value'),Input('vis-slider','value')],
-            prevent_initial_call=True
-        )(self.update_cell)
+            [Output('layer-control','children'),Output('colorbar-div','children'),
+             Output('filter-slider','max'),Output('filter-slider','disable'),
+             Output({'type':'color-picker-results','index':ALL},'children')],
+            [Input('cell-drop','value'),Input('vis-slider','value'),
+             Input('filter-slider','value'),Input({'type':'ftu-bound-color','index':ALL},'value')],
+            prevent_initial_call = True
+        )(self.update_overlays)
 
         self.app.callback(
             Output('roi-pie-holder','children'),
@@ -936,55 +940,75 @@ class SlideHeatVis:
         else:
             self.hex_color_key = {}
 
-    def update_cell(self,cell_val,vis_val):
-        
-        # Update for sub-properties
+    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color):
+
+        print(f'trigger to update_overlays: {ctx.triggered_id}')
+        print(f'{ctx.triggered_prop_ids}')
+        print(filter_vals)
+        print(ftu_color)
+        # Extracting cell val if there are sub-properties
         m_prop = None
         if '-->' in cell_val:
             cell_val_parts = cell_val.split(' --> ')
             m_prop = cell_val_parts[0]
             cell_val = cell_val_parts[1]
+        
+        if not ftu_color is None:
+            self.ftu_colors = {i:f for i,f in zip(self.ftu_colors,ftu_color)}
+            self.filter_vals = filter_vals
 
         if not cell_val is None:
-            # Updating current cell prop
+            # Updating current_cell property
             if cell_val in self.cell_names_key:
                 if m_prop == 'Main_Cell_Types':
                     self.current_cell = self.cell_names_key[cell_val]
                     self.update_hex_color_key('cell_value')
 
                     color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                    
+                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                    filter_disable = False
+                
                 elif m_prop == 'Cell_States':
                     self.current_cell = self.cell_names_key[cell_val]
                     self.update_hex_color_key('cell_state')
 
                     color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
 
+                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                    filter_disable = False
+
             elif cell_val == 'Max Cell Type':
-                self.update_hex_color_key('max_cell')
                 self.current_cell = 'max'
+                self.update_hex_color_key('max_cell')
 
                 cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
                 color_bar = dlx.categorical_colorbar(categories = cell_types, colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
-            
-            elif cell_val == 'Morphometrics Clusters':
-                self.update_hex_color_key('cluster')
-                self.current_cell = 'cluster'
 
+                filter_max_val = 1.0
+                filter_disable = True
+
+            elif cell_val == 'Morphometrics Clusters':
+                self.current_cell = 'cluster'
+                self.update_hex_color_key('cluster')
+
+                #TODO: This should probably be a categorical colorbar
                 color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+
+                filter_max_val = 1.0
+                filter_disable = True
             
             else:
-                # Used for morphometrics values
+                # For other morphometric properties
                 self.current_cell = cell_val
                 self.update_hex_color_key(cell_val)
 
                 color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
 
+                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_disable = False
+
             self.cell_vis_val = vis_val/100
-
-            vis_val = vis_val/100
-
-            # More print statements:
-            # Changing fill and fill-opacity properties for structures and adding that as a property
 
             map_dict = {
                 'url':self.wsi.tile_url,
@@ -1010,7 +1034,7 @@ class SlideHeatVis:
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=vis_val, ftu_color = map_dict['FTUs'][struct]['color']),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=self.cell_vis_val, ftu_color = self.ftu_colors[struct]),
                                     hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'],dashArray='')))
                     ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
                 )
@@ -1020,7 +1044,7 @@ class SlideHeatVis:
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(style = self.ftu_style_handle),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = vis_val, ftu_color = spot_dict['color']),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = self.ftu_colors['Spots']),
                                     hoverStyle = arrow_function(dict(weight=5,color=spot_dict['hover_color'],dashArray='')))
                     ),name = 'Spots', checked = False, id = self.wsi.item_id+'_Spots'
                 )
@@ -1031,7 +1055,7 @@ class SlideHeatVis:
                     dl.Overlay(
                         dl.LayerGroup(
                             dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle),
-                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = vis_val, ftu_color = 'white'),
+                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white'),
                                         hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'],dashArray='')))
                         ), name = f'Manual ROI {m_idx}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
                     )
@@ -1040,7 +1064,9 @@ class SlideHeatVis:
 
             self.current_overlays = new_children
                         
-            return new_children, color_bar
+            return new_children, color_bar, filter_max_val, filter_disable, ftu_color
+        else:
+            raise exceptions.PreventUpdate
 
     def update_cell_hierarchy(self,cell_clickData):
         # Loading the cell-graphic and hierarchy image
@@ -1098,84 +1124,6 @@ class SlideHeatVis:
 
         return True, tool_bbox, tool_children
 
-    """
-    def get_hover(self,ftu_hover):
-        
-        hover_text = []
-
-        if self.current_cell in self.cell_graphics_key:
-            for f in ftu_hover:
-                if f is not None:
-                    hover_text.append(f'{self.current_cell}:{round(f["properties"]["Main_Cell_Types"][self.current_cell],3)}')
-        else:
-            print(f'current_cell: {self.current_cell} not in cell_names_key')        
-
-        return hover_text
-    """
-    """
-    def get_click(self,ftu_click,mini_specs):
-        
-        print(f'Number of ftu_bounds to get_click: {len(ftu_click)}')
-        if not mini_specs == 'None' and len(ftu_click)>0:
-            click_data = [i for i in ftu_click if i is not None]
-            
-            if len(click_data)>0:
-                mini_chart_list = []
-                popup_list = []
-                for c in click_data:
-                    chart_coords = np.mean(np.squeeze(c['geometry']['coordinates']),axis=0)
-                    chart_dict_data = c['properties']
-
-                    if mini_specs == 'All Main Cell Types':
-                        chart_dict_data = chart_dict_data['Main_Cell_Types']
-                    elif mini_specs == 'Cell States for Current Cell Type':
-                        chart_dict_data = chart_dict_data['Cell_States'][self.current_cell]
-                    else:
-                        # For clusters and morphometrics just show main cell types
-                        chart_dict_data = chart_dict_data['Main_Cell_Types']
-                    
-                    chart_labels = list(chart_dict_data.keys())
-                    chart_data = [chart_dict_data[j] for j in chart_labels]
-
-                    if not all([i==j for i,j in zip(chart_coords,self.current_chart_coords)]):
-                        self.current_chart_coords = chart_coords
-
-                        mini_pie_chart = dl.Minichart(
-                            data = chart_data, 
-                            labels = chart_labels, 
-                            lat=chart_coords[1],
-                            lon=chart_coords[0],
-                            height=100,
-                            width=100,
-                            labelMinSize=2,
-                            type='pie',id=f'pie_click{random.randint(0,1000)}')
-
-                        mini_chart_list.append(mini_pie_chart)
-
-                        # popup div
-                        popup_df = pd.DataFrame.from_dict({'Values':chart_data,'Labels':chart_labels})
-                        popup_div = html.Div([
-                            dbc.Card([
-                                dbc.CardHeader('FTU Popup'),
-                                dbc.CardBody([
-                                    dbc.Row([
-                                        dcc.Graph(figure=px.pie(popup_df,values='Values',names='Labels',title='Cell Type Pie'))
-                                    ])
-                                ])
-                            ])
-                        ])
-
-                        popup_list.append(popup_div)
-
-                    print(f'len mini_chart_list: {len(mini_chart_list)}')
-                    print(f'len popup_list: {len(popup_list)}')
-                return mini_chart_list, popup_list
-            else:
-                return [],[]
-                #raise exceptions.PreventUpdate
-        else:
-            return [],[]
-    """
     def get_click_popup(self,ftu_click):
 
         if not ftu_click is None:
@@ -1197,7 +1145,6 @@ class SlideHeatVis:
 
                     # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
                     cell_states = ftu_click['properties']['Cell_States']
-                    print(f'cell_states: {cell_states}')
                     cells_for_cell_states = list(cell_states.keys())
                     initial_cell_states = cell_states[cells_for_cell_states[0]]
                     cell_states_df = pd.DataFrame({'States':list(initial_cell_states.keys()),'Values':list(initial_cell_states.values())})
@@ -1226,7 +1173,7 @@ class SlideHeatVis:
                                                             customdata = main_cells_df['Full'],
                                                             hovertemplate = "Cell: %{customdata}: <br>Proportion: %{value}</br>"
                                                         )],
-                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0}}
+                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False}
                                                 )),
                                             md='auto')
                                         ],style={'height':'100%','width':'100%'})
@@ -1234,7 +1181,16 @@ class SlideHeatVis:
                                 ], title = 'Main Cell Types'),
                             dbc.AccordionItem([
                                 html.Div([
-                                    dbc.Row(dcc.Dropdown(cells_for_cell_states,cells_for_cell_states[0],id = {'type':'popup-state-drop','index':0})),
+                                    dbc.Row(
+                                        html.Div(
+                                            dcc.Dropdown(
+                                                options=cells_for_cell_states,
+                                                placeholder = 'Select a Cell Type',
+                                                id = {'type':'popup-state-drop','index':0}
+                                            ),style={'display':'inline-block'}
+                                        )
+                                    ),
+                                    html.Hr(),
                                     dbc.Row([
                                         dbc.Col(
                                             dcc.Graph(
@@ -1294,7 +1250,7 @@ class SlideHeatVis:
             raise exceptions.PreventUpdate
         
     def update_state_popup(self,cell_type):
-        
+        print(f'cell_type: {cell_type}')
         if not cell_type is None:
             # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
             cell_states = self.clicked_ftu['properties']['Cell_States']
@@ -1507,8 +1463,8 @@ class SlideHeatVis:
                 struct: {
                     'geojson':{'type':'FeatureCollection','features':[i for i in new_slide.geojson_ftus['features'] if i['properties']['name']==struct]},
                     'id':{'type':'ftu-bounds','index':new_slide.ftu_names.index(struct)},
-                    'color':'',
-                    'hover_color':''
+                    'color':self.ftu_colors[struct],
+                    'hover_color':'#9caf00'
                 }
                 for struct in new_slide.ftu_names
             }
@@ -1518,7 +1474,7 @@ class SlideHeatVis:
         spot_dict = {
             'geojson': new_slide.geojson_spots,
             'id':{'type':'ftu-bounds','index':len(new_slide.ftu_names)},
-            'color': '#dffa00',
+            'color': self.ftu_colors['Spots'],
             'hover_color':'#9caf00'
         }
 

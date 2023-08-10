@@ -61,6 +61,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             }
 
             style.color = ftu_color;
+
             return style;
         }
 

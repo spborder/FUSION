@@ -491,6 +491,12 @@ class LayoutHandler:
         ])
 
         # Overlays control tab
+        combined_colors_dict = {}
+        for f in map_dict['FTUs']:
+            combined_colors_dict[f] = {'color':map_dict['FTUs'][f]['color']}
+        
+        combined_colors_dict['Spots'] = {'color':spot_dict['color']}
+
         overlays_tab = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
@@ -530,6 +536,22 @@ class LayoutHandler:
                 dbc.Row([
                     dbc.Col([
                         dbc.Label(
+                            "FTUs Filter by Overlay Value",html_for="filter-slider"
+                        ),
+                        self.gen_info_button('Set a range of values to only view FTUs with that overlay value'),
+                        dcc.RangeSlider(
+                            id = 'filter-slider',
+                            min=0.0,
+                            max=1.0,
+                            step = 0.1,
+                            value = [0.0,1.0]
+                        )
+                    ])
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Label(
                             'FTU Boundary Color Picker',
                             html_for = 'ftu-bound-opts'
                         )
@@ -543,24 +565,20 @@ class LayoutHandler:
                                 children = [
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Row(dbc.Label('Boundary Width')),
-                                            dbc.Row(dcc.Input(type='number',min=0,max=10,step=1,id={'type':'ftu-bound','index':idx}))
-                                        ],md=6),
-                                        dbc.Col([
                                             html.Div(
                                                 dmc.ColorPicker(
-                                                    id =  {'type':'ftu-color','index':idx},
+                                                    id =  {'type':'ftu-bound-color','index':idx},
                                                     format = 'hex',
-                                                    value = map_dict['FTUs'][struct]['color'],
+                                                    value = combined_colors_dict[struct]['color'],
                                                     fullWidth=True
                                                 ),
-                                                style = {'width':'25vh'}
+                                                style = {'width':'50vh'}
                                             )
-                                        ],md=6)
+                                        ],md=12)
                                     ])
                                 ], label = struct
                             )
-                            for idx,struct in enumerate(list(map_dict['FTUs'].keys()))
+                            for idx,struct in enumerate(list(combined_colors_dict.keys()))
                         ]
                     )
                 ])
