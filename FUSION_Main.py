@@ -56,6 +56,7 @@ from timeit import default_timer as timer
 
 from FUSION_WSI import DSASlide
 from Initialize_FUSION import LayoutHandler, DownloadHandler, GirderHandler
+from FUSION_Prep import PrepHandler
 
 
 class SlideHeatVis:
@@ -155,7 +156,7 @@ class SlideHeatVis:
         self.color_map = cm.get_cmap('jet',255)
         self.cell_vis_val = 0.5
         self.ftu_style_handle = assign("""function(feature,context){
-            const {color_key,current_cell,fillOpacity,ftu_color} = context.props.hideout;
+            const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.props.hideout;
             
             if (current_cell==='cluster'){
                 if (current_cell in feature.properties){
@@ -191,6 +192,7 @@ class SlideHeatVis:
                 } else if (cell_value==0) {
                     cell_value = (cell_value).toFixed(1);
                 }
+                                       
             } else if (current_cell in feature.properties){
                 var cell_value = feature.properties[current_cell];
 
@@ -204,18 +206,49 @@ class SlideHeatVis:
 
                 style.fillColor = fillColor;
                 style.fillOpacity = fillOpacity;
+                style.color = ftu_color;
 
             } else {
+                style.display = none;
                 style.fillOpacity = 0.0;
-            }
-
-            style.color = ftu_color;
+            }           
                                        
             return style;
             }
             """
         )
 
+        self.ftu_filter = assign("""function(feature,context){
+                const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.props.hideout;
+                                 
+                if (current_cell in feature.properties.Main_Cell_Types){
+                    var cell_value = feature.properties.Main_Cell_Types[current_cell];
+                    if (cell_value > filter_vals[0]){
+                        if (cell_value < filter_vals[1]){
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                } else if (current_cell in feature.properties){
+                    var cell_value = feature.properties[current_cell];
+                    if (cell_value > filter_vals[0]){
+                        if (cell_value < filter_vals[1]){
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return true;
+                }
+            }
+            """
+        )
         # Adding callbacks to app
         self.vis_callbacks()
         self.all_layout_callbacks()
@@ -294,8 +327,7 @@ class SlideHeatVis:
 
         self.app.callback(
             [Output('layer-control','children'),Output('colorbar-div','children'),
-             Output('filter-slider','max'),Output('filter-slider','disable'),
-             Output({'type':'color-picker-results','index':ALL},'children')],
+             Output('filter-slider','max'),Output('filter-slider','disabled')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
              Input('filter-slider','value'),Input({'type':'ftu-bound-color','index':ALL},'value')],
             prevent_initial_call = True
@@ -954,7 +986,16 @@ class SlideHeatVis:
             cell_val = cell_val_parts[1]
         
         if not ftu_color is None:
-            self.ftu_colors = {i:f for i,f in zip(self.ftu_colors,ftu_color)}
+            # Getting these to align with the ftu-colors property order
+            current_ftu_colors = list(self.ftu_colors.values())
+            ftu_list = list(self.ftu_colors.keys())
+
+            # Index of which ftu is different
+            new_color = [i for i in range(len(current_ftu_colors)) if current_ftu_colors[i] not in ftu_color]
+            if len(new_color)>0:
+                for n in new_color:
+                    self.ftu_colors[ftu_list[n]] = [i for i in ftu_color if i not in current_ftu_colors][0]
+
             self.filter_vals = filter_vals
 
         if not cell_val is None:
@@ -1016,6 +1057,7 @@ class SlideHeatVis:
                     struct: {
                         'geojson':{'type':'FeatureCollection','features':[i for i in self.wsi.geojson_ftus['features'] if i['properties']['name']==struct]},
                         'id': {'type':'ftu-bounds','index':self.wsi.ftu_names.index(struct)},
+                        'popup_id':{'type':'ftu-popup','index':self.wsi.ftu_names.index(struct)},
                         'color':self.ftu_colors[struct],
                         'hover_color':'#9caf00'
                     }
@@ -1026,6 +1068,7 @@ class SlideHeatVis:
             spot_dict = {
                 'geojson':self.wsi.geojson_spots,
                 'id':{'type':'ftu-bounds','index':len(self.wsi.ftu_names)},
+                'popup_id':{'type':'ftu-popup','index':len(self.wsi.ftu_names)},
                 'color':self.ftu_colors["Spots"],
                 'hover_color':'#9caf00'
             }
@@ -1033,9 +1076,10 @@ class SlideHeatVis:
             new_children = [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=self.cell_vis_val, ftu_color = self.ftu_colors[struct]),
-                                    hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'],dashArray='')))
+                        dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=self.cell_vis_val, ftu_color = self.ftu_colors[struct],filter_vals = self.filter_vals),
+                                    hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'],dashArray='')),
+                                    children = [dl.Popup(id=map_dict['FTUs'][struct]['popup_id'])])
                     ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
                 )
                 for struct in map_dict['FTUs']
@@ -1043,9 +1087,11 @@ class SlideHeatVis:
             new_children += [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(style = self.ftu_style_handle),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = self.ftu_colors['Spots']),
-                                    hoverStyle = arrow_function(dict(weight=5,color=spot_dict['hover_color'],dashArray='')))
+                        dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = self.ftu_colors['Spots'],filter_vals = self.filter_vals),
+                                    hoverStyle = arrow_function(dict(weight=5,color=spot_dict['hover_color'],dashArray='')),
+                                    children = [dl.Popup(id=spot_dict['popup_id'])],
+                                    zoomToBounds=False)
                     ),name = 'Spots', checked = False, id = self.wsi.item_id+'_Spots'
                 )
             ]
@@ -1054,9 +1100,10 @@ class SlideHeatVis:
                 new_children.append(
                     dl.Overlay(
                         dl.LayerGroup(
-                            dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle),
-                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white'),
-                                        hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'],dashArray='')))
+                            dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white',filter_vals = self.filter_vals),
+                                        hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'],dashArray='')),
+                                        children = [dl.Popup(id=man['popup_id'])])
                         ), name = f'Manual ROI {m_idx}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
                     )
                 )
@@ -1064,7 +1111,7 @@ class SlideHeatVis:
 
             self.current_overlays = new_children
                         
-            return new_children, color_bar, filter_max_val, filter_disable, ftu_color
+            return new_children, color_bar, filter_max_val, filter_disable
         else:
             raise exceptions.PreventUpdate
 
@@ -1463,6 +1510,7 @@ class SlideHeatVis:
                 struct: {
                     'geojson':{'type':'FeatureCollection','features':[i for i in new_slide.geojson_ftus['features'] if i['properties']['name']==struct]},
                     'id':{'type':'ftu-bounds','index':new_slide.ftu_names.index(struct)},
+                    'popup_id':{'type':'ftu-popup','index':new_slide.ftu_names.index(struct)},
                     'color':self.ftu_colors[struct],
                     'hover_color':'#9caf00'
                 }
@@ -1474,6 +1522,7 @@ class SlideHeatVis:
         spot_dict = {
             'geojson': new_slide.geojson_spots,
             'id':{'type':'ftu-bounds','index':len(new_slide.ftu_names)},
+            'popup_id':{'type':'ftu-popup','index':len(new_slide.ftu_names)},
             'color': self.ftu_colors['Spots'],
             'hover_color':'#9caf00'
         }
@@ -1481,9 +1530,10 @@ class SlideHeatVis:
         new_children = [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle),
-                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val),
-                                hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'], dashArray = '')))
+                    dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_va.s),
+                                hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
+                                children = [dl.Popup(id=map_dict['FTUs'][struct]['popup_id'])])
                 ), name = struct, checked = True, id = new_slide.item_id+'_'+struct
             )
             for struct in map_dict['FTUs']
@@ -1492,10 +1542,12 @@ class SlideHeatVis:
         new_children += [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(style = self.ftu_style_handle),
-                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val),
-                                hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray='')))),
-                name = 'Spots', checked = False, id = new_slide.item_id+'_Spots'
+                    dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_vals),
+                                hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray='')),
+                                children = [dl.Popup(id=spot_dict['popup_id'])],
+                                zoomtoBounds=True),
+                ), name = 'Spots', checked = False, id = new_slide.item_id+'_Spots'
             )
         ]
 
@@ -1504,9 +1556,10 @@ class SlideHeatVis:
             new_children.append(
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors),
-                                    hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')))
+                        dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
+                                    hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')),
+                                    children = [dl.Popup(id=man['popup_id'])])
                     ),
                     name = f'Manual ROI {m_idx}', checked = True, id = new_slide.item_id+f'_manual_roi{m_idx}'
                 )
@@ -1726,22 +1779,19 @@ class SlideHeatVis:
                             # New geojson has no properties which can be used for overlays or anything so we have to add those
                             # Step 1, find intersecting spots:
                             overlap_spot_props = self.wsi.find_intersecting_spots(shape(new_geojson['features'][0]['geometry']))
-                            main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_spot_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
-
-                            main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
-
-                            main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
                             
+                            # Adding Main_Cell_Types from intersecting spots data
+                            main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_spot_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
+                            main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
+                            main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
                             main_counts_dict = main_counts_data.astype(float).to_dict()[0]
 
+                            # Aggregating cell state information from intersecting spots
                             agg_cell_states = {}
                             for m_c in list(main_counts_dict.keys()):
 
                                 cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_spot_props]).sum(axis=0).to_frame()
-
-
                                 cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
-
                                 cell_states[0] = cell_states[0].map('{:.19f}'.format)
 
                                 agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
@@ -1757,6 +1807,8 @@ class SlideHeatVis:
                                 {
                                     'geojson':new_geojson,
                                     'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                    'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
+                                    'color':'white',
                                     'hover_color':'#32a852'
                                 }
                             )
@@ -1768,8 +1820,9 @@ class SlideHeatVis:
                             new_child = dl.Overlay(
                                 dl.LayerGroup(
                                     dl.GeoJSON(data = new_geojson, id = {'type':'ftu-bounds','index':len(self.current_overlays)}, options = dict(style=self.ftu_style_handle),
-                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val),
-                                        hoverStyle = arrow_function(dict(weight=5, color = '#32a852',dashArray = ''))
+                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_vals),
+                                        hoverStyle = arrow_function(dict(weight=5, color = '#32a852',dashArray = '')),
+                                        children = [dl.Popup(id={'type':'ftu-popup','index':len(self.current_overlays)})]
                                     )
                                 ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
                             )
@@ -2175,18 +2228,17 @@ class SlideHeatVis:
         wsi_name = wsi_name[0]
         omics_name = omics_name[0]
         if ctx.triggered_id['type']=='wsi-upload' and not wsi_file is None:
-            
-            self.dataset_handler.upload_data(wsi_file,wsi_name,self.upload_collection_id)
+            collection_id = self.dataset_handler.upload_data(wsi_file,wsi_name)
 
         elif ctx.triggered_id['type']=='omics-upload' and not omics_file is None:
 
-            self.dataset_handler.upload_data(omics_file,omics_name,self.upload_collection_id)
+            collection_id = self.dataset_handler.upload_data(omics_file,omics_name)
 
         # Checking the upload check
         if all([self.upload_check[i] for i in self.upload_check]):
             print('All set!')
 
-            slide_qc_table = self.slide_qc(self.upload_collection_id)
+            slide_qc_table = self.slide_qc(collection_id)
 
             slide_qc_results = dash_table.DataTable(
                 id = {'type':'slide-qc-table','index':0},

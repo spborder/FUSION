@@ -25,6 +25,8 @@ import shutil
 from PIL import Image
 from io import BytesIO
 import requests
+from math import ceil
+import base64
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -109,7 +111,9 @@ class LayoutHandler:
             dl.Overlay(
                 dl.LayerGroup(
                     dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(color = spot_dict['color']),
-                        hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray = '')),children = [dl.Popup(id=spot_dict['popup_id'])])),
+                        hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray = '')),
+                        children = [dl.Popup(id=spot_dict['popup_id'])],
+                        zoomToBounds=True)),
                 name = 'Spots', checked = False, id = 'Spots')
         ]
 
@@ -543,8 +547,11 @@ class LayoutHandler:
                             id = 'filter-slider',
                             min=0.0,
                             max=1.0,
-                            step = 0.1,
-                            value = [0.0,1.0]
+                            step = 0.01,
+                            value = [0.0,1.0],
+                            marks=None,
+                            tooltip = {'placement':'bottom','always_visible':True},
+                            allowCross=False
                         )
                     ])
                 ]),
@@ -572,10 +579,10 @@ class LayoutHandler:
                                                     value = combined_colors_dict[struct]['color'],
                                                     fullWidth=True
                                                 ),
-                                                style = {'width':'50vh'}
+                                                style = {'width':'30vh'}
                                             )
-                                        ],md=12)
-                                    ])
+                                        ],md=12,align='center')
+                                    ],align='center')
                                 ], label = struct
                             )
                             for idx,struct in enumerate(list(combined_colors_dict.keys()))
@@ -1335,11 +1342,45 @@ class GirderHandler:
 
         return image_region
 
-    def upload_data(self,data,data_name,target_id):
+    def upload_data(self,data,data_name):
 
+        # Finding the current user's private folder
+        user_folder = f'/user/{self.gc.get("/user/me")["login"]}/Private'
+        private_folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder})['_id']
+        print(f'user_folder: {user_folder}')
+        print(f'private_folder_id: {private_folder_id}')
         # Trying to just upload the entire file at once?
-        self.gc.post('/file',data=data,parameters={'parentType':'folder','parentId':target_id,'name':data_name})
+        """
+        print('Starting upload')
 
+        # Finding file size
+        print(f'len of bytes string: {len(data)}')
+        print(f'n_unique characters: {len(set(data))}')
+        print(f'type of data: {type(data)}')
+        #upload_size = 4*(ceil(len(data)/3))
+        upload_size = 8913183
+        print(f'upload_size: {upload_size}')
+
+        response = self.gc.post(f'/file?token={self.user_token}',
+                     data={'image':data},
+                     headers = {
+                         'X-HTTP-Metod':'POST',
+                         'Content-Type':'image/jpeg'
+                     },
+                     parameters={
+                         'parentType':'folder',
+                         'parentId':private_folder_id,
+                         'name':data_name,
+                         'size':upload_size,
+                         'mimeType':'image/jpeg'
+                         }
+                    )
+        self.gc.post(f'/file/completion?token={self.user_token}',
+                     parameters={'uploadId':response['_id']})
+        print(response)
+        print(f'Upload completed: {data_name}')
+        """
+        return private_folder_id
 
 
 
