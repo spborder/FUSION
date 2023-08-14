@@ -742,27 +742,37 @@ class LayoutHandler:
             dbc.CardHeader('File Uploads'),
             dbc.CardBody([
                 dbc.Row([
-                    #dbc.Col([
-                    #    dbc.Label('Select Collection or Make New Collection',html_for='collect-select'),
-                    #    dcc.Dropdown(collection_list,placeholder='Collections',id='collect-select'),
-                    #    html.B(),
-                    #    dcc.Input(type='text',placeholder='New Collection Name',id='new-collect-entry',disabled=True,style={'marginTop':'2px'})
-                    #],md=2),
-                    dbc.Col([
-                        dbc.Label('Select Upload type:',html_for='upload-type'),
-                        dcc.Dropdown(upload_types, placeholder = 'Select Spatial -omics method', id = 'upload-type')
-                    ],md=6,style={'marginRight':'20px'}),
-                    dbc.Col(html.Div(id='upload-requirements'),md=6,style={'marginLeft':'20px'})
-                ],align='center')
+                    dbc.Col(
+                        html.Div([
+                            dbc.Label('Select Upload type:',html_for='upload-type'),
+                            dcc.Dropdown(upload_types, placeholder = 'Select Spatial -omics method', id = 'upload-type')
+                            ]
+                        )
+                    ),
+                    dbc.Col(
+                        html.Div(
+                            id='upload-requirements',
+                            children = []
+                        )
+                    )
+                ],
+                align='center')
             ])
         ])
 
         # Slide QC card:
         slide_qc_card = dbc.Card([
             dbc.CardHeader('Slide Quality Control Results'),
-            dbc.CardBody([
-                html.Div(id='slide-qc-results')
-            ])
+            dbc.CardBody(
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            id='slide-qc-results',
+                            children = []
+                        )
+                    )
+                ])
+            )
         ])
 
         # MC model selection card:
@@ -773,10 +783,12 @@ class LayoutHandler:
             dbc.CardHeader('Multi-Compartment Model Selection'),
             dbc.CardBody([
                 dbc.Row([
-                    dbc.Col([
-                        dbc.Label('Select Organ:',html_for='organ-type'),
-                        dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True)
-                    ])
+                    dbc.Col(
+                        html.Div([
+                            dbc.Label('Select Organ:',html_for='organ-type'),
+                            dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True)
+                        ])
+                    )
                 ])
             ])
         ])
@@ -790,46 +802,77 @@ class LayoutHandler:
             dbc.CardHeader('Sub-Compartment Segmentation'),
             dbc.CardBody([
                 dbc.Row([
-                    dbc.Col([
-                        dbc.Label('Select FTU',html_for='ftu-select'),
-                        dcc.Dropdown(placeholder='FTU Options',id='ftu-select')
-                    ],md=6),
-                    dbc.Col(html.Div(id='seg-qc-results'),md=6)
-                ]),
-                html.Hr(),
-                dbc.Row([
-                    dbc.Col(dcc.Graph(figure=go.Figure(),id='ex-ftu-img'),md=8),
-                    dbc.Col([
-                        dbc.Label('Example FTU Segmentation Options',html_for='ex-ftu-opts'),
-                        html.Hr(),
-                        html.Div(id='ex-ftu-opts',children = [
-                            dcc.RadioItems(['Overlaid','Side-by-Side'],value='Overlaid',inline=True,id='ex-ftu-view'),
-                            html.B(),
-                            dbc.Label('Overlaid Mask Transparency:',html_for='ex-ftu-slider'),
-                            dcc.Slider(0,100,5,value=50,marks=None,vertical=False,tooltip={'placement':'bottom'})
-                        ]),
-
-                    ],md=4)
-                ]),
-                html.Hr(),
-                dbc.Row([
-                    dbc.Col(dbc.Label('Sub-compartment Segmentation Method:',html_for='sub-comp-method'),md=4),
                     dbc.Col(
-                        [
-                            dcc.Dropdown(sub_comp_methods_list,placeholder='Available Methods',id='sub-comp-method')
-                        ],md=8
+                        html.Div([
+                            dbc.Label('Select FTU',html_for='ftu-select'),
+                            dcc.Dropdown(placeholder='FTU Options',id='ftu-select')
+                        ]),md=6),
+                    dbc.Col(
+                        html.Div(
+                            id='seg-qc-results',
+                            children = []
+                        ),md=6)
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            children = [
+                                dcc.Graph(figure=go.Figure(),id='ex-ftu-img')
+                            ]
+                        ),md=8),
+                    dbc.Col(
+                        html.Div(
+                            children = [
+                                dbc.Label('Example FTU Segmentation Options',html_for='ex-ftu-opts'),
+                                html.Hr(),
+                                html.Div(
+                                    id='ex-ftu-opts',
+                                    children = [
+                                        dcc.RadioItems(['Overlaid','Side-by-Side'],value='Overlaid',inline=True,id='ex-ftu-view'),
+                                        html.B(),
+                                        dbc.Label('Overlaid Mask Transparency:',html_for='ex-ftu-slider'),
+                                        dcc.Slider(0,100,5,value=50,marks=None,vertical=False,tooltip={'placement':'bottom'})
+                                    ]
+                                )
+                            ]
+                        ),md=4)
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            children = [
+                                dbc.Label('Sub-compartment Segmentation Method:',html_for='sub-comp-method')
+                            ]
+                        ),md=4),
+                    dbc.Col(
+                        html.Div(
+                            children = [
+                                dcc.Dropdown(sub_comp_methods_list,placeholder='Available Methods',id='sub-comp-method')
+                            ]
+                        ),md=8
                     )
                 ]),
-                dbc.Row(html.Div(id='sub-comp-tabs'))
+                dbc.Row(
+                    dbc.Col(
+                        html.Div(
+                            id='sub-comp-tabs',
+                            children = []
+                        ),md=12
+                    )
+                )
             ])
         ])
 
         # Feature extraction card:
         feat_extract_card = dbc.Card([
             dbc.CardHeader('Morphometric Feature Extraction'),
-            dbc.CardBody([
-                html.Div(id='feature-items')
-            ])
+            dbc.CardBody(
+                dbc.Row([
+                    dbc.Col(html.Div(id='feature-items'))
+                ])
+            )
         ])
 
         # Progressbar
@@ -839,18 +882,44 @@ class LayoutHandler:
                 html.H1('Dataset Uploader'),
                 html.Hr(),
                 dbc.Row(
-                    file_upload_card
+                    children = [
+                        dbc.Col(file_upload_card,md=12)
+                    ]
                 ),
                 html.Hr(),
-                dbc.Row([
-                    dbc.Col(slide_qc_card,style={'margin-right':'20px'}),
-                    dbc.Col(mc_model_card,style={'margin-left':'20px'})
-                ]),
+                dbc.Row(
+                    children = [
+                        dbc.Col(
+                            dbc.Row(
+                                children = [
+                                    dbc.Col(slide_qc_card,md=6),
+                                    dbc.Col(mc_model_card,md=6)
+                                ]
+                            ),md=12
+                        )
+                    ],
+                    align='center',
+                    id = 'post-upload-row',
+                    style = {'display':'none'}
+                ),
                 html.Hr(),
-                dbc.Row([
-                    dbc.Col(sub_comp_card,style={'margin-right':'20px'}),
-                    dbc.Col(feat_extract_card,style={'margin-left':'20px'})
-                ]),
+                dbc.Row(
+                    children = [
+                        dbc.Col(
+                            html.Div(
+                                dbc.Row(
+                                    children = [
+                                        dbc.Col(html.Div(sub_comp_card),md=6),
+                                        dbc.Col(html.Div(feat_extract_card),md=6)
+                                    ]
+                                )
+                            ),md=12
+                        )
+                    ],
+                    align='center',
+                    id = 'post-segment-row',
+                    style={'display':'none'}
+                ),
                 html.Hr(),
                 dbc.Row(p_bar)
 

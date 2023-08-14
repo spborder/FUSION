@@ -513,9 +513,17 @@ class SlideHeatVis:
              [State({'type':'wsi-upload','index':ALL},'filename'),
               State({'type':'omics-upload','index':ALL},'filename')],
               [Output('slide-qc-results','children'),
-               Output('organ-type','disabled')],
+               Output('organ-type','disabled'),
+               Output('post-upload-row','style')],
             prevent_initial_call=True
         )(self.upload_data)
+
+        # Executing segmentation according to model selection
+        self.app.callback(
+            Input('organ-type','value'),
+            Output('post-segment-row','style'),
+            prevent_initial_call=True
+        )(self.apres_segmentation)
 
         # Enabling components after upload is complete
 
@@ -2230,19 +2238,26 @@ class SlideHeatVis:
         if ctx.triggered_id['type']=='wsi-upload' and not wsi_file is None:
             collection_id = self.dataset_handler.upload_data(wsi_file,wsi_name)
 
+            self.upload_check['WSI'] = True
+
         elif ctx.triggered_id['type']=='omics-upload' and not omics_file is None:
 
             collection_id = self.dataset_handler.upload_data(omics_file,omics_name)
+            
+            self.upload_check['Omics'] = True
 
+        print(self.upload_check)
         # Checking the upload check
         if all([self.upload_check[i] for i in self.upload_check]):
             print('All set!')
 
+            print(f'collection_id: {collection_id}')
             slide_qc_table = self.slide_qc(collection_id)
+            print(slide_qc_table)
 
             slide_qc_results = dash_table.DataTable(
                 id = {'type':'slide-qc-table','index':0},
-                columns = [{'name':i, 'id': i, 'deletable':False, 'selectable':True} for i in slide_qc_results],
+                columns = [{'name':i, 'id': i, 'deletable':False, 'selectable':True} for i in slide_qc_table],
                 data = slide_qc_table.to_dict('records'),
                 editable=False,
                 filter_action='native',
@@ -2271,21 +2286,37 @@ class SlideHeatVis:
             )
 
             organ_type_disabled = False
+            post_upload_style = {'display':'flex'}
 
-            return slide_qc_results, organ_type_disabled
+            return slide_qc_results, organ_type_disabled, post_upload_style
         
         else:
             raise exceptions.PreventUpdate
 
     def slide_qc(self, upload_collection_id):
 
-        collection_contents = self.dataset_handler.get_collection_items(upload_collection_id)
+        try:
+            collection_contents = self.dataset_handler.get_collection_items(upload_collection_id)
+        except girder_client.HttpError:
+            print(f'Collection: {upload_collection_id} is empty')
+            collection_contents = [{'Slide':'No Slide','OtherStuff':'No Other Stuff Either'}]
 
         #TODO: Activate the HistoQC plugin from here and return some metrics
         histo_qc_output = pd.DataFrame.from_records(collection_contents)
 
         return histo_qc_output
 
+    def apres_segmentation(self,organ_selection):
+
+        print(f'organ_selection: {organ_selection}')
+        if not organ_selection is None:
+
+            # Executing segmentation CLI for organ/model/FTU selections
+
+            sub_comp_style = {'display':'flex'}
+            return sub_comp_style
+        else:
+            raise exceptions.PreventUpdate
 
 #if __name__ == '__main__':
 def app(*args):
