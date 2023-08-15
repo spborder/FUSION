@@ -79,8 +79,8 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
 
             if (current_cell in feature.properties.Main_Cell_Types) {
                 var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                if (cell_value > filter_vals[0]) {
-                    if (cell_value < filter_vals[1]) {
+                if (cell_value >= filter_vals[0]) {
+                    if (cell_value <= filter_vals[1]) {
                         return true;
                     } else {
                         return false;
@@ -90,8 +90,8 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 }
             } else if (current_cell in feature.properties) {
                 var cell_value = feature.properties[current_cell];
-                if (cell_value > filter_vals[0]) {
-                    if (cell_value < filter_vals[1]) {
+                if (cell_value >= filter_vals[0]) {
+                    if (cell_value <= filter_vals[1]) {
                         return true;
                     } else {
                         return false;

@@ -49,7 +49,7 @@ import dash_leaflet as dl
 import dash_leaflet.express as dlx
 from dash_extensions.javascript import assign, Namespace, arrow_function
 from dash_extensions.enrich import DashProxy, html, Input, Output, MultiplexerTransform, State
-
+import dash_mantine_components as dmc
 
 from timeit import default_timer as timer
 #import diskcache
@@ -59,7 +59,7 @@ from Initialize_FUSION import LayoutHandler, DownloadHandler, GirderHandler
 from FUSION_Prep import PrepHandler
 
 
-class SlideHeatVis:
+class FUSION:
     def __init__(self,
                 app,
                 layout_handler,
@@ -157,6 +157,8 @@ class SlideHeatVis:
         # Colormap settings (customize later)
         self.color_map = cm.get_cmap('jet',255)
         self.cell_vis_val = 0.5
+        self.filter_vals = [0,1]
+
         self.ftu_style_handle = assign("""function(feature,context){
             const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.props.hideout;
             
@@ -225,8 +227,8 @@ class SlideHeatVis:
                                  
                 if (current_cell in feature.properties.Main_Cell_Types){
                     var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                    if (cell_value > filter_vals[0]){
-                        if (cell_value < filter_vals[1]){
+                    if (cell_value >= filter_vals[0]){
+                        if (cell_value <= filter_vals[1]){
                             return true;
                         } else {
                             return false;
@@ -236,8 +238,8 @@ class SlideHeatVis:
                     }
                 } else if (current_cell in feature.properties){
                     var cell_value = feature.properties[current_cell];
-                    if (cell_value > filter_vals[0]){
-                        if (cell_value < filter_vals[1]){
+                    if (cell_value >= filter_vals[0]){
+                        if (cell_value <= filter_vals[1]){
                             return true;
                         } else {
                             return false;
@@ -399,8 +401,9 @@ class SlideHeatVis:
              Output('slide-map','bounds'),
              Output('slide-tile','tileSize'),
              Output('slide-map','maxZoom'),
-             Output('feature-group','children'),
-             Output('cell-drop','options')],
+             Output({'type':'edit_control','index':ALL},'geojson'),
+             Output('cell-drop','options'),
+             Output('ftu-bound-opts','children')],
             Input('slide-select','value'),
             prevent_initial_call=True,
             suppress_callback_exceptions=True
@@ -538,12 +541,35 @@ class SlideHeatVis:
 
         return video_src
 
+    def update_plotting_metadata(self):
+
+        # Populating metadata based on current slides selection
+        metadata = []
+
+        print(f'current_slides: {self.current_slides}')
+        for i in self.current_slides:
+            if i['included']:
+                item_annotations = self.dataset_handler.gc.get(f'/annotation/item/{i["_id"]}')
+                if len(item_annotations)>0:
+                    for g in item_annotations:
+                        if 'annotation' in g:
+                            if 'elements' in g['annotation']:
+                                for e in g['annotation']['elements']:
+                                    if 'user' not in e:
+                                        e['user'] = {}
+                                    e['user']['slide_id'] = i['_id']
+                                    e['user']['annotation_id'] = e['id']
+                                    metadata.append(e['user'])
+
+        return metadata
+
     def initialize_metadata_plots(self,selected_dataset_list):
 
         # Extracting metadata from selected datasets and plotting
         all_metadata_labels = []
         all_metadata = []
         slide_dataset_dict = []
+        full_slides_list = []
 
         for d in selected_dataset_list:
 
@@ -555,6 +581,8 @@ class SlideHeatVis:
             metadata_available = self.dataset_handler.slide_datasets[d_id]['Metadata']
             # This will store metadata, id, name, etc. for every slide in that dataset
             slides_list = [i for i in self.dataset_handler.slide_datasets[d_id]['Slides']]
+            full_slides_list.extend(slides_list)
+
             slide_dataset_dict.extend([{'Slide Names':s['name'],'Dataset':d_name} for s in slides_list])
 
             # Grabbing dataset-level metadata
@@ -567,9 +595,12 @@ class SlideHeatVis:
         all_metadata_labels = np.unique(all_metadata_labels)
         slide_dataset_df = pd.DataFrame.from_records(slide_dataset_dict)
         self.current_slides = []
-        for i in slide_dataset_dict:
+        for i in full_slides_list:
             i['included'] = True
             self.current_slides.append(i)
+
+        # Updating annotation metadata
+        self.metadata = self.update_plotting_metadata()
 
         # Defining cell_type_dropdowns
         cell_type_dropdowns = [
@@ -649,7 +680,6 @@ class SlideHeatVis:
         else:
             cell_types_turn_off = (False, False, False)
 
-
         current_slide_count, slide_select_options = self.update_current_slides(slide_rows)
 
         print(f'new_meta: {new_meta}')
@@ -659,10 +689,14 @@ class SlideHeatVis:
         if type(group_type)==list:
             group_type = group_type[0]
 
+        if type(ctx.triggered_id)==dict:
+            if ctx.triggered_id['type']=='slide-dataset-table':
+                self.metadata = self.update_plotting_metadata()
+
         # For DSA-backend deployment
         if not new_meta is None:
             # Filtering out de-selected slides
-            present_slides = [s['Slide Names'] for s in self.current_slides]
+            present_slides = [s['name'] for s in self.current_slides]
             included_slides = [t for t in present_slides if self.current_slides[present_slides.index(t)]['included']]                    
             #print(f'included_slides: {included_slides}')
 
@@ -786,10 +820,11 @@ class SlideHeatVis:
                 else:
                     self.current_slides[s]['included'] = False
                     
-            slide_options = [{'label':i['Slide Names'],'value':i['Slide Names']} for i in self.current_slides if i['included']]
+            slide_options = [{'label':i['name'],'value':i['name']} for i in self.current_slides if i['included']]
 
         if slide_options == []:
             slide_options = [{'label':'blah','value':'blah'}]
+
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
@@ -1509,6 +1544,7 @@ class SlideHeatVis:
                     slide_properties.append(p.replace(cell_abbrev,self.cell_graphics_key[cell_abbrev]['full']))
 
         self.wsi = new_slide
+        print(f'length of manual ROIs: {len(self.wsi.manual_rois)}')
 
         # Updating overlays colors according to the current cell
         self.update_hex_color_key(self.current_cell)
@@ -1541,7 +1577,7 @@ class SlideHeatVis:
             dl.Overlay(
                 dl.LayerGroup(
                     dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
-                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_va.s),
+                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                                 children = [dl.Popup(id=map_dict['FTUs'][struct]['popup_id'])])
                 ), name = struct, checked = True, id = new_slide.item_id+'_'+struct
@@ -1556,7 +1592,7 @@ class SlideHeatVis:
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray='')),
                                 children = [dl.Popup(id=spot_dict['popup_id'])],
-                                zoomtoBounds=True),
+                                zoomToBounds=True),
                 ), name = 'Spots', checked = False, id = new_slide.item_id+'_Spots'
             )
         ]
@@ -1586,12 +1622,44 @@ class SlideHeatVis:
         self.current_overlays = new_children
 
         # Adding fresh edit-control to the outputs
+        """
         new_edit_control = dl.EditControl(
             id={'type':'edit_control','index':np.random.randint(0,1000)},
             draw = dict(line=False,circle=False,circlemarker=False)
             )
+        """
 
-        return new_url, new_children, center_point, map_bounds, tile_size, zoom_levels,new_edit_control, slide_properties
+        # Populating FTU boundary options:
+        combined_colors_dict = {}
+        for f in map_dict['FTUs']:
+            combined_colors_dict[f] = {'color':map_dict['FTUs'][f]['color']}
+        
+        combined_colors_dict['Spots'] = {'color':spot_dict['color']}
+
+        boundary_options_children = [
+            dbc.Tab(
+                children = [
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div(
+                                dmc.ColorPicker(
+                                    id = {'type':'ftu-bound-color','index':idx},
+                                    format = 'hex',
+                                    value = combined_colors_dict[struct]['color'],
+                                    fullWidth=True
+                                ),
+                                style = {'width':'30vh'}
+                            )
+                        ],md=12,align='center')
+                    ],align='center')
+                ], label = struct
+            )
+            for idx, struct in enumerate(list(combined_colors_dict.keys()))
+        ]
+
+        new_edit_control = [{'type':'FeatureCollection','features':[]}]
+
+        return new_url, new_children, center_point, map_bounds, tile_size, zoom_levels, new_edit_control, slide_properties, boundary_options_children
 
     def update_graph(self,ftu,plot,label):
         
@@ -1766,15 +1834,9 @@ class SlideHeatVis:
 
     def add_manual_roi(self,new_geojson):
         
-        print(f'triggered_id for add_manual: {ctx.triggered_id}')
-        print(f'triggered prop ids for add_manual: {ctx.triggered_prop_ids}')
-        print(f'type of ctx.triggered_id: {type(ctx.triggered_id)}')
         triggered_id = ctx.triggered_id['type']
 
-        print(f'triggered_id: {triggered_id}')
-
         if triggered_id == 'edit_control':
-            print(f'manual_roi:{new_geojson}')
             if not new_geojson is None:
                 if type(new_geojson)==list:
                     new_geojson = new_geojson[0]
@@ -1784,7 +1846,6 @@ class SlideHeatVis:
                         if not new_geojson['features'][len(self.wsi.manual_rois)]['properties']['type']=='marker':
                             # Only getting the most recent to add
                             new_geojson = {'type':'FeatureCollection','features':[new_geojson['features'][len(self.wsi.manual_rois)]]}
-                            print(f'new_geojson: {new_geojson}')
 
                             # New geojson has no properties which can be used for overlays or anything so we have to add those
                             # Step 1, find intersecting spots:
@@ -1806,7 +1867,6 @@ class SlideHeatVis:
 
                                 agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
                             
-
                             new_geojson['features'][0]['properties']['Main_Cell_Types'] = main_counts_dict
                             new_geojson['features'][0]['properties']['Cell_States'] = agg_cell_states
 
@@ -2489,7 +2549,7 @@ def app(*args):
     prep_handler = PrepHandler(dataset_handler)
 
     main_app = DashProxy(__name__,external_stylesheets=external_stylesheets,transforms = [MultiplexerTransform()])
-    vis_app = SlideHeatVis(
+    vis_app = FUSION(
         main_app,
         layout_handler,
         dataset_handler,
