@@ -65,6 +65,7 @@ class SlideHeatVis:
                 layout_handler,
                 dataset_handler,
                 download_handler,
+                prep_handler,
                 wsi,
                 cell_graphics_key,
                 asct_b_table,
@@ -80,6 +81,7 @@ class SlideHeatVis:
         self.current_overlays = self.layout_handler.initial_overlays
 
         self.download_handler = download_handler
+        self.prep_handler = prep_handler
 
         # Setting some app-related things
         self.app = app
@@ -2254,6 +2256,7 @@ class SlideHeatVis:
             print(f'collection_id: {collection_id}')
             slide_qc_table = self.slide_qc(collection_id)
             print(slide_qc_table)
+            self.upload_item_id = collection_id
 
             slide_qc_results = dash_table.DataTable(
                 id = {'type':'slide-qc-table','index':0},
@@ -2312,11 +2315,20 @@ class SlideHeatVis:
         if not organ_selection is None:
 
             # Executing segmentation CLI for organ/model/FTU selections
-
             sub_comp_style = {'display':'flex'}
+
+            print(f'Running segmentation!')
+            try:
+                segmentation_info = self.prep_handler.segment_image(self.upload_item_id,organ_selection)
+            except girder_client.HttpError:
+                print('Error running job')
+
             return sub_comp_style
+        
         else:
             raise exceptions.PreventUpdate
+    
+
 
 #if __name__ == '__main__':
 def app(*args):
@@ -2474,12 +2486,15 @@ def app(*args):
 
     download_handler = DownloadHandler(dataset_handler)
 
+    prep_handler = PrepHandler(dataset_handler)
+
     main_app = DashProxy(__name__,external_stylesheets=external_stylesheets,transforms = [MultiplexerTransform()])
     vis_app = SlideHeatVis(
         main_app,
         layout_handler,
         dataset_handler,
         download_handler,
+        prep_handler,
         wsi,
         cell_graphics_key,
         asct_b_table,

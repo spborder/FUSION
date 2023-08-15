@@ -11,6 +11,10 @@ import numpy as  np
 
 from PIL import Image
 from skimage.draw import polygon
+from skimage.color import rgb2hsv
+from skimage.morphology import remove_small_objects, remove_small_holes
+from skimage.segmentation import watershed
+from skimage.measure import label
 
 class PrepHandler:
     def __init__(self,
@@ -18,6 +22,11 @@ class PrepHandler:
                  ):
 
         self.girder_handler = girder_handler
+
+        # Dictionary containing model and item id's
+        self.model_zoo = {
+            'Kidney':'648123751019450486d13dcd'
+        }
 
 
     def get_annotation_image_mask(self,item_id,annotations,layer_idx,ann_idx):
@@ -52,23 +61,62 @@ class PrepHandler:
 
             return image, mask
 
+    def segment_image(self,item_id,model_type):
 
+        # Get folder id from item id
+        folder_id = self.girder_handler.gc.get(f'/item/{item_id}')
+        print(f'item info: {folder_id}')
+        folder_id = folder_id['folderId']
 
+        if model_type=='Kidney':
+            job_response = self.girder_handler.gc.post('/slicer_cli_web/sarderlab_histo-cloud_Segmentation/SegmentWSI/run',
+                                        parameters={
+                                            'inputImageFile':item_id,
+                                            'outputAnnotationFile_folder':folder_id
+                                        })
 
+            print(f'job_response: {job_response}')
 
+        else:
+            job_response = 'Oopsie Poopsie!'
 
+        return job_response
 
+    def sub_segment_image(self,image,mask,seg_params):
+        
+        # Sub-compartment segmentation
+        sub_comp_image = np.zeros((np.shape(image)[0],np.shape(image)[1],len(seg_params)))
+        remainder_mask = np.ones((np.shape(image)[0],np.shape(image)[1]))
+        hsv_image = rgb2hsv(sub_comp_image)[:,:,1]
+        for idx,param in enumerate(seg_params):
 
+            remaining_pixels = np.multiply(hsv_image,remainder_mask)
+            masked_remaining_pixels = np.multiply(remaining_pixels,mask)
 
+            # Applying manual threshold
+            masked_remaining_pixels[masked_remaining_pixels<param['threshold']] = 0
+            masked_remaining_pixels[masked_remaining_pixels>0] = 1
 
+            # Filtering by minimum size
+            small_object_filtered = (1/255)*np.uint8(remove_small_objects(masked_remaining_pixels,param['min_size']))
 
+            # Check for if the current sub-compartment is nuclei
+            if param['name'].lower()=='nuclei':
+                
+                # Area threshold for holes is controllable for this
+                sub_mask = remove_small_holes(small_object_filtered,area_threshold=64)
+                sub_mask = watershed(sub_mask,label(sub_mask))
+                sub_mask = sub_mask>0
 
+            else:
+                sub_mask = small_object_filtered
 
+            sub_comp_image[:,:,idx] += sub_mask
+            remainder_mask -= sub_mask
 
+            # have to add the final mask thing for the lowest segmentation hierarchy
 
-
-
-
+        return sub_comp_image
 
 
 
