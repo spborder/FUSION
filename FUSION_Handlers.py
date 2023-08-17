@@ -40,11 +40,6 @@ import dash_mantine_components as dmc
 from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function
 
-#from dataclasses import dataclass, field
-#from typing import Callable, List, Union
-#from dash.dependencies import handle_callback_args
-#from dash.dependencies import Input, Output, State
-
 import girder_client
 
 
@@ -61,7 +56,6 @@ class LayoutHandler:
         self.info_button_idx = -1
 
         self.gen_welcome_layout()
-        #self.gen_uploader_layout()
 
     def gen_info_button(self,text):
         
@@ -82,10 +76,11 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self,cell_types, center_point, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds, cli_list = None):
+    def gen_vis_layout(self,wsi, cli_list = None):
 
+        #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
-
+        center_point = [0.5*(wsi.map_bounds[0][0]+wsi.map_bounds[1][0]),0.5*(wsi.map_bounds[0][1]+wsi.map_bounds[1][1])]
         # Description and instructions card
         vis_description = [
             html.P('FUSION was designed by the members of the CMI Lab at the University of Florida in collaboration with HuBMAP'),
@@ -101,37 +96,35 @@ class LayoutHandler:
         self.initial_overlays = [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(color = map_dict['FTUs'][struct]['color']),
-                        hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'], dashArray = '')),children=[dl.Popup(id = map_dict['FTUs'][struct]['popup_id'])])),
+                    dl.GeoJSON(data = wsi.map_dict['FTUs'][struct]['geojson'], id = wsi.map_dict['FTUs'][struct]['id'], options = dict(color = wsi.map_dict['FTUs'][struct]['color']),
+                        hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
                 name = struct, checked = True, id = struct)
-        for struct in map_dict['FTUs']
+        for struct in wsi.map_dict['FTUs']
         ] 
 
         self.initial_overlays+= [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(color = spot_dict['color']),
-                        hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray = '')),
-                        children = [dl.Popup(id=spot_dict['popup_id'])],
+                    dl.GeoJSON(data = wsi.spot_dict['geojson'], id = wsi.spot_dict['id'], options = dict(color = wsi.spot_dict['color']),
+                        hoverStyle = arrow_function(dict(weight=5, color = wsi.spot_dict['hover_color'], dashArray = '')),
+                        children = [dl.Popup(id=wsi.spot_dict['popup_id'])],
                         zoomToBounds=True)),
                 name = 'Spots', checked = False, id = 'Spots')
         ]
 
-
         map_children = [
-            dl.TileLayer(url = map_dict['url'], tileSize = tile_size, id = 'slide-tile'),
+            dl.TileLayer(url = wsi.map_dict['url'], tileSize = wsi.tile_dims[0], id = 'slide-tile'),
             dl.FeatureGroup(id='feature-group',
                             children = [
                                 dl.EditControl(id = {'type':'edit_control','index':0},
                                                 draw = dict(line=False, circle = False, circlemarker=False))
                             ]),
-            dl.LayerGroup(id='mini-label'),
             html.Div(id='colorbar-div',children = [dl.Colorbar(id='map-colorbar')]),
             dl.LayersControl(id='layer-control',children = self.initial_overlays)
         ]
 
         map_layer = dl.Map(
-            center = center_point, zoom = 3, minZoom = 0, maxZoom = zoom_levels, crs='Simple',bounds = map_bounds,
+            center = center_point, zoom = 3, minZoom = 0, maxZoom = wsi.zoom_levels, crs='Simple',bounds = wsi.map_bounds,
             style = {'width':'100%','height':'80vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             children = map_children
@@ -147,8 +140,7 @@ class LayoutHandler:
                 html.Div(
                     map_layer
                 )
-            ]),
-            dbc.Row([html.Div(id='current-hover')])
+            ])
         ], style = {'marginBottom':'20px'})
 
         # Cell type proportions and cell state distributions
@@ -291,7 +283,7 @@ class LayoutHandler:
 
         ftu_list = ['glomerulus','Tubules']
         plot_types = ['TSNE','UMAP']
-        labels = ['Cluster','image_id']+cell_types.copy()
+        labels = ['Cluster','image_id']+wsi.properties_list
         # Cluster viewer tab
         cluster_card = dbc.Card([
             dbc.Row([
@@ -424,7 +416,7 @@ class LayoutHandler:
         # Converting the cell_types list into a dictionary to disable some
         disable_list = []
         cell_types_list = []
-        for c in slide_properties:
+        for c in wsi.properties_list:
             if c not in disable_list:
                 cell_types_list.append({'label':c,'value':c,'disabled':False})
             else:
@@ -496,10 +488,10 @@ class LayoutHandler:
 
         # Overlays control tab
         combined_colors_dict = {}
-        for f in map_dict['FTUs']:
-            combined_colors_dict[f] = {'color':map_dict['FTUs'][f]['color']}
+        for f in wsi.map_dict['FTUs']:
+            combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
         
-        combined_colors_dict['Spots'] = {'color':spot_dict['color']}
+        combined_colors_dict['Spots'] = {'color':wsi.spot_dict['color']}
 
         overlays_tab = dbc.Card([
             dbc.CardBody([
@@ -514,7 +506,7 @@ class LayoutHandler:
                         html.Div(
                             id = 'cell-select-div',
                             children=[
-                                dcc.Dropdown(cell_types_list,cell_types_list[0]['value'],id='cell-drop')
+                                dcc.Dropdown(cell_types_list,placeholder='Select Property for Overlaid Heatmap',id='cell-drop')
                             ]
                         )
                     ])
@@ -582,7 +574,7 @@ class LayoutHandler:
                                                 style = {'width':'30vh'}
                                             )
                                         ],md=12,align='center')
-                                    ],align='center')
+                                    ],align='center',style={'marginTop':'5px','marginLeft':'10px'})
                                 ], label = struct
                             )
                             for idx,struct in enumerate(list(combined_colors_dict.keys()))
@@ -763,7 +755,15 @@ class LayoutHandler:
         # Slide QC card:
         slide_qc_card = dbc.Card([
             dbc.CardHeader('Slide Quality Control Results'),
-            dbc.CardBody(
+            dbc.CardBody([
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            id = 'slide-thumbnail-holder',
+                            children = []
+                        )
+                    )
+                ]),
                 dbc.Row([
                     dbc.Col(
                         html.Div(
@@ -772,7 +772,7 @@ class LayoutHandler:
                         )
                     )
                 ])
-            )
+            ])
         ])
 
         # MC model selection card:
@@ -829,10 +829,19 @@ class LayoutHandler:
                                 html.Div(
                                     id='ex-ftu-opts',
                                     children = [
-                                        dcc.RadioItems(['Overlaid','Side-by-Side'],value='Overlaid',inline=True,id='ex-ftu-view'),
+                                        dcc.RadioItems([{'label':html.Span('Overlaid',style={'marginBottom':'5px'}),'value':'Overlaid'},{'label':html.Span('Side-by-side'),'value':'Side-by-side'}],value='Overlaid',inline=True,id='ex-ftu-view'),
                                         html.B(),
-                                        dbc.Label('Overlaid Mask Transparency:',html_for='ex-ftu-slider'),
-                                        dcc.Slider(0,100,5,value=50,marks=None,vertical=False,tooltip={'placement':'bottom'})
+                                        dbc.Label('Overlaid Mask Transparency:',html_for='ex-ftu-slider',style={'marginTop':'10px'}),
+                                        dcc.Slider(0,100,5,value=0,marks=None,vertical=False,tooltip={'placement':'bottom'}),
+                                        html.B(),
+                                        dbc.Row([
+                                            dbc.Col(dbc.Button('Previous',id='prev-butt')),
+                                            dbc.Col(dbc.Button('Next',id='next-butt'))
+                                        ]),
+                                        dbc.Row([
+                                            dbc.Col(dbc.Button('Go to Feature Extraction',id='go-to-feat'))
+                                        ])
+
                                     ]
                                 )
                             ]
@@ -1173,14 +1182,22 @@ class LayoutHandler:
 
 class GirderHandler:
     def __init__(self,
-                apiUrl: str):
+                apiUrl: str,
+                username: str,
+                password: str):
         
         self.apiUrl = apiUrl
         self.gc = girder_client.GirderClient(apiUrl = self.apiUrl)
-    
+
+        self.authenticate(username, password)
+        self.get_token()
+
     def authenticate(self, username, password):
         # Getting authentication for user
         #TODO: Add some handling here for incorrect username or password
+        self.username = username
+        self.password = password
+        
         self.gc.authenticate(username,password)
 
     def get_token(self):
@@ -1230,129 +1247,6 @@ class GirderHandler:
         annotations = self.gc.get(f'annotation/item/{item_id}')
 
         return annotations
-    
-    def convert_json(self,annotations,image_dims,base_dims,tile_dims):
-
-        # Top left and bottom right should be in (x,y) or (lng,lat) format
-        #top_left = [0,tile_dims[0]]
-        #bottom_right = [0,tile_dims[1]]
-
-        # Translation step
-        #base_x_scale = base_dims[0]/(bottom_right[0]-top_left[0])
-        #base_y_scale = base_dims[1]/(bottom_right[1]-top_left[1])
-        base_x_scale = base_dims[0]/tile_dims[0]
-        base_y_scale = base_dims[1]/tile_dims[1]
-
-        # image bounds [maxX, maxY]
-        # bottom_right[0]-top_left[0] --> range of x values in target crs
-        # bottom_right[1]-top_left[1] --> range of y values in target crs
-        # scaling values so they fall into the current map (pixels)
-        #x_scale = (bottom_right[0]-top_left[0])/(image_dims[0])
-        #y_scale = (bottom_right[1]-top_left[1])/(image_dims[1])
-        x_scale = tile_dims[0]/image_dims[0]
-        y_scale = tile_dims[1]/image_dims[1]
-        y_scale*=-1
-        # y_scale has to be inverted because y is measured upward in these maps
-
-        final_ann = {'type':'FeatureCollection','features':[]}
-        for a in annotations:
-            if 'elements' in a['annotation']:
-                f_name = a['annotation']['name']
-                for f in a['annotation']['elements']:
-                    f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]},'properties':{}}
-                    
-                    # This is only for polyline type elements
-                    if f['type']=='polyline':
-                        og_coords = np.squeeze(np.array(f['points']))
-                        
-                        scaled_coords = og_coords.tolist()
-                        scaled_coords = [i[0:-1] for i in scaled_coords]
-                        scaled_coords = [[base_x_scale*((i[0]*x_scale)),base_y_scale*((i[1]*y_scale))] for i in scaled_coords]
-                        f_dict['geometry']['coordinates'] = [scaled_coords]
-
-                    elif f['type']=='rectangle':
-                        width = f['width']
-                        height = f['height']
-                        center = f['center'][0:-1]
-                        # Coords: top left, top right, bottom right, bottom left
-                        bbox_coords = [
-                            [int(center[0])-int(width/2),int(center[1])-int(height/2)],
-                            [int(center[0])+int(width/2),int(center[1])-int(height/2)],
-                            [int(center[0])+int(width/2),int(center[1])+int(height/2)],
-                            [int(center[0])-int(width/2),int(center[1])+int(height/2)]
-                        ]
-                        scaled_coords = [[base_x_scale*(i[0]*x_scale),base_y_scale*(i[1]*y_scale)] for i in bbox_coords]
-                        f_dict['geometry']['coordinates'] = [scaled_coords]
-
-                    # Who even cares about circles and ellipses??
-
-                    # If any user-provided metadata is provided per element add it to "properties" key                       
-                    if 'user' in f:
-                        f_dict['properties'] = f['user']
-
-                    f_dict['properties']['name'] = f_name
-
-                    final_ann['features'].append(f_dict)
-
-
-        return final_ann, base_x_scale*x_scale, base_y_scale*y_scale
-
-    def get_resource_map_data(self,resource):
-        # Getting all of the necessary materials for loading a new slide
-
-        # Step 1: get resource item id
-        # lol
-        if os.sep in resource:
-            item_id = self.get_resource_id(resource)
-        else:
-            item_id = resource
-
-        # Step 2: get resource tile metadata
-        tile_metadata = self.get_tile_metadata(item_id)
-        print(f'tile_metadata: {tile_metadata}')
-        # Step 3: get tile, base, zoom, etc.
-        # Number of zoom levels for an image
-        zoom_levels = tile_metadata['levels']
-        print(f'zoom_levels: {zoom_levels}')
-        # smallest level dimensions used to generate initial tiles
-        base_dims = [
-            tile_metadata['sizeX']/(2**(zoom_levels-1)),
-            tile_metadata['sizeY']/(2**(zoom_levels-1))
-        ]
-        # Getting the tile dimensions (used for all tiles)
-        tile_dims = [
-            tile_metadata['tileWidth'],
-            tile_metadata['tileHeight']
-        ]
-        # Original image dimensions used for scaling annotations
-        image_dims = [
-            tile_metadata['sizeX'],
-            tile_metadata['sizeY']
-        ]
-
-        print(f'base_dims: {base_dims}')
-        print(f'tile_dims: {tile_dims}')
-        print(f'image_dims: {image_dims}')
-
-        # Step 4: Defining bounds of map
-        map_bounds = [[0,image_dims[1]],[0,image_dims[0]]]
-
-        # Step 5: Getting annotations for a resource
-        annotations = self.get_annotations(item_id)
-
-        # Step 6: Converting Histomics/large-image annotations to GeoJSON
-        geojson_annotations, x_scale, y_scale = self.convert_json(annotations,image_dims,base_dims,tile_dims)
-
-        map_bounds[0][1]*=x_scale
-        map_bounds[1][1]*=y_scale
-
-        print(f'map_bounds: {map_bounds}')
-
-        # Step 7: Getting user token and tile url
-        user_token = self.get_token()
-        tile_url = self.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+user_token
-
-        return map_bounds, base_dims, image_dims, tile_dims[0], zoom_levels-1, geojson_annotations, x_scale, y_scale, tile_url
 
     def get_cli_list(self):
         # Get a list of possible CLIs available for current user
@@ -1380,8 +1274,6 @@ class GirderHandler:
         for p,p_type in zip(path,path_type):
             self.current_collection['path'].append(p)
             self.current_collection['id'].append(self.gc.get('resource/lookup',parameters={'path':p,})['_id'])
-            #self.current_collection_path = path
-            #self.current_collection_id = self.gc.get('resource/lookup',parameters={'path':self.current_collection_path})['_id']
 
             # Getting contents of base collection
             collection_contents = self.gc.get(f'resource/{self.current_collection["id"][-1]}/items',parameters={'type':p_type})
@@ -1417,6 +1309,29 @@ class GirderHandler:
                         self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
                     elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                         self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+    
+    def get_collection_annotation_meta(self,select_ids:list):
+
+        # Iterate through select_ids and extract annotation metadata
+        metadata = []
+        for i in select_ids:
+            try:
+                item_annotations = self.gc.get(f'/annotation/item/{i}')
+                for g in item_annotations:
+                    if 'annotation' in g:
+                        if 'elements' in g['annotation']:
+                            for e in g['annotation']['elements']:
+                                if 'user' not in e:
+                                    e['user'] = {}
+                                
+                                # Adding slide and annotation ids
+                                e['user']['slide_id'] = i
+                                e['user']['annotation_id'] = e['id']
+                                metadata.append(e['user'])
+            except girder_client.HttpError:
+                print(f'{i} not found! Uh oh!')
+        
+        return metadata
 
     def get_image_region(self,item_id,coords_list):
 
@@ -1425,6 +1340,34 @@ class GirderHandler:
 
         return image_region
 
+    def get_annotation_image(self,slide_id,annotation_id):
+
+        # Girder does the "annotation_id" a little differently. They have an endpoint that pulls annotation LAYERS by their id gc.get('annotation/{item}')
+        # But not a SPECIFIC annotation. Makes sense because I guess you'd have to read the whole set of annotations anyways
+        slide_annotations = self.get_annotations(slide_id)
+
+        #TODO There's probably a faster way to do this (maybe filter by structure/layer name first?)
+        matching_annotation = None
+        for a in slide_annotations:
+            if 'annotation' in a:
+                if 'elements' in a['annotation']:
+                    for e in a['annotation']['elements']:
+                        if e['id']==annotation_id:
+                            matching_annotation = e
+        
+        if not matching_annotation is None:
+            ann_coords = np.squeeze(np.array(matching_annotation['points']))
+            min_x = np.min(ann_coords[:,0])
+            min_y = np.min(ann_coords[:,1])
+            max_x = np.max(ann_coords[:,0])
+            max_y = np.max(ann_coords[:,1])
+
+            image_region = self.get_image_region(slide_id,[min_x,min_y,max_x,max_y])
+
+            return image_region
+        else:
+            raise ValueError
+
     def upload_data(self,data,data_name):
 
         # Finding the current user's private folder
@@ -1432,6 +1375,11 @@ class GirderHandler:
         private_folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder})['_id']
         print(f'user_folder: {user_folder}')
         print(f'private_folder_id: {private_folder_id}')
+
+        # Testing folder ID containing small section of tissue with annotations
+        private_folder_id = '64dba32c287cfdce1e9c7105'
+
+
         # Trying to just upload the entire file at once?
         """
         print('Starting upload')
@@ -1465,7 +1413,29 @@ class GirderHandler:
         """
         return private_folder_id
 
+    def get_slide_thumbnail(self,item_id):
 
+        #thumbnail = Image.open(BytesIO(self.gc.get(f'/item/{item_id}/tiles/thumbnail?token={self.user_token}')))
+        thumbnail = Image.open(BytesIO(requests.get(f'{self.gc.urlBase}/item/{item_id}/tiles/thumbnail?width=200&height=200&token={self.user_token}').content))
+        return thumbnail
+
+    def get_asset_items(self,assets_path):
+
+        # Key items to grab from assets:
+        # cell_graphics_key
+        # asct+b table
+
+        # Downloading JSON resource
+        cell_graphics_resource = self.gc.get('resource/lookup',parameters={'path':assets_path+'cell_graphics/graphic_reference.json'})
+        self.cell_graphics_key = self.gc.get(f'/item/{cell_graphics_resource["_id"]}/download')
+
+        self.cell_names = []
+        for ct in self.cell_graphics_key:
+            self.cell_names.append(self.cell_graphics_key[ct]['full'])
+
+        # Getting asct+b table
+        asct_b_table_id = self.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
+        self.asct_b_table = pd.read_csv(self.apiUrl+f'item/{asct_b_table_id}/download?token={self.user_token}',skiprows=list(range(10)))
 
     """
     def get_cli_input_list(self,cli_id):

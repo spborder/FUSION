@@ -10,52 +10,35 @@ import pandas as pd
 import numpy as np
 import json
 
-from glob import glob
-
 from PIL import Image
-import requests
 from io import BytesIO
-
-try:
-    import openslide
-except:
-    import tiffslide as openslide
-
-import lxml.etree as ET
 
 from tqdm import tqdm
 
 import shapely
-from shapely.geometry import Polygon, Point, shape, box
-from skimage.draw import polygon
+from shapely.geometry import Point, shape, box
 from skimage.transform import resize
-import geojson
 import random
 
-import requests
 import girder_client
 
 import plotly.express as px
-from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from matplotlib import cm
+from matplotlib import colormaps
 
-from dash import dcc, ctx, Dash, MATCH, ALL, ALLSMALLER, dash_table, exceptions, callback_context,no_update
-#from dash.long_callback import DiskcacheLongCallbackManager
+from dash import dcc, ctx, MATCH, ALL, dash_table, exceptions, callback_context, no_update
 
 import dash_bootstrap_components as dbc
-import dash_cytoscape as cyto
 import dash_leaflet as dl
 import dash_leaflet.express as dlx
-from dash_extensions.javascript import assign, Namespace, arrow_function
+from dash_extensions.javascript import assign, arrow_function
 from dash_extensions.enrich import DashProxy, html, Input, Output, MultiplexerTransform, State
 import dash_mantine_components as dmc
 
 from timeit import default_timer as timer
-#import diskcache
 
 from FUSION_WSI import DSASlide
-from Initialize_FUSION import LayoutHandler, DownloadHandler, GirderHandler
+from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler
 from FUSION_Prep import PrepHandler
 
 
@@ -67,8 +50,6 @@ class FUSION:
                 download_handler,
                 prep_handler,
                 wsi,
-                cell_graphics_key,
-                asct_b_table,
                 cluster_metadata,
                 ga_tag = None
                 ):
@@ -98,13 +79,8 @@ class FUSION:
 
         # clustering related properties (and also cell types, cell states, image_ids, etc.)
         self.metadata = cluster_metadata
-
         self.wsi = wsi
-
-        if type(cell_graphics_key)==str:
-            self.cell_graphics_key = json.load(open(cell_graphics_key))
-        else:
-            self.cell_graphics_key = cell_graphics_key
+        self.cell_graphics_key = self.dataset_handler.cell_graphics_key
 
         # Inverting the graphics key to get {'full_name':'abbreviation'}
         self.cell_names_key = {}
@@ -115,21 +91,15 @@ class FUSION:
         self.plot_cell_types_n = 5
 
         # ASCT+B table for cell hierarchy generation
-        self.table_df = asct_b_table    
+        self.table_df = self.dataset_handler.asct_b_table    
 
         # FTU settings
         self.ftus = self.wsi.ftu_names
-        self.ftu_colors = {
-            'Glomeruli':'#390191',
-            'Tubules':'#e71d1d',
-            'Arterioles':'#b6d7a8',
-            'Spots':'#dffa00'
-        }
+        self.ftu_colors = self.wsi.ftu_colors
 
         self.current_ftu_layers = self.wsi.ftu_names+['Spots']
         self.current_ftus = self.wsi.ftu_names+['Spots']
         self.pie_ftu = self.current_ftu_layers[-1]
-        self.pie_chart_order = self.current_ftu_layers.copy()
 
         # Specifying available properties with visualizations implemented
         # TODO:Add cell states in there later, need to figure out how to view proportions of different cell states in the same overlay
@@ -155,7 +125,7 @@ class FUSION:
         }
 
         # Colormap settings (customize later)
-        self.color_map = cm.get_cmap('jet',255)
+        self.color_map = colormaps['jet']
         self.cell_vis_val = 0.5
         self.filter_vals = [0,1]
 
@@ -364,24 +334,6 @@ class FUSION:
             prevent_initial_call = True
         )(self.update_state_bar)
 
-        """
-        # Commenting out hover for now, not really useful
-        self.app.callback(
-            Output('current-hover','children'),
-            Input({'type':'ftu-bounds','index':ALL},'hover_feature'),
-            prevent_initial_call=True
-        )(self.get_hover)
-        """
-
-        """
-        self.app.callback(
-            [Output('mini-label','children'),
-             Output({'type':'ftu-popup','index':ALL},'children')],
-            [Input({'type':'ftu-bounds','index':ALL},'click_feature'),
-            Input('mini-drop','value')],
-            prevent_initial_call=True
-        )(self.get_click)
-        """
         self.app.callback(
             Output({'type':'ftu-popup','index':MATCH},'children'),
             Input({'type':'ftu-bounds','index':MATCH},'click_feature'),
@@ -518,6 +470,9 @@ class FUSION:
              [State({'type':'wsi-upload','index':ALL},'filename'),
               State({'type':'omics-upload','index':ALL},'filename')],
               [Output('slide-qc-results','children'),
+               Output('slide-thumbnail-holder','children'),
+               Output({'type':'wsi-upload','index':ALL},'disabled'),
+               Output({'type':'omics-upload','index':ALL},'disabled'),
                Output('organ-type','disabled'),
                Output('post-upload-row','style')],
             prevent_initial_call=True
@@ -525,8 +480,10 @@ class FUSION:
 
         # Executing segmentation according to model selection
         self.app.callback(
-            Input('organ-type','value'),
-            Output('post-segment-row','style'),
+            [Input('organ-type','value')],
+            [Output('post-segment-row','style'),
+             Output('organ-type','disabled'),
+             Output('ex-ftu-img','figure')],
             prevent_initial_call=True
         )(self.apres_segmentation)
 
@@ -544,22 +501,9 @@ class FUSION:
     def update_plotting_metadata(self):
 
         # Populating metadata based on current slides selection
-        metadata = []
+        select_ids = [i['_id'] for i in self.current_slides if i['included']]
 
-        print(f'current_slides: {self.current_slides}')
-        for i in self.current_slides:
-            if i['included']:
-                item_annotations = self.dataset_handler.gc.get(f'/annotation/item/{i["_id"]}')
-                if len(item_annotations)>0:
-                    for g in item_annotations:
-                        if 'annotation' in g:
-                            if 'elements' in g['annotation']:
-                                for e in g['annotation']['elements']:
-                                    if 'user' not in e:
-                                        e['user'] = {}
-                                    e['user']['slide_id'] = i['_id']
-                                    e['user']['annotation_id'] = e['id']
-                                    metadata.append(e['user'])
+        metadata = self.dataset_handler.get_collection_annotation_meta(select_ids)
 
         return metadata
 
@@ -837,7 +781,7 @@ class FUSION:
         else:
             bounds_box = shapely.geometry.box(*bounds)
 
-        print(f'current viewport bounds: {bounds}')
+        #print(f'current viewport bounds: {bounds}')
 
         # Storing current slide boundaries
         self.current_slide_bounds = bounds_box
@@ -1023,13 +967,8 @@ class FUSION:
         print(f'{ctx.triggered_prop_ids}')
         print(filter_vals)
         print(ftu_color)
-        # Extracting cell val if there are sub-properties
         m_prop = None
-        if '-->' in cell_val:
-            cell_val_parts = cell_val.split(' --> ')
-            m_prop = cell_val_parts[0]
-            cell_val = cell_val_parts[1]
-        
+
         if not ftu_color is None:
             # Getting these to align with the ftu-colors property order
             current_ftu_colors = list(self.ftu_colors.values())
@@ -1044,6 +983,12 @@ class FUSION:
             self.filter_vals = filter_vals
 
         if not cell_val is None:
+            # Extracting cell val if there are sub-properties
+            if '-->' in cell_val:
+                cell_val_parts = cell_val.split(' --> ')
+                m_prop = cell_val_parts[0]
+                cell_val = cell_val_parts[1]
+
             # Updating current_cell property
             if cell_val in self.cell_names_key:
                 if m_prop == 'Main_Cell_Types':
@@ -1096,46 +1041,24 @@ class FUSION:
 
             self.cell_vis_val = vis_val/100
 
-            map_dict = {
-                'url':self.wsi.tile_url,
-                'FTUs':{
-                    struct: {
-                        'geojson':{'type':'FeatureCollection','features':[i for i in self.wsi.geojson_ftus['features'] if i['properties']['name']==struct]},
-                        'id': {'type':'ftu-bounds','index':self.wsi.ftu_names.index(struct)},
-                        'popup_id':{'type':'ftu-popup','index':self.wsi.ftu_names.index(struct)},
-                        'color':self.ftu_colors[struct],
-                        'hover_color':'#9caf00'
-                    }
-                    for struct in self.wsi.ftu_names
-                }
-            }
-
-            spot_dict = {
-                'geojson':self.wsi.geojson_spots,
-                'id':{'type':'ftu-bounds','index':len(self.wsi.ftu_names)},
-                'popup_id':{'type':'ftu-popup','index':len(self.wsi.ftu_names)},
-                'color':self.ftu_colors["Spots"],
-                'hover_color':'#9caf00'
-            }
-
             new_children = [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
+                        dl.GeoJSON(data = self.wsi.map_dict['FTUs'][struct]['geojson'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
                                     hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=self.cell_vis_val, ftu_color = self.ftu_colors[struct],filter_vals = self.filter_vals),
-                                    hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'],dashArray='')),
-                                    children = [dl.Popup(id=map_dict['FTUs'][struct]['popup_id'])])
+                                    hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'],dashArray='')),
+                                    children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
                     ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
                 )
-                for struct in map_dict['FTUs']
+                for struct in self.wsi.map_dict['FTUs']
             ]
             new_children += [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                        dl.GeoJSON(data = self.wsi.spot_dict['geojson'], id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
                                     hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = self.ftu_colors['Spots'],filter_vals = self.filter_vals),
-                                    hoverStyle = arrow_function(dict(weight=5,color=spot_dict['hover_color'],dashArray='')),
-                                    children = [dl.Popup(id=spot_dict['popup_id'])],
+                                    hoverStyle = arrow_function(dict(weight=5,color=self.wsi.spot_dict['hover_color'],dashArray='')),
+                                    children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],
                                     zoomToBounds=False)
                     ),name = 'Spots', checked = False, id = self.wsi.item_id+'_Spots'
                 )
@@ -1525,23 +1448,8 @@ class FUSION:
             if slide_name in d_slides:
                 # Getting slide item id
                 slide_id = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]['_id']
-                # Getting all the mapping info
-                map_bounds, base_dims, image_dims, tile_size, zoom_levels, geojson_annotations, x_scale, y_scale, tile_url = self.dataset_handler.get_resource_map_data(slide_id)
 
-        new_slide = DSASlide(slide_name,slide_id,tile_url,geojson_annotations,image_dims,base_dims,x_scale,y_scale)
-
-        pre_slide_properties = new_slide.properties_list
-
-        # Updating available slide_properties to the ones that are implemented as visualizations
-        slide_properties = []
-        for p in pre_slide_properties:
-            if p in self.visualization_properties:
-                slide_properties.append(p)
-            elif '-->' in p:
-                main_p = p.split(' --> ')[0]
-                cell_abbrev = p.split(' --> ')[1]
-                if main_p in self.visualization_properties:
-                    slide_properties.append(p.replace(cell_abbrev,self.cell_graphics_key[cell_abbrev]['full']))
+        new_slide = DSASlide(slide_name,slide_id,self.dataset_handler,self.ftu_colors)
 
         self.wsi = new_slide
         print(f'length of manual ROIs: {len(self.wsi.manual_rois)}')
@@ -1549,56 +1457,32 @@ class FUSION:
         # Updating overlays colors according to the current cell
         self.update_hex_color_key(self.current_cell)
 
-        # map_dict contains ftu geojson information
-        map_dict = {
-            'url': tile_url,
-            'FTUs':{
-                struct: {
-                    'geojson':{'type':'FeatureCollection','features':[i for i in new_slide.geojson_ftus['features'] if i['properties']['name']==struct]},
-                    'id':{'type':'ftu-bounds','index':new_slide.ftu_names.index(struct)},
-                    'popup_id':{'type':'ftu-popup','index':new_slide.ftu_names.index(struct)},
-                    'color':self.ftu_colors[struct],
-                    'hover_color':'#9caf00'
-                }
-                for struct in new_slide.ftu_names
-            }
-        }
-
-        # spot_dict contains spot geojson information
-        spot_dict = {
-            'geojson': new_slide.geojson_spots,
-            'id':{'type':'ftu-bounds','index':len(new_slide.ftu_names)},
-            'popup_id':{'type':'ftu-popup','index':len(new_slide.ftu_names)},
-            'color': self.ftu_colors['Spots'],
-            'hover_color':'#9caf00'
-        }
-
         new_children = [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                    dl.GeoJSON(data = self.wsi.map_dict['FTUs'][struct]['geojson'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_vals),
-                                hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
-                                children = [dl.Popup(id=map_dict['FTUs'][struct]['popup_id'])])
+                                hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
+                                children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
                 ), name = struct, checked = True, id = new_slide.item_id+'_'+struct
             )
-            for struct in map_dict['FTUs']
+            for struct in self.wsi.map_dict['FTUs']
         ]
 
         new_children += [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                    dl.GeoJSON(data = self.wsi.spot_dict['geojson'], id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_vals),
-                                hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray='')),
-                                children = [dl.Popup(id=spot_dict['popup_id'])],
+                                hoverStyle = arrow_function(dict(weight=5, color = self.wsi.spot_dict['hover_color'], dashArray='')),
+                                children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],
                                 zoomToBounds=True),
                 ), name = 'Spots', checked = False, id = new_slide.item_id+'_Spots'
             )
         ]
 
         # Now iterating through manual ROIs
-        for m_idx, man in enumerate(new_slide.manual_rois):
+        for m_idx, man in enumerate(self.wsi.manual_rois):
             new_children.append(
                 dl.Overlay(
                     dl.LayerGroup(
@@ -1611,8 +1495,8 @@ class FUSION:
                 )
             )
 
-        new_url = tile_url
-        center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
+        new_url = self.wsi.tile_url
+        center_point = [0.5*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),0.5*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
 
 
         self.current_ftus = self.wsi.ftu_names+['Spots']
@@ -1631,10 +1515,10 @@ class FUSION:
 
         # Populating FTU boundary options:
         combined_colors_dict = {}
-        for f in map_dict['FTUs']:
-            combined_colors_dict[f] = {'color':map_dict['FTUs'][f]['color']}
+        for f in self.wsi.map_dict['FTUs']:
+            combined_colors_dict[f] = {'color':self.wsi.map_dict['FTUs'][f]['color']}
         
-        combined_colors_dict['Spots'] = {'color':spot_dict['color']}
+        combined_colors_dict['Spots'] = {'color':self.wsi.spot_dict['color']}
 
         boundary_options_children = [
             dbc.Tab(
@@ -1659,7 +1543,7 @@ class FUSION:
 
         new_edit_control = [{'type':'FeatureCollection','features':[]}]
 
-        return new_url, new_children, center_point, map_bounds, tile_size, zoom_levels, new_edit_control, slide_properties, boundary_options_children
+        return new_url, new_children, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, new_edit_control, self.wsi.properties_list, boundary_options_children
 
     def update_graph(self,ftu,plot,label):
         
@@ -1719,16 +1603,8 @@ class FUSION:
 
         img_list = []
         for idx,s in enumerate(sample_info):
-            #TODO: Make this part not require coordinates in the properties
-            print(f's: {s}')
-            min_x = int(s['Min_x_coord'])
-            min_y = int(s['Min_y_coord'])
-            max_x = int(s['Max_x_coord'])
-            max_y = int(s['Max_y_coord'])
-
-            # Pulling image region using provided coordinates
-            # Have to find the slide id for this particular sample
-            image_region = self.dataset_handler.get_image_region(s['slide_id'],[min_x,min_y,max_x,max_y])
+            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['annotation_id'])
+            
             img_list.append(resize(np.array(image_region),output_shape=(512,512,3)))
 
 
@@ -2297,26 +2173,44 @@ class FUSION:
         omics_file = omics_file[0]
         wsi_name = wsi_name[0]
         omics_name = omics_name[0]
+
+        wsi_disabled = False
+        omics_disabled = False
+
         if ctx.triggered_id['type']=='wsi-upload' and not wsi_file is None:
-            collection_id = self.dataset_handler.upload_data(wsi_file,wsi_name)
+            self.upload_item_id = self.dataset_handler.upload_data(wsi_file,wsi_name)
 
             self.upload_check['WSI'] = True
+            wsi_disabled = True
 
         elif ctx.triggered_id['type']=='omics-upload' and not omics_file is None:
 
-            collection_id = self.dataset_handler.upload_data(omics_file,omics_name)
+            self.upload_item_id = self.dataset_handler.upload_data(omics_file,omics_name)
             
             self.upload_check['Omics'] = True
+            omics_disabled = True
+        else:
+            print(f'ctx.triggered_id["type"]: {ctx.triggered_id["type"]}')
 
         print(self.upload_check)
+        print(wsi_disabled)
+        print(omics_disabled)
         # Checking the upload check
         if all([self.upload_check[i] for i in self.upload_check]):
             print('All set!')
+            print(ctx.triggered_id)
+            wsi_disabled = True
+            omics_disabled = True
 
-            print(f'collection_id: {collection_id}')
-            slide_qc_table = self.slide_qc(collection_id)
+            slide_thumbnail, slide_qc_table = self.slide_qc(self.upload_item_id)
             print(slide_qc_table)
-            self.upload_item_id = collection_id
+
+            thumb_fig = dcc.Graph(
+                figure=go.Figure(
+                    data = px.imshow(slide_thumbnail)['data'],
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0},'height':100,'width':100}
+                )
+            )
 
             slide_qc_results = dash_table.DataTable(
                 id = {'type':'slide-qc-table','index':0},
@@ -2351,31 +2245,31 @@ class FUSION:
             organ_type_disabled = False
             post_upload_style = {'display':'flex'}
 
-            return slide_qc_results, organ_type_disabled, post_upload_style
+            return slide_qc_results, thumb_fig, [wsi_disabled], [omics_disabled],organ_type_disabled, post_upload_style
         
         else:
-            raise exceptions.PreventUpdate
+            return no_update, no_update, [wsi_disabled], [omics_disabled],no_update, no_update
 
-    def slide_qc(self, upload_collection_id):
+    def slide_qc(self, upload_id):
 
-        try:
-            collection_contents = self.dataset_handler.get_collection_items(upload_collection_id)
-        except girder_client.HttpError:
-            print(f'Collection: {upload_collection_id} is empty')
-            collection_contents = [{'Slide':'No Slide','OtherStuff':'No Other Stuff Either'}]
+        #try:
+        #collection_contents = self.dataset_handler.get_collection_items(upload_id)
+        thumbnail = self.dataset_handler.get_slide_thumbnail(upload_id)
+        collection_contents = self.dataset_handler.gc.get(f'/item/{upload_id}')
+        print(collection_contents)
 
         #TODO: Activate the HistoQC plugin from here and return some metrics
-        histo_qc_output = pd.DataFrame.from_records(collection_contents)
+        histo_qc_output = pd.DataFrame(collection_contents)
 
-        return histo_qc_output
+        return thumbnail, histo_qc_output
 
     def apres_segmentation(self,organ_selection):
 
-        print(f'organ_selection: {organ_selection}')
         if not organ_selection is None:
 
             # Executing segmentation CLI for organ/model/FTU selections
             sub_comp_style = {'display':'flex'}
+            disable_organ = True
 
             print(f'Running segmentation!')
             try:
@@ -2383,112 +2277,70 @@ class FUSION:
             except girder_client.HttpError:
                 print('Error running job')
 
-            return sub_comp_style
+            # Extract annotation and initial sub-compartment mask
+            self.upload_annotations = self.dataset_handler.get_annotations(self.upload_item_id)
+            # Initializing layer and annotation idxes
+            self.layer_ann = {
+                'current_layer':0,
+                'previous_layer':0,
+                'current_annotation':0,
+                'previous_annotation':0,
+                'max_layers':[len(i) for i in self.upload_annotations]
+            }
+
+            image, mask = self.prep_handler.get_annotation_image_mask(self.upload_item_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+
+            self.layer_ann['current_image'] = image
+            self.layer_ann['current_boundary_mask'] = mask
+
+            image_figure = go.Figure(
+                data = px.imshow(image)['data'],
+                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                )
+
+            return sub_comp_style, disable_organ, image_figure
         
         else:
             raise exceptions.PreventUpdate
     
 
-
-#if __name__ == '__main__':
 def app(*args):
-
-    run_type = 'dsa'
-
-    try:
-        run_type = os.environ['RUNTYPE']
-    except:
-        print(f'Using {run_type} run type')
     
     # Using DSA as base directory for storage and accessing files
     dsa_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1/'
-
-    # Different kind of dataset handler
-    dataset_handler = GirderHandler(apiUrl=dsa_url)
-
-    # Using environment variables for login TODO: Add login to main page
-    #try:
     username = os.environ.get('DSA_USER')
     p_word = os.environ.get('DSA_PWORD')
-    dataset_handler.authenticate(username,p_word)
-    #except:
-    #    print('Get a load of this guy, no login!')
 
-    # Initial collection TODO: get some default image as a placeholder in the visualization
-    initial_collection = '/collection/10X_Visium/FFPE Cohort/Histology/Reference'
-    path_type = 'folder'
+    # Initializing GirderHandler
+    dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
+
+    # Initial collection
+    initial_collection = '/collection/10X_Visium'
+    path_type = 'collection'
     print(f'initial collection: {initial_collection}')
     initial_collection_id = dataset_handler.gc.get('resource/lookup',parameters={'path':initial_collection})
-    
-    # Saving & organizing relevant id's in GirderHandler
-    dataset_handler.initialize_folder_structure(initial_collection,path_type)
 
-    print(f'found initial collection: {initial_collection_id}')
-    # Contents of folder
+    # Contents of folder (used for testing to initialize with one slide)
     initial_collection_contents = dataset_handler.gc.get(f'resource/{initial_collection_id["_id"]}/items',parameters={'type':path_type})
     initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
 
-    # For testing
-    #initial_collection_contents = [initial_collection_contents[-2],initial_collection_contents[-1]]
-    initial_collection_contents = [initial_collection_contents[0]]
-    # Loading metadata for initial collection
-    print('Loading Metadata')
-    metadata = []
-    for i in initial_collection_contents:
-        item_annotations = dataset_handler.gc.get(f'/annotation/item/{i["_id"]}')
-        for g in tqdm(item_annotations):
-            for e in g['annotation']['elements']:
-                if 'user' not in e:
-                    e['user'] = {}
-                e['user']['slide_id'] = i['_id']
-                e['user']['annotation_id'] = e['id']
-                metadata.append(e['user'])
+    # For testing, setting initial slide
+    initial_collection_contents = initial_collection_contents[0:2]
+    
+    # Saving & organizing relevant id's in GirderHandler
+    dataset_handler.initialize_folder_structure(initial_collection,path_type)
+    metadata = dataset_handler.get_collection_annotation_meta([i['_id'] for i in initial_collection_contents])
 
     # Getting graphics_reference.json from the FUSION Assets folder
     assets_path = '/collection/FUSION Assets/'
-
-    cell_graphics_key = dataset_handler.gc.get('resource/lookup',parameters={'path':assets_path+'cell_graphics/graphic_reference.json'})
-    # Downloading cell_graphics_key to get json file contents
-    cell_graphics_key = dataset_handler.gc.get(f'item/{cell_graphics_key["_id"]}/download')
-    cell_names = []
-    for ct in cell_graphics_key:
-        cell_names.append(cell_graphics_key[ct]['full'])
-
-    # Getting asct+b table
-    asct_b_table_id = dataset_handler.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
-    token = dataset_handler.get_token()
-    asct_b_table = pd.read_csv(dsa_url+f'item/{asct_b_table_id}/download?token={token}',skiprows=list(range(10)))
-
-    print(f'first slide: {initial_collection_contents[0]["name"]}')
-    map_bounds, base_dims, image_dims, tile_size, zoom_levels, geojson_annotations, x_scale, y_scale, slide_url = dataset_handler.get_resource_map_data(resource=initial_collection_contents[0]['_id'])
-    print(f'map_bounds: {map_bounds}')
-    print(f'base_dims: {base_dims}')
-    print(f'image_dims: {image_dims}')
+    dataset_handler.get_asset_items(assets_path)
 
     # Getting the slide data for DSASlide()
-
     slide_name = initial_collection_contents[0]['name']
     slide_item_id = initial_collection_contents[0]['_id']
     slide_names = [i['name'] for i in initial_collection_contents if 'largeImage' in i]
 
-    wsi = DSASlide(slide_name,slide_item_id,slide_url,geojson_annotations,image_dims,base_dims,x_scale,y_scale)
-    center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
-
-    pre_slide_properties = wsi.properties_list
-    slide_properties = []
-    visualization_properties = [
-        'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
-        'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction'
-    ]
-    for p in pre_slide_properties:
-        if p in visualization_properties:
-            slide_properties.append(p)
-        elif '-->' in p:
-            main_p = p.split(' --> ')[0]
-            cell_abbrev = p.split(' --> ')[1]
-            if main_p in visualization_properties:
-                slide_properties.append(p.replace(cell_abbrev,cell_graphics_key[cell_abbrev]['full']))
-
+    # Initializing FTU Colors
     ftu_colors = {
         'Glomeruli':'#390191',
         'Tubules':'#e71d1d',
@@ -2496,26 +2348,7 @@ def app(*args):
         'Spots':'#dffa00'
     }
 
-    map_dict = {
-        'url':slide_url,
-        'FTUs':{
-            struct : {
-                'geojson':{'type':'FeatureCollection','features':[i for i in wsi.geojson_annotations['features'] if i['properties']['name']==struct]},
-                'id':{'type':'ftu-bounds','index':wsi.ftu_names.index(struct)},
-                'popup_id':{'type':'ftu-popup','index':wsi.ftu_names.index(struct)},
-                'color':ftu_colors[struct],
-                'hover_color':'#9caf00'
-            }
-            for struct in wsi.ftu_names
-        }
-    }
-    spot_dict = {
-        'geojson':{'type':'FeatureCollection','features':[i for i in wsi.geojson_annotations['features'] if i['properties']['name']=='Spots']},
-        'id':{'type':'ftu-bounds','index':len(wsi.ftu_names)},
-        'popup_id':{'type':'ftu-popup','index':len(wsi.ftu_names)},
-        'color':ftu_colors["Spots"],
-        'hover_color':'#9caf00'
-    }
+    wsi = DSASlide(slide_name,slide_item_id,dataset_handler,ftu_colors)
 
     # Getting list of available CLIs in DSA instance
     # This dict will contain all the info for the CLI's, have to reduce it to names
@@ -2535,12 +2368,11 @@ def app(*args):
     # Adding functionality that is specifically implemented in FUSION
     fusion_cli = ['Segment Anything Model (SAM)','Contrastive Language-Image Pre-training (CLIP)']
 
-
     external_stylesheets = [dbc.themes.LUX,dbc.icons.BOOTSTRAP]
 
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names)
-    layout_handler.gen_vis_layout(cell_names,center_point,zoom_levels,map_dict,spot_dict,slide_properties,tile_size,map_bounds,cli_list)
+    layout_handler.gen_vis_layout(wsi,cli_list)
     layout_handler.gen_builder_layout(dataset_handler)
     layout_handler.gen_uploader_layout(dataset_handler)
 
@@ -2556,9 +2388,7 @@ def app(*args):
         download_handler,
         prep_handler,
         wsi,
-        cell_graphics_key,
-        asct_b_table,
-        metadata,
+        metadata
     )
 
 # Comment this portion out for web running
