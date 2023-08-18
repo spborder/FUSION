@@ -1369,8 +1369,33 @@ class GirderHandler:
 
     def get_image_region(self,item_id,coords_list):
 
-        # Pulling specific region from an image using provided coordinates
-        image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
+        # Checking to make sure coords are within the slide boundaries
+        slide_metadata = self.gc.get(f'/item/{item_id}/tiles')
+
+        # coords_list is organized: [min_x, min_y, max_x, max_y]
+        if coords_list[0]>=0 and coords_list[1]>=0 and coords_list[2]<=slide_metadata['sizeX'] and coords_list[3]<=slide_metadata['sizeY']:
+            # Pulling specific region from an image using provided coordinates
+            image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
+        else:
+            # Wish there was a shorter way to write this
+            if coords_list[0]<0:
+                coords_list[0] = 0
+            if coords_list[1]<0:
+                coords_list[1] = 0
+            if coords_list[2]>slide_metadata['sizeX']:
+                coords_list[2] = slide_metadata['sizeX']
+            if coords_list[3]>slide_metadata['sizeY']:
+                coords_list[3] = slide_metadata['sizeY']
+
+            try:
+                image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
+            except:
+                print('-------------------------------------------------')
+                print(f'Error reading image region from item: {item_id}')
+                print(f'Provided coordinates: {coords_list}')
+                print(f'------------------------------------------------')
+
+                return np.zeros((100,100))
 
         return image_region
 
@@ -1400,13 +1425,12 @@ class GirderHandler:
 
             # Creating boundary based on coordinates from annotation
             scaled_coordinates = ann_coords.tolist()
-            x_coords = [i[0]-min_x+self.padding_pixels for i in scaled_coordinates]
-            y_coords = [i[1]-min_y+self.padding_pixels for i in scaled_coordinates]
+            x_coords = [i[0]-min_x for i in scaled_coordinates]
+            y_coords = [i[1]-min_y for i in scaled_coordinates]
             height = np.shape(image_region)[0]
             width = np.shape(image_region)[1]
             cc,rr = polygon_perimeter(y_coords,x_coords,(height,width))
             image_region[cc,rr] = 0
-
 
             return image_region
         else:

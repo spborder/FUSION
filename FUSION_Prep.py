@@ -81,11 +81,12 @@ class PrepHandler:
             
             # Scaling coordinates to fit within bounding box
             scaled_coordinates = coordinates.tolist()
-            scaled_coordinates = [[i[0]-min_x+self.padding_pixels,i[1]-min_y+self.padding_pixels] for i in scaled_coordinates]
+            scaled_coordinates = [[i[0]-min_x,i[1]-min_y] for i in scaled_coordinates]
 
             x_coords = [int(i[0]) for i in scaled_coordinates]
             y_coords = [int(i[1]) for i in scaled_coordinates]
 
+            # Creating mask from scaled coordinates
             height = np.shape(image)[0]
             width = np.shape(image)[1]
             mask = np.zeros((height,width))
