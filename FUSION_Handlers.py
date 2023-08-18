@@ -30,6 +30,7 @@ import base64
 
 import plotly.express as px
 import plotly.graph_objects as go
+from skimage.draw import polygon_perimeter
 
 from dash import dcc, ctx, Dash, dash_table
 import dash_bootstrap_components as dbc
@@ -41,6 +42,9 @@ from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function
 
 import girder_client
+from tqdm import tqdm
+from timeit import default_timer as timer
+
 
 
 class LayoutHandler:
@@ -806,15 +810,7 @@ class LayoutHandler:
                         html.Div([
                             dbc.Label('Select FTU',html_for='ftu-select'),
                             dcc.Dropdown(placeholder='FTU Options',id='ftu-select')
-                        ]),md=6),
-                    dbc.Col(
-                        html.Div(
-                            id='seg-qc-results',
-                            children = [
-                                dbc.Label('Rename FTU (optional)',html_for='rename-text'),
-                                dcc.Input(type='text',placeholder = 'New FTU Name',id = 'rename-text')
-                            ]
-                        ),md=6)
+                        ]),md=12)
                 ]),
                 html.Hr(),
                 dbc.Row([
@@ -823,7 +819,9 @@ class LayoutHandler:
                             children = [
                                 dcc.Graph(figure=go.Figure(),id='ex-ftu-img')
                             ]
-                        ),md=8),
+                        ),md=12)
+                ]),
+                dbc.Row([
                     dbc.Col(
                         html.Div(
                             children = [
@@ -834,7 +832,7 @@ class LayoutHandler:
                                     children = [
                                         dcc.RadioItems(
                                             [
-                                                {'label':html.Span('Overlaid',style={'marginBottom':'5px','marginLeft':'5px'}),'value':'Overlaid'},
+                                                {'label':html.Span('Overlaid',style={'marginBottom':'5px','marginLeft':'5px','marginRight':'10px'}),'value':'Overlaid'},
                                                 {'label':html.Span('Side-by-side',style={'marginLeft':'5px'}),'value':'Side-by-side'}
                                             ],
                                                 value='Overlaid',inline=True,id='ex-ftu-view'),
@@ -843,17 +841,18 @@ class LayoutHandler:
                                         dcc.Slider(0,1,0.05,value=0,marks=None,vertical=False,tooltip={'placement':'bottom'},id='ex-ftu-slider'),
                                         html.B(),
                                         dbc.Row([
-                                            dbc.Col(dbc.Button('Previous',id='prev-butt')),
-                                            dbc.Col(dbc.Button('Next',id='next-butt'))
-                                        ]),
+                                            dbc.Col(dbc.Button('Previous',id='prev-butt',outline=True,color='secondary',className='d-grid gap-2 col-6 mx-auto')),
+                                            dbc.Col(dbc.Button('Next',id='next-butt',outline=True,color='secondary',className='d-grid gap-2 col-6 mx-auto'))
+                                        ],style={'marginBottom':'15px','display':'flex'}),
+                                        html.Hr(),
                                         dbc.Row([
-                                            dbc.Col(dbc.Button('Go to Feature Extraction',id='go-to-feat'))
+                                            dbc.Col(dbc.Button('Go to Feature Extraction',id='go-to-feat',color='success',className='d-grid gap-2 col-12 mx-auto'))
                                         ])
 
                                     ]
                                 )
                             ]
-                        ),md=4)
+                        ),md=12)
                 ]),
                 html.Hr(),
                 dbc.Row([
@@ -875,7 +874,19 @@ class LayoutHandler:
                     dbc.Col(
                         html.Div(
                             id='sub-comp-tabs',
-                            children = []
+                            children = [
+                                dbc.Label('Sub-Compartment Thresholds',html_for='sub-thresh-slider'),
+                                dcc.RangeSlider(
+                                    id = 'sub-thresh-slider',
+                                    min = 0.0,
+                                    max = 255.0,
+                                    step = 5.0,
+                                    value = [0.0,50.0,120.0],
+                                    marks = None,
+                                    tooltip = {'placement':'bottom','always_visible':True},
+                                    allowCross=False
+                                )
+                            ]
                         ),md=12
                     )
                 )
@@ -1200,6 +1211,11 @@ class GirderHandler:
         self.authenticate(username, password)
         self.get_token()
 
+        self.padding_pixels = 50
+
+        # Initializing blank annotation metadata cache to prevent multiple dsa requests
+        self.cached_annotation_metadata = {}
+
     def authenticate(self, username, password):
         # Getting authentication for user
         #TODO: Add some handling here for incorrect username or password
@@ -1321,24 +1337,34 @@ class GirderHandler:
     def get_collection_annotation_meta(self,select_ids:list):
 
         # Iterate through select_ids and extract annotation metadata
+        #TODO: This needs to be more efficient somehow
+        print(f'select_ids: {select_ids}')
         metadata = []
         for i in select_ids:
-            try:
-                item_annotations = self.gc.get(f'/annotation/item/{i}')
-                for g in item_annotations:
-                    if 'annotation' in g:
-                        if 'elements' in g['annotation']:
-                            for e in g['annotation']['elements']:
-                                if 'user' not in e:
-                                    e['user'] = {}
-                                
-                                # Adding slide and annotation ids
-                                e['user']['slide_id'] = i
-                                e['user']['annotation_id'] = e['id']
-                                metadata.append(e['user'])
-            except girder_client.HttpError:
-                print(f'{i} not found! Uh oh!')
-        
+            start_time = timer()
+            if i not in list(self.cached_annotation_metadata.keys()):
+                try:
+                    item_annotations = self.gc.get(f'/annotation/item/{i}')
+                    for g in item_annotations:
+                        if 'annotation' in g:
+                            if 'elements' in g['annotation']:
+                                if not g['annotation']['name']=='Spots':
+                                    for e in tqdm(g['annotation']['elements']):
+                                        if 'user' not in e:
+                                            e['user'] = {}
+                                        
+                                        # Adding slide and annotation ids
+                                        e['user']['slide_id'] = i
+                                        e['user']['annotation_id'] = e['id']
+                                        metadata.append(e['user'])
+                                        self.cached_annotation_metadata[i] = e['user']
+                except girder_client.HttpError:
+                    print(f'{i} not found! Uh oh!')
+            else:
+                metadata.append(self.cached_annotation_metadata[i])
+            end_time = timer()
+            print(f'Getting: {i} took: {end_time-start_time}')
+            
         return metadata
 
     def get_image_region(self,item_id,coords_list):
@@ -1348,29 +1374,39 @@ class GirderHandler:
 
         return image_region
 
-    def get_annotation_image(self,slide_id,annotation_id):
+    def get_annotation_image(self,slide_id,annotation_layer,annotation_id):
 
         # Girder does the "annotation_id" a little differently. They have an endpoint that pulls annotation LAYERS by their id gc.get('annotation/{item}')
         # But not a SPECIFIC annotation. Makes sense because I guess you'd have to read the whole set of annotations anyways
         slide_annotations = self.get_annotations(slide_id)
 
-        #TODO There's probably a faster way to do this (maybe filter by structure/layer name first?)
+        #TODO: This needs to be more efficient
         matching_annotation = None
         for a in slide_annotations:
             if 'annotation' in a:
                 if 'elements' in a['annotation']:
-                    for e in a['annotation']['elements']:
-                        if e['id']==annotation_id:
-                            matching_annotation = e
+                    if a['annotation']['name']==annotation_layer:
+                        all_ids = [i['id'] for i in a['annotation']['elements']]
+                        matching_annotation = a['annotation']['elements'][all_ids.index(annotation_id)]
         
         if not matching_annotation is None:
             ann_coords = np.squeeze(np.array(matching_annotation['points']))
-            min_x = np.min(ann_coords[:,0])
-            min_y = np.min(ann_coords[:,1])
-            max_x = np.max(ann_coords[:,0])
-            max_y = np.max(ann_coords[:,1])
+            min_x = np.min(ann_coords[:,0])-self.padding_pixels
+            min_y = np.min(ann_coords[:,1])-self.padding_pixels
+            max_x = np.max(ann_coords[:,0])+self.padding_pixels
+            max_y = np.max(ann_coords[:,1])+self.padding_pixels
 
             image_region = self.get_image_region(slide_id,[min_x,min_y,max_x,max_y])
+
+            # Creating boundary based on coordinates from annotation
+            scaled_coordinates = ann_coords.tolist()
+            x_coords = [i[0]-min_x+self.padding_pixels for i in scaled_coordinates]
+            y_coords = [i[1]-min_y+self.padding_pixels for i in scaled_coordinates]
+            height = np.shape(image_region)[0]
+            width = np.shape(image_region)[1]
+            cc,rr = polygon_perimeter(y_coords,x_coords,(height,width))
+            image_region[cc,rr] = 0
+
 
             return image_region
         else:

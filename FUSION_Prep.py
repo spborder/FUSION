@@ -35,11 +35,13 @@ class PrepHandler:
 
         self.color_map = colormaps['jet']
 
+        self.padding_pixels = 50
+
         self.initial_segmentation_parameters = [
             {
                 'name':'Nuclei',
                 'threshold':110,
-                'min_size':20,
+                'min_size':45,
                 'color':[0,0,255]
             },            
             {
@@ -69,17 +71,17 @@ class PrepHandler:
             coordinates = np.squeeze(np.array(current_item['points']))
 
             # Defining bounding box
-            min_x = np.min(coordinates[:,0])
-            min_y = np.min(coordinates[:,1])
-            max_x = np.max(coordinates[:,0])
-            max_y = np.max(coordinates[:,1])
+            min_x = np.min(coordinates[:,0])-self.padding_pixels
+            min_y = np.min(coordinates[:,1])-self.padding_pixels
+            max_x = np.max(coordinates[:,0])+self.padding_pixels
+            max_y = np.max(coordinates[:,1])+self.padding_pixels
 
             # Getting image and mask
             image = np.uint8(np.array(self.girder_handler.get_image_region(item_id,[min_x,min_y,max_x,max_y])))
             
             # Scaling coordinates to fit within bounding box
             scaled_coordinates = coordinates.tolist()
-            scaled_coordinates = [[i[0]-min_x,i[1]-min_y] for i in scaled_coordinates]
+            scaled_coordinates = [[i[0]-min_x+self.padding_pixels,i[1]-min_y+self.padding_pixels] for i in scaled_coordinates]
 
             x_coords = [int(i[0]) for i in scaled_coordinates]
             y_coords = [int(i[1]) for i in scaled_coordinates]
@@ -138,7 +140,7 @@ class PrepHandler:
                 sub_mask = sub_mask>0
                 # Watershed implementation from: https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_watershed.html
                 distance = ndi.distance_transform_edt(sub_mask)
-                coords = peak_local_max(distance,footprint=np.ones((3,3)),labels = label(sub_mask))
+                coords = peak_local_max(distance,footprint=np.ones((15,15)),labels = label(sub_mask))
                 watershed_mask = np.zeros(distance.shape,dtype=bool)
                 watershed_mask[tuple(coords.T)] = True
                 markers, _ = ndi.label(watershed_mask)

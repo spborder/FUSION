@@ -493,6 +493,7 @@ class FUSION:
              Input('go-to-feat','n_clicks'),
              Input('ex-ftu-view','value'),
              Input('ex-ftu-slider','value'),
+             Input('sub-thresh-slider','value'),
              Input('sub-comp-method','value')],
              [Output('ex-ftu-img','figure'),
               Output('feature-items','children'),
@@ -516,8 +517,7 @@ class FUSION:
         # Populating metadata based on current slides selection
         select_ids = [i['_id'] for i in self.current_slides if i['included']]
 
-        #metadata = self.dataset_handler.get_collection_annotation_meta(select_ids)
-        metadata = self.metadata
+        metadata = self.dataset_handler.get_collection_annotation_meta(select_ids)
 
         return metadata
 
@@ -558,7 +558,9 @@ class FUSION:
             self.current_slides.append(i)
 
         # Updating annotation metadata
+        print(f'Getting plot metadata')
         self.metadata = self.update_plotting_metadata()
+        print(f'Done')
 
         # Defining cell_type_dropdowns
         cell_type_dropdowns = [
@@ -611,7 +613,10 @@ class FUSION:
                 dbc.Row(
                     id = {'type':'lower-row','index':0},
                     children = [
-                        dbc.Col(dcc.Dropdown(['By Dataset','By Slide'],'By Dataset',id={'type':'agg-meta-drop','index':0}))
+                        dbc.Col(dcc.Dropdown(['By Dataset','By Slide'],'By Dataset',id={'type':'agg-meta-drop','index':0})),
+                        dbc.Col(
+                            dbc.Button('Go to Visualization!',id={'type':'go-to-vis-butt','index':0},color='success',href='/vis')
+                        )
                     ]
                 )
             ])
@@ -708,7 +713,6 @@ class FUSION:
 
 
                     dataset_metadata.append(d_dict)
-                    #print(f'd_dict: {d_dict}')
 
             # Converting to dataframe
             plot_data = pd.concat([pd.DataFrame.from_dict(i) for i in dataset_metadata],ignore_index=True)
@@ -992,8 +996,10 @@ class FUSION:
             new_color = [i for i in range(len(current_ftu_colors)) if current_ftu_colors[i] not in ftu_color]
             if len(new_color)>0:
                 for n in new_color:
-                    self.ftu_colors[ftu_list[n]] = [i for i in ftu_color if i not in current_ftu_colors][0]
-
+                    check_for_new = [i for i in ftu_color if i not in current_ftu_colors]
+                    if len(check_for_new)>0:
+                        self.ftu_colors[ftu_list[n]] = check_for_new[0]
+                    
             self.filter_vals = filter_vals
 
         if not cell_val is None:
@@ -1617,7 +1623,7 @@ class FUSION:
 
         img_list = []
         for idx,s in enumerate(sample_info):
-            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['annotation_id'])
+            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['name'],s['annotation_id'])
             
             img_list.append(resize(np.array(image_region),output_shape=(512,512,3)))
 
@@ -2313,11 +2319,18 @@ class FUSION:
                                 'disabled':False
                             })
                         else:
-                            ftu_names.append({
-                                'label':i['annotation']['name']+' (None detected in slide)',
-                                'value':idx,
-                                'disabled':True
-                            })
+                            if not 'interstitium' in i['annotation']['name']:
+                                ftu_names.append({
+                                    'label':i['annotation']['name']+' (None detected in slide)',
+                                    'value':idx,
+                                    'disabled':True
+                                })
+                            else:
+                                ftu_names.append({
+                                    'label':i['annotation']['name']+ ' (Not implemented for interstitium)',
+                                    'value':idx,
+                                    'disabled':True
+                                })
 
             image, mask = self.prep_handler.get_annotation_image_mask(self.upload_item_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
@@ -2334,13 +2347,16 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
         
-    def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,sub_method):
+    def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method):
 
         new_ex_ftu = go.Figure()
         feature_extract_children = []
         go_to_feat_disabled = False
 
         print(ctx.triggered_id)
+        for idx,ftu,thresh in zip(list(range(len(self.sub_compartment_params))),self.sub_compartment_params,thresh_slider[::-1]):
+            ftu['threshold'] = thresh
+            self.sub_compartment_params[idx] = ftu
 
         if ctx.triggered_id=='next-butt':
             # Moving to next annotation in current layer
