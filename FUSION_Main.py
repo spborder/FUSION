@@ -88,7 +88,7 @@ class FUSION:
             self.cell_names_key[self.cell_graphics_key[ct]['full']] = ct
 
         # Number of main cell types to include in pie-charts
-        self.plot_cell_types_n = 5
+        self.plot_cell_types_n = len(list(self.cell_names_key.keys()))
 
         # ASCT+B table for cell hierarchy generation
         self.table_df = self.dataset_handler.asct_b_table    
@@ -108,11 +108,8 @@ class FUSION:
             'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction'
         ]
 
-        self.current_chart_coords = [0,0]
-
         # Initializing some parameters
         self.current_cell = 'PT'
-        self.current_barcodes = []
 
         # Cell Hierarchy related properties
         self.node_cols = {
@@ -483,9 +480,25 @@ class FUSION:
             [Input('organ-type','value')],
             [Output('post-segment-row','style'),
              Output('organ-type','disabled'),
+             Output('ftu-select','options'),
              Output('ex-ftu-img','figure')],
             prevent_initial_call=True
         )(self.apres_segmentation)
+
+        # Updating sub-compartment segmentation
+        self.app.callback(
+            [Input('ftu-select','value'),
+             Input('prev-butt','n_clicks'),
+             Input('next-butt','n_clicks'),
+             Input('go-to-feat','n_clicks'),
+             Input('ex-ftu-view','value'),
+             Input('ex-ftu-slider','value'),
+             Input('sub-comp-method','value')],
+             [Output('ex-ftu-img','figure'),
+              Output('feature-items','children'),
+              Output('go-to-feat','disabled')],
+            prevent_initial_call = True
+        )(self.update_sub_compartment)
 
         # Enabling components after upload is complete
 
@@ -503,7 +516,8 @@ class FUSION:
         # Populating metadata based on current slides selection
         select_ids = [i['_id'] for i in self.current_slides if i['included']]
 
-        metadata = self.dataset_handler.get_collection_annotation_meta(select_ids)
+        #metadata = self.dataset_handler.get_collection_annotation_meta(select_ids)
+        metadata = self.metadata
 
         return metadata
 
@@ -2193,12 +2207,9 @@ class FUSION:
             print(f'ctx.triggered_id["type"]: {ctx.triggered_id["type"]}')
 
         print(self.upload_check)
-        print(wsi_disabled)
-        print(omics_disabled)
         # Checking the upload check
         if all([self.upload_check[i] for i in self.upload_check]):
             print('All set!')
-            print(ctx.triggered_id)
             wsi_disabled = True
             omics_disabled = True
 
@@ -2208,7 +2219,7 @@ class FUSION:
             thumb_fig = dcc.Graph(
                 figure=go.Figure(
                     data = px.imshow(slide_thumbnail)['data'],
-                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0},'height':100,'width':100}
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0},'height':200,'width':200}
                 )
             )
 
@@ -2282,11 +2293,31 @@ class FUSION:
             # Initializing layer and annotation idxes
             self.layer_ann = {
                 'current_layer':0,
-                'previous_layer':0,
                 'current_annotation':0,
                 'previous_annotation':0,
-                'max_layers':[len(i) for i in self.upload_annotations]
+                'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
             }
+
+            # Populate with default sub-compartment parameters
+            self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
+
+            # Adding options to FTU Options dropdown menu
+            ftu_names = []
+            for idx,i in enumerate(self.upload_annotations):
+                if 'annotation' in i:
+                    if 'elements' in i['annotation']:
+                        if len(i['annotation']['elements'])>0:
+                            ftu_names.append({
+                                'label':i['annotation']['name'],
+                                'value':idx,
+                                'disabled':False
+                            })
+                        else:
+                            ftu_names.append({
+                                'label':i['annotation']['name']+' (None detected in slide)',
+                                'value':idx,
+                                'disabled':True
+                            })
 
             image, mask = self.prep_handler.get_annotation_image_mask(self.upload_item_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
@@ -2298,10 +2329,64 @@ class FUSION:
                 layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
                 )
 
-            return sub_comp_style, disable_organ, image_figure
+            return sub_comp_style, disable_organ, ftu_names, image_figure
         
         else:
             raise exceptions.PreventUpdate
+        
+    def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,sub_method):
+
+        new_ex_ftu = go.Figure()
+        feature_extract_children = []
+        go_to_feat_disabled = False
+
+        print(ctx.triggered_id)
+
+        if ctx.triggered_id=='next-butt':
+            # Moving to next annotation in current layer
+            self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+
+            if self.layer_ann['current_annotation']+1>=self.layer_ann['max_layers'][self.layer_ann['current_layer']]:
+                self.layer_ann['current_annotation'] = 0
+            else:
+                self.layer_ann['current_annotation'] += 1
+
+        elif ctx.triggered_id=='prev-butt':
+            # Moving back to previous annotation in current layer
+            self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+
+            if self.layer_ann['current_annotation']==0:
+                self.layer_ann['current_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]-1
+            else:
+                self.layer_ann['current_annotation'] -= 1
+        
+        elif ctx.triggered_id=='ftu-select':
+            # Moving to next annotation layer, restarting annotation count
+            self.layer_ann['current_layer']=select_ftu
+
+            self.layer_ann['current_annotation'] = 0
+            self.layer_ann['previous_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]
+
+        if ctx.triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
+            
+            new_image, new_mask = self.prep_handler.get_annotation_image_mask(self.upload_item_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+            self.layer_ann['current_image'] = new_image
+            self.layer_ann['current_mask'] = new_mask
+
+        if ctx.triggered_id not in ['go-to-feat']:
+            
+            sub_compartment_image = self.prep_handler.sub_segment_image(self.layer_ann['current_image'],self.layer_ann['current_mask'],self.sub_compartment_params,ex_ftu_view,ftu_slider)
+
+            new_ex_ftu = go.Figure(
+                data = px.imshow(sub_compartment_image),
+                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+            )
+
+        return new_ex_ftu, feature_extract_children, go_to_feat_disabled
+
+
+
+
     
 
 def app(*args):

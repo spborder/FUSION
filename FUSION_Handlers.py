@@ -810,7 +810,10 @@ class LayoutHandler:
                     dbc.Col(
                         html.Div(
                             id='seg-qc-results',
-                            children = []
+                            children = [
+                                dbc.Label('Rename FTU (optional)',html_for='rename-text'),
+                                dcc.Input(type='text',placeholder = 'New FTU Name',id = 'rename-text')
+                            ]
                         ),md=6)
                 ]),
                 html.Hr(),
@@ -829,10 +832,15 @@ class LayoutHandler:
                                 html.Div(
                                     id='ex-ftu-opts',
                                     children = [
-                                        dcc.RadioItems([{'label':html.Span('Overlaid',style={'marginBottom':'5px'}),'value':'Overlaid'},{'label':html.Span('Side-by-side'),'value':'Side-by-side'}],value='Overlaid',inline=True,id='ex-ftu-view'),
+                                        dcc.RadioItems(
+                                            [
+                                                {'label':html.Span('Overlaid',style={'marginBottom':'5px','marginLeft':'5px'}),'value':'Overlaid'},
+                                                {'label':html.Span('Side-by-side',style={'marginLeft':'5px'}),'value':'Side-by-side'}
+                                            ],
+                                                value='Overlaid',inline=True,id='ex-ftu-view'),
                                         html.B(),
                                         dbc.Label('Overlaid Mask Transparency:',html_for='ex-ftu-slider',style={'marginTop':'10px'}),
-                                        dcc.Slider(0,100,5,value=0,marks=None,vertical=False,tooltip={'placement':'bottom'}),
+                                        dcc.Slider(0,1,0.05,value=0,marks=None,vertical=False,tooltip={'placement':'bottom'},id='ex-ftu-slider'),
                                         html.B(),
                                         dbc.Row([
                                             dbc.Col(dbc.Button('Previous',id='prev-butt')),
@@ -1012,7 +1020,7 @@ class LayoutHandler:
                                         'User Survey',
                                         id = 'user-survey-button',
                                         outline = True,
-                                        color = 'secondary',
+                                        color = 'primary',
                                         href = ' https://ufl.qualtrics.com/jfe/form/SV_1A0CcKNLhTnFCHI',
                                         style = {'textTransform':'none'}
                                     )
@@ -1022,7 +1030,7 @@ class LayoutHandler:
                                         "Cell Cards",
                                         id='cell-cards-button',
                                         outline=True,
-                                        color="secondary",
+                                        color="primary",
                                         href="https://cellcards.org/index.php",
                                         style={"textTransform":"none"}
                                     )
@@ -1032,7 +1040,7 @@ class LayoutHandler:
                                         "Lab Website",
                                         id='lab-web-button',
                                         outline=True,
-                                        color='secondary',
+                                        color='primary',
                                         href='https://cmilab.nephrology.medicine.ufl.edu',
                                         style={"textTransform":"none"}
                                     )
@@ -1046,7 +1054,7 @@ class LayoutHandler:
                 align='center')
                 ], fluid=True),
             dark=True,
-            color="primary",
+            color="dark",
             sticky='fixed',
             style={'marginBottom':'20px'}
         )

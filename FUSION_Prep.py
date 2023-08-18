@@ -15,6 +15,11 @@ from skimage.color import rgb2hsv
 from skimage.morphology import remove_small_objects, remove_small_holes
 from skimage.segmentation import watershed
 from skimage.measure import label
+from scipy import ndimage as ndi
+from skimage.feature import peak_local_max
+
+from matplotlib import colormaps
+
 
 class PrepHandler:
     def __init__(self,
@@ -28,11 +33,37 @@ class PrepHandler:
             'Kidney':'648123751019450486d13dcd'
         }
 
+        self.color_map = colormaps['jet']
+
+        self.initial_segmentation_parameters = [
+            {
+                'name':'Nuclei',
+                'threshold':110,
+                'min_size':20,
+                'color':[0,0,255]
+            },            
+            {
+                'name':'PAS',
+                'threshold':45,
+                'min_size':20,
+                'color':[255,0,0]
+            },
+            {
+                'name':'Luminal Space',
+                'threshold':0,
+                'min_size':20,
+                'color':[0,255,0]
+            }
+        ]
 
     def get_annotation_image_mask(self,item_id,annotations,layer_idx,ann_idx):
 
         # Codes taken from Annotaterator
-        current_item = annotations[layer_idx]['annotation']['elements'][ann_idx]
+        print(f'item_id: {item_id}')
+        print(f'layer_idx: {layer_idx}')
+        print(f'ann_idx: {ann_idx}')
+        filtered_annotations = [i for i in annotations if 'annotation' in i]
+        current_item = filtered_annotations[layer_idx]['annotation']['elements'][ann_idx]
 
         if current_item['type']=='polyline':
             coordinates = np.squeeze(np.array(current_item['points']))
@@ -82,12 +113,12 @@ class PrepHandler:
 
         return job_response
 
-    def sub_segment_image(self,image,mask,seg_params):
+    def sub_segment_image(self,image,mask,seg_params,view_method,transparency_val):
         
         # Sub-compartment segmentation
-        sub_comp_image = np.zeros((np.shape(image)[0],np.shape(image)[1],len(seg_params)))
+        sub_comp_image = np.zeros((np.shape(image)[0],np.shape(image)[1],3))
         remainder_mask = np.ones((np.shape(image)[0],np.shape(image)[1]))
-        hsv_image = rgb2hsv(sub_comp_image)[:,:,1]
+        hsv_image = np.uint8(255*rgb2hsv(image)[:,:,1])
         for idx,param in enumerate(seg_params):
 
             remaining_pixels = np.multiply(hsv_image,remainder_mask)
@@ -98,23 +129,43 @@ class PrepHandler:
             masked_remaining_pixels[masked_remaining_pixels>0] = 1
 
             # Filtering by minimum size
-            small_object_filtered = (1/255)*np.uint8(remove_small_objects(masked_remaining_pixels,param['min_size']))
-
+            small_object_filtered = (1/255)*np.uint8(remove_small_objects(masked_remaining_pixels>0,param['min_size']))
             # Check for if the current sub-compartment is nuclei
             if param['name'].lower()=='nuclei':
                 
                 # Area threshold for holes is controllable for this
-                sub_mask = remove_small_holes(small_object_filtered,area_threshold=64)
-                sub_mask = watershed(sub_mask,label(sub_mask))
+                sub_mask = remove_small_holes(small_object_filtered>0,area_threshold=10)
+                sub_mask = sub_mask>0
+                # Watershed implementation from: https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_watershed.html
+                distance = ndi.distance_transform_edt(sub_mask)
+                coords = peak_local_max(distance,footprint=np.ones((3,3)),labels = label(sub_mask))
+                watershed_mask = np.zeros(distance.shape,dtype=bool)
+                watershed_mask[tuple(coords.T)] = True
+                markers, _ = ndi.label(watershed_mask)
+                sub_mask = watershed(-distance,markers,mask=sub_mask)
                 sub_mask = sub_mask>0
 
             else:
                 sub_mask = small_object_filtered
 
-            sub_comp_image[:,:,idx] += sub_mask
-            remainder_mask -= sub_mask
+            #sub_comp_image[sub_mask>0] = idx+1
+            sub_comp_image[sub_mask>0,:] = param['color']
+            remainder_mask -= sub_mask>0
 
-            # have to add the final mask thing for the lowest segmentation hierarchy
+        # have to add the final mask thing for the lowest segmentation hierarchy
+        if view_method=='Side-by-side':
+            # Side-by-side view of sub-compartment segmentation
+            sub_comp_image = np.concatenate((image,sub_comp_image),axis=1)
+        elif view_method=='Overlaid':
+            # Overlaid view of sub-compartment segmentation
+            # Processing combined annotations to set black background to transparent
+            zero_mask = np.where(np.sum(sub_comp_image.copy(),axis=2)==0,0,255*transparency_val)
+            sub_comp_mask_4d = np.concatenate((sub_comp_image,zero_mask[:,:,None]),axis=-1)
+            rgba_mask = Image.fromarray(np.uint8(sub_comp_mask_4d),'RGBA')
+            
+            image = Image.fromarray(np.uint8(image)).convert('RGBA')
+            image.paste(rgba_mask, mask = rgba_mask)
+            sub_comp_image = np.array(image.copy())[:,:,0:3]
 
         return sub_comp_image
 
