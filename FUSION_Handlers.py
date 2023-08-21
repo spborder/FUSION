@@ -882,12 +882,16 @@ class LayoutHandler:
                                     max = 255.0,
                                     step = 5.0,
                                     value = [0.0,50.0,120.0],
-                                    marks = None,
-                                    tooltip = {'placement':'bottom','always_visible':True},
+                                    marks = {
+                                        0.0:{'label':'Luminal Space: 0','style':'rgb(0,255,0)'},
+                                        50.0:{'label':'PAS: 50','style':'rgb(255,0,0)'},
+                                        120.0:{'label':'Nuclei: 120','style':'rgb(0,0,255)'}
+                                    },
+                                    tooltip = {'placement':'top','always_visible':False},
                                     allowCross=False
                                 )
                             ]
-                        ),md=12
+                        ),md=12, style = {'marginLeft':'20px','marginRight':'20px'}
                     )
                 )
             ])

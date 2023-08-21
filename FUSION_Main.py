@@ -220,6 +220,7 @@ class FUSION:
             }
             """
         )
+        
         # Adding callbacks to app
         self.vis_callbacks()
         self.all_layout_callbacks()
@@ -338,8 +339,8 @@ class FUSION:
         )(self.get_click_popup)
 
         self.app.callback(
-            Output({'type':'popup-state-fig','index':MATCH},'figure'),
-            Input({'type':'popup-state-drop','index':MATCH},'value'),
+            Output('popup-state-fig','children'),
+            Input('popup-state-drop','value'),
             prevent_initial_call = True
         )(self.update_state_popup)
 
@@ -495,8 +496,12 @@ class FUSION:
              Input('ex-ftu-slider','value'),
              Input('sub-thresh-slider','value'),
              Input('sub-comp-method','value')],
+             State('go-to-feat','disabled'),
              [Output('ex-ftu-img','figure'),
+              Output('sub-thresh-slider','marks'),
               Output('feature-items','children'),
+              Output('sub-thresh-slider','disabled'),
+              Output('sub-comp-method','disabled'),
               Output('go-to-feat','disabled')],
             prevent_initial_call = True
         )(self.update_sub_compartment)
@@ -1181,8 +1186,18 @@ class FUSION:
                     # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
                     cell_states = ftu_click['properties']['Cell_States']
                     cells_for_cell_states = list(cell_states.keys())
-                    initial_cell_states = cell_states[cells_for_cell_states[0]]
-                    cell_states_df = pd.DataFrame({'States':list(initial_cell_states.keys()),'Values':list(initial_cell_states.values())})
+
+                    # Checking for non-zero cell states
+                    non_zero_list = []
+                    for cs in cells_for_cell_states:
+                        if sum(list(cell_states[cs].values()))>0:
+                            non_zero_list.append(cs)
+
+                    cs_df_list = []
+                    for nz_cs in non_zero_list:
+                        cell_state_info = cell_states[nz_cs]
+                        cell_state_df = pd.DataFrame({'States':list(cell_state_info.keys()),'Values':list(cell_state_info.values())})
+                        cs_df_list.append(cell_state_df)
 
                     # Getting other FTU/Spot properties
                     all_properties = list(ftu_click['properties'].keys())
@@ -1215,34 +1230,26 @@ class FUSION:
                                     ],style = {'height':'250px','width':'250px','display':'inline-block'})
                                 ], title = 'Main Cell Types'),
                             dbc.AccordionItem([
-                                html.Div([
-                                    dbc.Row(
+                                dbc.Tabs([
+                                    dbc.Tab(
                                         html.Div(
-                                            dcc.Dropdown(
-                                                options=cells_for_cell_states,
-                                                placeholder = 'Select a Cell Type',
-                                                id = {'type':'popup-state-drop','index':0}
-                                            ),style={'display':'inline-block'}
-                                        )
-                                    ),
-                                    html.Hr(),
-                                    dbc.Row([
-                                        dbc.Col(
                                             dcc.Graph(
                                                 figure = go.Figure(
                                                     data = [
                                                         go.Pie(
                                                             name = '',
-                                                            values = cell_states_df['Values'],
-                                                            labels = cell_states_df['States']
+                                                            values = cs_df['Values'],
+                                                            labels = cs_df['States'],
+                                                            hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
                                                         )
                                                     ],
-                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0}},
-                                                ),id = {'type':'popup-state-fig','index':0}
-                                            ),md='auto'
-                                        )
-                                    ],style={'height':'100%','width':'100%'})
-                                ],style = {'height':'250px','width':'250px','display':'inline-block'})
+                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False}
+                                                )
+                                            )
+                                        ), label = cs
+                                    )
+                                    for cs,cs_df in zip(non_zero_list,cs_df_list)
+                                ])
                             ], title = 'Cell States'),
                             dbc.AccordionItem([
                                 html.Div([
@@ -1293,18 +1300,20 @@ class FUSION:
             initial_cell_states = cell_states[cells_for_cell_states[0]]
             cell_states_df = pd.DataFrame({'States':list(initial_cell_states.keys()),'Values':list(initial_cell_states.values())})
 
-            cell_states_fig = go.Figure(
-                data = [
-                    go.Pie(
-                        name = '',
-                        values = cell_states_df['Values'],
-                        labels = cell_states_df['States']
-                    )                    
-                ],
-                layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0}}
-            )            
+            cell_states_fig = dcc.Graph(
+                figure = go.Figure(
+                            data = [
+                                go.Pie(
+                                    name = '',
+                                    values = cell_states_df['Values'],
+                                    labels = cell_states_df['States']
+                                )                    
+                            ],
+                            layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0}}
+                        )      
+            )      
 
-            return [cell_states_fig]
+            return cell_states_fig
         else:
             raise exceptions.PreventUpdate
 
@@ -2296,13 +2305,6 @@ class FUSION:
 
             # Extract annotation and initial sub-compartment mask
             self.upload_annotations = self.dataset_handler.get_annotations(self.upload_item_id)
-            # Initializing layer and annotation idxes
-            self.layer_ann = {
-                'current_layer':0,
-                'current_annotation':0,
-                'previous_annotation':0,
-                'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
-            }
 
             # Populate with default sub-compartment parameters
             self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
@@ -2312,30 +2314,39 @@ class FUSION:
             for idx,i in enumerate(self.upload_annotations):
                 if 'annotation' in i:
                     if 'elements' in i['annotation']:
-                        if len(i['annotation']['elements'])>0:
-                            ftu_names.append({
-                                'label':i['annotation']['name'],
-                                'value':idx,
-                                'disabled':False
-                            })
-                        else:
-                            if not 'interstitium' in i['annotation']['name']:
+                        if not 'interstitium' in i['annotation']['name']:
+                            if len(i['annotation']['elements'])>0:
+                                ftu_names.append({
+                                    'label':i['annotation']['name'],
+                                    'value':idx,
+                                    'disabled':False
+                                })
+                            else:
                                 ftu_names.append({
                                     'label':i['annotation']['name']+' (None detected in slide)',
                                     'value':idx,
                                     'disabled':True
                                 })
-                            else:
-                                ftu_names.append({
-                                    'label':i['annotation']['name']+ ' (Not implemented for interstitium)',
-                                    'value':idx,
-                                    'disabled':True
-                                })
+                        else:
+                            ftu_names.append({
+                                'label':i['annotation']['name']+' (Not implemented for interstitium)',
+                                'value':idx,
+                                'disabled':True
+                            })
 
+            # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+            self.layer_ann = {
+                'current_layer':[i for i in ftu_names if not i['disabled']][0]['value'],
+                'current_annotation':0,
+                'previous_annotation':0,
+                'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
+            }
+
+            self.feature_extract_ftus = ftu_names
             image, mask = self.prep_handler.get_annotation_image_mask(self.upload_item_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
             self.layer_ann['current_image'] = image
-            self.layer_ann['current_boundary_mask'] = mask
+            self.layer_ann['current_mask'] = mask
 
             image_figure = go.Figure(
                 data = px.imshow(image)['data'],
@@ -2347,11 +2358,18 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
         
-    def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method):
+    def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state):
 
         new_ex_ftu = go.Figure()
         feature_extract_children = []
-        go_to_feat_disabled = False
+        go_to_feat_disabled = go_to_feat_state
+        disable_slider = go_to_feat_state
+        disable_method = go_to_feat_state
+
+        slider_marks = {
+            val:{'label':f'{sub_comp["name"]}: {val}','style':{'color':sub_comp["marks_color"]}}
+            for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
+        }
 
         print(ctx.triggered_id)
         for idx,ftu,thresh in zip(list(range(len(self.sub_compartment_params))),self.sub_compartment_params,thresh_slider[::-1]):
@@ -2397,11 +2415,22 @@ class FUSION:
                 data = px.imshow(sub_compartment_image),
                 layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
             )
+        else:
+            go_to_feat_disabled = True
+            disable_slider = True
+            disable_method = True
 
-        return new_ex_ftu, feature_extract_children, go_to_feat_disabled
+            new_ex_ftu = go.Figure(
+                data = px.imshow(self.prep_handler.current_sub_comp_image),
+                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+            )
 
+            feature_extract_children = self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)
 
-
+        if go_to_feat_state:
+            return new_ex_ftu, slider_marks, no_update, disable_slider, disable_method, go_to_feat_disabled
+        else:
+            return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
 
     
 
@@ -2421,6 +2450,7 @@ def app(*args):
     print(f'initial collection: {initial_collection}')
     initial_collection_id = dataset_handler.gc.get('resource/lookup',parameters={'path':initial_collection})
 
+    print(f'loading initial slide(s)')
     # Contents of folder (used for testing to initialize with one slide)
     initial_collection_contents = dataset_handler.gc.get(f'resource/{initial_collection_id["_id"]}/items',parameters={'type':path_type})
     initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
@@ -2429,10 +2459,12 @@ def app(*args):
     initial_collection_contents = initial_collection_contents[0:2]
     
     # Saving & organizing relevant id's in GirderHandler
+    print('Getting initial items metadata')
     dataset_handler.initialize_folder_structure(initial_collection,path_type)
     metadata = dataset_handler.get_collection_annotation_meta([i['_id'] for i in initial_collection_contents])
 
     # Getting graphics_reference.json from the FUSION Assets folder
+    print(f'Getting asset items')
     assets_path = '/collection/FUSION Assets/'
     dataset_handler.get_asset_items(assets_path)
 
@@ -2449,6 +2481,7 @@ def app(*args):
         'Spots':'#dffa00'
     }
 
+    print(f'Initializing DSA Slide: {slide_name}')
     wsi = DSASlide(slide_name,slide_item_id,dataset_handler,ftu_colors)
 
     # Getting list of available CLIs in DSA instance
@@ -2471,6 +2504,7 @@ def app(*args):
 
     external_stylesheets = [dbc.themes.LUX,dbc.icons.BOOTSTRAP]
 
+    print(f'Generating layouts')
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names)
     layout_handler.gen_vis_layout(wsi,cli_list)

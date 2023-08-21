@@ -12,13 +12,18 @@ import numpy as  np
 from PIL import Image
 from skimage.draw import polygon
 from skimage.color import rgb2hsv
-from skimage.morphology import remove_small_objects, remove_small_holes
+from skimage.morphology import remove_small_objects, remove_small_holes, disk
 from skimage.segmentation import watershed
 from skimage.measure import label
 from scipy import ndimage as ndi
 from skimage.feature import peak_local_max
+from skimage.filters import rank
+from skimage import exposure
 
 from matplotlib import colormaps
+
+import dash_bootstrap_components as dbc
+from dash import dcc, html
 
 
 class PrepHandler:
@@ -42,19 +47,22 @@ class PrepHandler:
                 'name':'Nuclei',
                 'threshold':110,
                 'min_size':45,
-                'color':[0,0,255]
+                'color':[0,0,255],
+                'marks_color':'rgb(0,0,255)'
             },            
             {
                 'name':'PAS',
                 'threshold':45,
                 'min_size':20,
-                'color':[255,0,0]
+                'color':[255,0,0],
+                'marks_color':'rgb(255,0,0)'
             },
             {
                 'name':'Luminal Space',
                 'threshold':0,
                 'min_size':20,
-                'color':[0,255,0]
+                'color':[0,255,0],
+                'marks_color':'rgb(0,255,0)'
             }
         ]
 
@@ -122,6 +130,11 @@ class PrepHandler:
         sub_comp_image = np.zeros((np.shape(image)[0],np.shape(image)[1],3))
         remainder_mask = np.ones((np.shape(image)[0],np.shape(image)[1]))
         hsv_image = np.uint8(255*rgb2hsv(image)[:,:,1])
+
+        # Applying adaptive histogram equalization
+        #hsv_image = rank.equalize(hsv_image,footprint=disk(30))
+        hsv_image = np.uint8(255*exposure.equalize_hist(hsv_image))
+
         for idx,param in enumerate(seg_params):
 
             remaining_pixels = np.multiply(hsv_image,remainder_mask)
@@ -141,7 +154,7 @@ class PrepHandler:
                 sub_mask = sub_mask>0
                 # Watershed implementation from: https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_watershed.html
                 distance = ndi.distance_transform_edt(sub_mask)
-                coords = peak_local_max(distance,footprint=np.ones((15,15)),labels = label(sub_mask))
+                coords = peak_local_max(distance,footprint=np.ones((3,3)),labels = label(sub_mask))
                 watershed_mask = np.zeros(distance.shape,dtype=bool)
                 watershed_mask[tuple(coords.T)] = True
                 markers, _ = ndi.label(watershed_mask)
@@ -151,7 +164,6 @@ class PrepHandler:
             else:
                 sub_mask = small_object_filtered
 
-            #sub_comp_image[sub_mask>0] = idx+1
             sub_comp_image[sub_mask>0,:] = param['color']
             remainder_mask -= sub_mask>0
 
@@ -170,9 +182,66 @@ class PrepHandler:
             image.paste(rgba_mask, mask = rgba_mask)
             sub_comp_image = np.array(image.copy())[:,:,0:3]
 
+        self.current_sub_comp_image = sub_comp_image
+
         return sub_comp_image
 
+    def gen_feat_extract_card(self,ftu_names):
 
+        # Generating layout of feature extraction card
+        card_children = [
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label('Structures for Feature Extraction:',html_for='include-ftu-drop')
+                ])
+            ]),
+            html.B(),
+            dbc.Row([
+                dbc.Col([
+                    dcc.Dropdown(
+                        options = ftu_names,
+                        value = [i['value'] for i in ftu_names if not i['disabled']],
+                        multi=True,
+                        placeholder = 'Select FTUs for feature extraction',
+                        id = 'include-ftu-drop'
+                    )
+                ])
+            ],style={'marginBottom':'20px'}),
+            html.B(),
+            dbc.Row([
+                dbc.Col([
+                    html.Div(
+                        dbc.Button(
+                            'Start Extracting!',
+                            color = 'success',
+                            className='d-grid gap-2 col-12 mx-auto',
+                            id = 'start-feat'
+                        )
+                    )
+                ])
+            ],style = {'marginBottom':'10px'}),
+            html.B(),
+            dbc.Row([
+                dbc.Card([
+                    dbc.CardHeader('Features to extract'),
+                    dbc.CardBody([
+                        html.Div('Selecting which types of features to extract here')
+                    ])
+                ])
+            ],style = {'marginBottom':'20px'}),
+            html.B(),
+            dbc.Row([
+                dbc.Card([
+                    dbc.CardHeader('Feature extraction progress'),
+                    dbc.CardBody([
+                        html.Div('Record logs/progress here')
+                    ])
+                ])
+            ])
+        ]
+
+
+        return card_children
 
 
 
