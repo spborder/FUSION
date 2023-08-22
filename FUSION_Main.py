@@ -34,6 +34,7 @@ import dash_leaflet.express as dlx
 from dash_extensions.javascript import assign, arrow_function
 from dash_extensions.enrich import DashProxy, html, Input, Output, MultiplexerTransform, State
 import dash_mantine_components as dmc
+import dash_uploader as du
 
 from timeit import default_timer as timer
 
@@ -338,12 +339,13 @@ class FUSION:
             prevent_initial_call = True
         )(self.get_click_popup)
 
+        """
         self.app.callback(
-            Output('popup-state-fig','children'),
-            Input('popup-state-drop','value'),
+            Output({'type':'popup-state-fig','index':MATCH},'children'),
+            Input({'type':'popup-state-drop','index':MATCH},'value'),
             prevent_initial_call = True
         )(self.update_state_popup)
-
+        """
         self.app.callback(
             [Output('slide-tile','url'),
              Output('layer-control','children'),
@@ -482,6 +484,8 @@ class FUSION:
             [Output('post-segment-row','style'),
              Output('organ-type','disabled'),
              Output('ftu-select','options'),
+             Output('ftu-select','value'),
+             Output('sub-comp-method','value'),
              Output('ex-ftu-img','figure')],
             prevent_initial_call=True
         )(self.apres_segmentation)
@@ -986,10 +990,6 @@ class FUSION:
 
     def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color):
 
-        print(f'trigger to update_overlays: {ctx.triggered_id}')
-        print(f'{ctx.triggered_prop_ids}')
-        print(filter_vals)
-        print(ftu_color)
         m_prop = None
 
         if not ftu_color is None:
@@ -1000,9 +1000,11 @@ class FUSION:
             # Index of which ftu is different
             new_color = [i for i in range(len(current_ftu_colors)) if current_ftu_colors[i] not in ftu_color]
             if len(new_color)>0:
+                print(new_color)
                 for n in new_color:
                     check_for_new = [i for i in ftu_color if i not in current_ftu_colors]
                     if len(check_for_new)>0:
+                        print(check_for_new)
                         self.ftu_colors[ftu_list[n]] = check_for_new[0]
                     
             self.filter_vals = filter_vals
@@ -1100,7 +1102,6 @@ class FUSION:
                         ), name = f'Manual ROI {m_idx}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
                     )
                 )
-
 
             self.current_overlays = new_children
                         
@@ -1632,7 +1633,7 @@ class FUSION:
 
         img_list = []
         for idx,s in enumerate(sample_info):
-            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['name'],s['annotation_id'])
+            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['structure'],s['annotation_id'])
             
             img_list.append(resize(np.array(image_region),output_shape=(512,512,3)))
 
@@ -1666,19 +1667,20 @@ class FUSION:
             current_image = self.grab_image(sample_info)
             print(f'length: {len(current_image)}')
             if len(current_image)==1:
-                selected_image = go.Figure(px.imshow(current_image[0]))
+                selected_image = go.Figure(
+                    data = px.imshow(current_image[0])['data'],
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                    )
             elif len(current_image)>1:
-                selected_image = go.Figure(px.imshow(np.stack(current_image,axis=0),animation_frame=0,binary_string=True,labels=dict(animation_frame=self.current_ftu)))
+                selected_image = go.Figure(
+                    data = px.imshow(np.stack(current_image,axis=0),animation_frame=0,binary_string=True,labels=dict(animation_frame=self.current_ftu)),
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                    )
             else:
                 print(f'No images found')
                 print(f'hover: {hover}')
                 print(f'selected:{selected}')
                 print(f'self.current_selected_samples: {self.current_selected_samples}')
-
-
-            selected_image.update_layout(
-                margin=dict(l=0,r=0,t=0,b=0)
-            )
 
             # Preparing figure containing cell types + cell states info
             counts_data = pd.DataFrame([i['Main_Cell_Types'] for i in sample_info]).sum(axis=0).to_frame()
@@ -2353,7 +2355,7 @@ class FUSION:
                 layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
                 )
 
-            return sub_comp_style, disable_organ, ftu_names, image_figure
+            return sub_comp_style, disable_organ, ftu_names, ftu_names[self.layer_ann['current_layer']],'Manual',image_figure
         
         else:
             raise exceptions.PreventUpdate
@@ -2396,7 +2398,7 @@ class FUSION:
         
         elif ctx.triggered_id=='ftu-select':
             # Moving to next annotation layer, restarting annotation count
-            self.layer_ann['current_layer']=select_ftu
+            self.layer_ann['current_layer']=select_ftu['value']
 
             self.layer_ann['current_annotation'] = 0
             self.layer_ann['previous_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]
@@ -2412,7 +2414,7 @@ class FUSION:
             sub_compartment_image = self.prep_handler.sub_segment_image(self.layer_ann['current_image'],self.layer_ann['current_mask'],self.sub_compartment_params,ex_ftu_view,ftu_slider)
 
             new_ex_ftu = go.Figure(
-                data = px.imshow(sub_compartment_image),
+                data = px.imshow(sub_compartment_image)['data'],
                 layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
             )
         else:
@@ -2421,7 +2423,7 @@ class FUSION:
             disable_method = True
 
             new_ex_ftu = go.Figure(
-                data = px.imshow(self.prep_handler.current_sub_comp_image),
+                data = px.imshow(self.prep_handler.current_sub_comp_image)['data'],
                 layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
             )
 

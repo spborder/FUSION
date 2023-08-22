@@ -37,6 +37,7 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 import dash_leaflet as dl
 import dash_mantine_components as dmc
+import dash_uploader as du
 
 from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function
@@ -1077,7 +1078,7 @@ class LayoutHandler:
         # Sidebar
         sider = html.Div([
             dbc.Offcanvas([
-                html.Img(id='welcome-logo-side',src=('./assets/FUSION-LAB-FINAL.png'),height='315px',width='250px'),
+                html.Img(id='welcome-logo-side',src=('./assets/FUSION-LAB-FINAL.png'),height='315px',width='275px'),
                 dbc.Nav([
                     dbc.NavLink('Welcome',href='/welcome',active='exact'),
                     dbc.NavLink('FUSION Visualizer',href='/vis',active='exact'),
@@ -1750,4 +1751,20 @@ class DownloadHandler:
     def extract_manual(self, slide, data):
     """
 
+class UploadHandler(du.HttpRequestHandler):
+    def __init__(self,
+                 girder_api_url,
+                 user_session_token):
+        
+        self.girder_api_url = girder_api_url
+        self.user_session_token = user_session_token
 
+    """
+    def post(self):
+
+
+    def configure_post(self,parent_id,file_name):
+        self.parent_id = parent_id
+        self.file_name = file_name
+
+    """

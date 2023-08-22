@@ -167,6 +167,10 @@ class PrepHandler:
             sub_comp_image[sub_mask>0,:] = param['color']
             remainder_mask -= sub_mask>0
 
+        # Assigning remaining pixels within the boundary mask to the last sub-compartment
+        masked_remaining_pixels = np.multiply(remaining_pixels,mask)
+        sub_comp_image[masked_remaining_pixels>0] = param['color']
+
         # have to add the final mask thing for the lowest segmentation hierarchy
         if view_method=='Side-by-side':
             # Side-by-side view of sub-compartment segmentation
@@ -209,6 +213,15 @@ class PrepHandler:
             ],style={'marginBottom':'20px'}),
             html.B(),
             dbc.Row([
+                dbc.Card([
+                    dbc.CardHeader('Features to extract'),
+                    dbc.CardBody([
+                        html.Div('Selecting which types of features to extract here')
+                    ])
+                ])
+            ],style = {'marginBottom':'20px'}),
+            html.B(),
+            dbc.Row([
                 dbc.Col([
                     html.Div(
                         dbc.Button(
@@ -220,15 +233,6 @@ class PrepHandler:
                     )
                 ])
             ],style = {'marginBottom':'10px'}),
-            html.B(),
-            dbc.Row([
-                dbc.Card([
-                    dbc.CardHeader('Features to extract'),
-                    dbc.CardBody([
-                        html.Div('Selecting which types of features to extract here')
-                    ])
-                ])
-            ],style = {'marginBottom':'20px'}),
             html.B(),
             dbc.Row([
                 dbc.Card([
