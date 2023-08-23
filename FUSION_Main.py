@@ -298,6 +298,7 @@ class FUSION:
 
     def vis_callbacks(self):
 
+        # Updating GeoJSON fill/color/filter
         self.app.callback(
             [Output('layer-control','children'),Output('colorbar-div','children'),
              Output('filter-slider','max'),Output('filter-slider','disabled')],
@@ -306,12 +307,14 @@ class FUSION:
             prevent_initial_call = True
         )(self.update_overlays)
 
+        # Updating Cell Composition pie charts
         self.app.callback(
             Output('roi-pie-holder','children'),
             [Input('slide-map','zoom'),Input('slide-map','viewport')],
             State('slide-map','bounds'),
         )(self.update_roi_pie)      
 
+        # Updating cell hierarchy data
         self.app.callback(
             [Output('cell-graphic','src'),
              Output('cell-hierarchy','elements'),
@@ -320,6 +323,7 @@ class FUSION:
             Input('neph-img','clickData'),
         )(self.update_cell_hierarchy)
 
+        # Getting nephron hover (cell type label)
         self.app.callback(
             [Output('neph-tooltip','show'),
              Output('neph-tooltip','bbox'),
@@ -327,25 +331,21 @@ class FUSION:
              Input('neph-img','hoverData')
         )(self.get_neph_hover)
 
+        # Updating cell state bar plot based on clicked cell type in cell composition tab
         self.app.callback(
             Output({'type':'ftu-state-bar','index':MATCH},'figure'),
             Input({'type':'ftu-cell-pie','index':MATCH},'clickData'),
             prevent_initial_call = True
         )(self.update_state_bar)
 
+        # Getting GeoJSON popup div with data
         self.app.callback(
             Output({'type':'ftu-popup','index':MATCH},'children'),
             Input({'type':'ftu-bounds','index':MATCH},'click_feature'),
             prevent_initial_call = True
         )(self.get_click_popup)
 
-        """
-        self.app.callback(
-            Output({'type':'popup-state-fig','index':MATCH},'children'),
-            Input({'type':'popup-state-drop','index':MATCH},'value'),
-            prevent_initial_call = True
-        )(self.update_state_popup)
-        """
+        # Loading new WSI from dropdown selection
         self.app.callback(
             [Output('slide-tile','url'),
              Output('layer-control','children'),
@@ -353,7 +353,7 @@ class FUSION:
              Output('slide-map','bounds'),
              Output('slide-tile','tileSize'),
              Output('slide-map','maxZoom'),
-             Output({'type':'edit_control','index':ALL},'geojson'),
+             Output('feature-group','children'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children')],
             Input('slide-select','value'),
@@ -361,6 +361,7 @@ class FUSION:
             suppress_callback_exceptions=True
         )(self.ingest_wsi)
         
+        # Updating cytoscapes plot for cell hierarchy
         self.app.callback(
             [Output('label-p','children'),
             Output('id-p','children'),
@@ -369,6 +370,7 @@ class FUSION:
             prevent_initial_call=True
         )(self.get_cyto_data)
 
+        # Updating morphometric cluster plot parameters
         self.app.callback(
             [Input('ftu-select','value'),
             Input('plot-select','value'),
@@ -377,6 +379,7 @@ class FUSION:
             Output('label-select','options')],
         )(self.update_graph)
 
+        # Grabbing image(s) from morphometric cluster plot
         self.app.callback(
             [Input('cluster-graph','clickData'),
             Input('cluster-graph','selectedData')],
@@ -385,12 +388,14 @@ class FUSION:
             Output('selected-cell-states','figure')],
         )(self.update_selected)
 
+        # Updating cell states bar chart from within the selected point(s) in morphometrics cluster plot
         self.app.callback(
             Input('selected-cell-types','clickData'),
             Output('selected-cell-states','figure'),
             prevent_initial_call=True
         )(self.update_selected_state_bar)
 
+        # Adding manual ROIs using EditControl
         self.app.callback(
             Input({'type':'edit_control','index':ALL},'geojson'),
             [Output('layer-control','children'),
@@ -398,13 +403,14 @@ class FUSION:
             prevent_initial_call=True
         )(self.add_manual_roi)
 
-        # Callbacks for data download
+        # Updating options for downloads
         self.app.callback(
             Input('data-select','value'),
             Output('data-options','children'),
             prevent_initial_call = True
         )(self.update_download_options)
 
+        # Downloading data
         self.app.callback(
             [Input({'type':'download-opts','index':MATCH},'value'),
             Input({'type':'download-butt','index':MATCH},'n_clicks')],
@@ -412,7 +418,7 @@ class FUSION:
             prevent_initial_call = True
         )(self.download_data)
 
-        # Callbacks for CLI application
+        # Selecting and running CLIs
         self.app.callback(
             [Input('cli-drop','value'),
              Input('cli-run','n_clicks')],
@@ -426,6 +432,7 @@ class FUSION:
 
     def builder_callbacks(self):
 
+        # Initializing plot after selecting dataset(s)
         self.app.callback(
             Input('dataset-table','selected_rows'),
             [Output('selected-dataset-slides','children'),
@@ -434,6 +441,7 @@ class FUSION:
              prevent_initial_call=True
         )(self.initialize_metadata_plots)
 
+        # Updating metadata plot based on selected parameters
         self.app.callback(
             [Input({'type':'meta-drop','index':ALL},'value'),
              Input({'type':'cell-meta-drop','index':ALL},'value'),
@@ -447,7 +455,8 @@ class FUSION:
         )(self.update_metadata_plot)
 
     def welcome_callbacks(self):
-
+        
+        # Selecting a specific tutorial video
         self.app.callback(
             Input({'type':'video-drop','index':ALL},'value'),
             Output({'type':'video','index':ALL},'src'),
@@ -1479,10 +1488,9 @@ class FUSION:
                 # Getting slide item id
                 slide_id = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]['_id']
 
-        new_slide = DSASlide(slide_name,slide_id,self.dataset_handler,self.ftu_colors)
-
+        #TODO: Check for previous manual ROIs or marked FTUs
+        new_slide = DSASlide(slide_name,slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
         self.wsi = new_slide
-        print(f'length of manual ROIs: {len(self.wsi.manual_rois)}')
 
         # Updating overlays colors according to the current cell
         self.update_hex_color_key(self.current_cell)
@@ -1525,9 +1533,10 @@ class FUSION:
                 )
             )
 
+        print(f'length of new_children: {len(new_children)}')
+
         new_url = self.wsi.tile_url
         center_point = [0.5*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),0.5*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
-
 
         self.current_ftus = self.wsi.ftu_names+['Spots']
         self.current_ftu_layers = self.wsi.ftu_names+['Spots']
@@ -1536,13 +1545,14 @@ class FUSION:
         self.current_overlays = new_children
 
         # Adding fresh edit-control to the outputs
-        """
         new_edit_control = dl.EditControl(
             id={'type':'edit_control','index':np.random.randint(0,1000)},
-            draw = dict(line=False,circle=False,circlemarker=False)
+            draw = dict(line=False,circle=False,circlemarker=False),
+            geojson={'type':'FeatureCollection','features':[m['geojson'] for m in self.wsi.manual_rois]}
             )
-        """
-
+        
+        print(f'new_edit_control geojson: {new_edit_control["geojson"]}')
+        
         # Populating FTU boundary options:
         combined_colors_dict = {}
         for f in self.wsi.map_dict['FTUs']:
@@ -1570,8 +1580,6 @@ class FUSION:
             )
             for idx, struct in enumerate(list(combined_colors_dict.keys()))
         ]
-
-        new_edit_control = [{'type':'FeatureCollection','features':[]}]
 
         return new_url, new_children, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, new_edit_control, self.wsi.properties_list, boundary_options_children
 
@@ -1742,14 +1750,16 @@ class FUSION:
     def add_manual_roi(self,new_geojson):
         
         triggered_id = ctx.triggered_id['type']
+        print(f'triggered_id for add_manual_roi: {triggered_id}')
+        print(new_geojson)
+        if type(new_geojson)==list:
+            new_geojson = new_geojson[0]
 
         if triggered_id == 'edit_control':
             if not new_geojson is None:
-                if type(new_geojson)==list:
-                    new_geojson = new_geojson[0]
-                if not new_geojson is None:
+                if self.wsi.new_slide_check>1:
+                    print(f'not a new slide: {self.wsi.slide_name}')
                     if len(new_geojson['features'])>0:
-                        
                         if not new_geojson['features'][len(self.wsi.manual_rois)]['properties']['type']=='marker':
                             # Only getting the most recent to add
                             new_geojson = {'type':'FeatureCollection','features':[new_geojson['features'][len(self.wsi.manual_rois)]]}
@@ -1847,6 +1857,10 @@ class FUSION:
                     else:
                         raise exceptions.PreventUpdate
                 else:
+                    # Attempt at fixing the manual ROIs crossing over to other slides after switching
+                    self.wsi.new_slide_check += 1
+                    print(f'Current check value: {self.wsi.new_slide_check}')
+
                     raise exceptions.PreventUpdate
             else:
                 raise exceptions.PreventUpdate
@@ -2338,12 +2352,12 @@ class FUSION:
 
             # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
             self.layer_ann = {
-                'current_layer':[i for i in ftu_names if not i['disabled']][0]['value'],
+                'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
                 'current_annotation':0,
                 'previous_annotation':0,
                 'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
             }
-
+            
             self.feature_extract_ftus = ftu_names
             image, mask = self.prep_handler.get_annotation_image_mask(self.upload_item_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
@@ -2373,7 +2387,6 @@ class FUSION:
             for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
         }
 
-        print(ctx.triggered_id)
         for idx,ftu,thresh in zip(list(range(len(self.sub_compartment_params))),self.sub_compartment_params,thresh_slider[::-1]):
             ftu['threshold'] = thresh
             self.sub_compartment_params[idx] = ftu
@@ -2398,7 +2411,10 @@ class FUSION:
         
         elif ctx.triggered_id=='ftu-select':
             # Moving to next annotation layer, restarting annotation count
-            self.layer_ann['current_layer']=select_ftu['value']
+            if type(select_ftu)==dict:
+                self.layer_ann['current_layer']=select_ftu['value']
+            elif type(select_ftu)==int:
+                self.layer_ann['current_layer'] = select_ftu
 
             self.layer_ann['current_annotation'] = 0
             self.layer_ann['previous_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]

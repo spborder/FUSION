@@ -144,24 +144,30 @@ class PrepHandler:
             masked_remaining_pixels[masked_remaining_pixels<param['threshold']] = 0
             masked_remaining_pixels[masked_remaining_pixels>0] = 1
 
-            # Filtering by minimum size
-            small_object_filtered = (1/255)*np.uint8(remove_small_objects(masked_remaining_pixels>0,param['min_size']))
+
             # Check for if the current sub-compartment is nuclei
             if param['name'].lower()=='nuclei':
                 
                 # Area threshold for holes is controllable for this
-                sub_mask = remove_small_holes(small_object_filtered>0,area_threshold=10)
+                sub_mask = remove_small_holes(masked_remaining_pixels>0,area_threshold=10)
                 sub_mask = sub_mask>0
                 # Watershed implementation from: https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_watershed.html
                 distance = ndi.distance_transform_edt(sub_mask)
-                coords = peak_local_max(distance,footprint=np.ones((3,3)),labels = label(sub_mask))
+                labeled_mask, _ = ndi.label(sub_mask)
+                coords = peak_local_max(distance,footprint=np.ones((3,3)),labels = labeled_mask)
                 watershed_mask = np.zeros(distance.shape,dtype=bool)
                 watershed_mask[tuple(coords.T)] = True
                 markers, _ = ndi.label(watershed_mask)
                 sub_mask = watershed(-distance,markers,mask=sub_mask)
                 sub_mask = sub_mask>0
 
+                # Filtering out small objects again
+                sub_mask = remove_small_objects(sub_mask,param['min_size'])
+
             else:
+                # Filtering by minimum size
+                small_object_filtered = (1/255)*np.uint8(remove_small_objects(masked_remaining_pixels>0,param['min_size']))
+
                 sub_mask = small_object_filtered
 
             sub_comp_image[sub_mask>0,:] = param['color']

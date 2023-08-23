@@ -27,6 +27,8 @@ class DSASlide:
         self.manual_rois = manual_rois
         self.marked_ftus = marked_ftus
 
+        self.new_slide_check = 0
+
         self.visualization_properties = [
             'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
             'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction'
@@ -34,6 +36,10 @@ class DSASlide:
 
         self.get_slide_map_data(self.item_id)
         self.process_annotations()
+    
+    def __str__(self):
+        
+        return f'{self.slide_name}'
 
     def get_slide_map_data(self,resource):
         # Getting all of the necessary materials for loading a new slide

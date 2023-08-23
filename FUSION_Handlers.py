@@ -118,14 +118,22 @@ class LayoutHandler:
         ]
 
         map_children = [
-            dl.TileLayer(url = wsi.map_dict['url'], tileSize = wsi.tile_dims[0], id = 'slide-tile'),
+            dl.TileLayer(id = 'slide-tile',
+                         url = wsi.map_dict['url'],
+                         tileSize = wsi.tile_dims[0]
+                        ),
             dl.FeatureGroup(id='feature-group',
                             children = [
                                 dl.EditControl(id = {'type':'edit_control','index':0},
                                                 draw = dict(line=False, circle = False, circlemarker=False))
                             ]),
-            html.Div(id='colorbar-div',children = [dl.Colorbar(id='map-colorbar')]),
-            dl.LayersControl(id='layer-control',children = self.initial_overlays)
+            html.Div(id='colorbar-div',
+                     children = [
+                         dl.Colorbar(id='map-colorbar')
+                         ]),
+            dl.LayersControl(id='layer-control',
+                             children = self.initial_overlays
+                             )
         ]
 
         map_layer = dl.Map(
@@ -1348,6 +1356,7 @@ class GirderHandler:
         for i in select_ids:
             start_time = timer()
             if i not in list(self.cached_annotation_metadata.keys()):
+                #TODO: Chunking error is sometimes triggered here, might just be a local connectivity problem
                 try:
                     item_annotations = self.gc.get(f'/annotation/item/{i}')
                     for g in item_annotations:
