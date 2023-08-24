@@ -137,7 +137,7 @@ class LayoutHandler:
         ]
 
         map_layer = dl.Map(
-            center = center_point, zoom = 3, minZoom = 0, maxZoom = wsi.zoom_levels, crs='Simple',bounds = wsi.map_bounds,
+            center = center_point, zoom = 3, minZoom = 0, maxZoom = wsi.zoom_levels-1, crs='Simple',bounds = wsi.map_bounds,
             style = {'width':'100%','height':'80vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             children = map_children
@@ -410,8 +410,8 @@ class LayoutHandler:
                                                     dbc.Col([
                                                         dcc.Graph(id='selected-cell-types',figure=go.Figure()),
                                                         self.gen_info_button('Click on a section of the pie chart to view cell state proportions')
-                                                        ]),
-                                                    dbc.Col(dcc.Graph(id='selected-cell-states',figure=go.Figure()))
+                                                        ],md=6),
+                                                    dbc.Col(dcc.Graph(id='selected-cell-states',figure=go.Figure()),md=6)
                                                 ]
                                             )
                                         ]
@@ -600,8 +600,8 @@ class LayoutHandler:
         # List of all tools tabs
         tool_tabs = [
             dbc.Tab(overlays_tab, label = 'Overlays'),
-            dbc.Tab(roi_pie, label = "Cell Composition"),
-            dbc.Tab(cell_card,label = "Cell Card"),
+            dbc.Tab(roi_pie, label = "Cell Compositions"),
+            dbc.Tab(cell_card,label = "Cell Graphics"),
             dbc.Tab(cluster_card,label = 'Morphological Clustering'),
             dbc.Tab(extract_card,label = 'Download Data'),
             dbc.Tab(cli_tab,label = 'Run Analyses'),
@@ -1370,6 +1370,7 @@ class GirderHandler:
                                         # Adding slide and annotation ids
                                         e['user']['slide_id'] = i
                                         e['user']['annotation_id'] = e['id']
+                                        e['user']['layer_id'] = g['_id']
                                         metadata.append(e['user'])
                                         self.cached_annotation_metadata[i] = e['user']
                 except girder_client.HttpError:
@@ -1413,7 +1414,7 @@ class GirderHandler:
 
         return image_region
 
-    def get_annotation_image(self,slide_id,annotation_layer,annotation_id):
+    def get_annotation_image(self,slide_id,layer_id,annotation_id):
 
         # Girder does the "annotation_id" a little differently. They have an endpoint that pulls annotation LAYERS by their id gc.get('annotation/{item}')
         # But not a SPECIFIC annotation. Makes sense because I guess you'd have to read the whole set of annotations anyways
@@ -1424,7 +1425,8 @@ class GirderHandler:
         for a in slide_annotations:
             if 'annotation' in a:
                 if 'elements' in a['annotation']:
-                    if a['annotation']['name']==annotation_layer:
+                    print(list(a['annotation'].keys()))
+                    if a['_id']==layer_id:
                         all_ids = [i['id'] for i in a['annotation']['elements']]
                         matching_annotation = a['annotation']['elements'][all_ids.index(annotation_id)]
         
@@ -1435,7 +1437,7 @@ class GirderHandler:
             max_x = np.max(ann_coords[:,0])+self.padding_pixels
             max_y = np.max(ann_coords[:,1])+self.padding_pixels
 
-            image_region = self.get_image_region(slide_id,[min_x,min_y,max_x,max_y])
+            image_region = np.array(self.get_image_region(slide_id,[min_x,min_y,max_x,max_y]))
 
             # Creating boundary based on coordinates from annotation
             scaled_coordinates = ann_coords.tolist()
@@ -1444,7 +1446,7 @@ class GirderHandler:
             height = np.shape(image_region)[0]
             width = np.shape(image_region)[1]
             cc,rr = polygon_perimeter(y_coords,x_coords,(height,width))
-            image_region[cc,rr] = 0
+            image_region[cc,rr,:] = 0
 
             return image_region
         else:

@@ -349,11 +349,11 @@ class FUSION:
         self.app.callback(
             [Output('slide-tile','url'),
              Output('layer-control','children'),
+             Output({'type':'edit_control','index':ALL},'editToolbar'),
              Output('slide-map','center'),
              Output('slide-map','bounds'),
              Output('slide-tile','tileSize'),
              Output('slide-map','maxZoom'),
-             Output('feature-group','children'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children')],
             Input('slide-select','value'),
@@ -833,7 +833,7 @@ class FUSION:
                 intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
         for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
-            intersecting_ftus[f'Manual ROI: {m_idx}'] = [m_ftu['geojson']['features'][0]['properties']]
+            intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
                 
         self.current_ftus = intersecting_ftus
         # Now we have main cell types, cell states, by ftu
@@ -1108,7 +1108,7 @@ class FUSION:
                                         hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white',filter_vals = self.filter_vals),
                                         hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'],dashArray='')),
                                         children = [dl.Popup(id=man['popup_id'])])
-                        ), name = f'Manual ROI {m_idx}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
+                        ), name = f'Manual ROI {m_idx+1}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
                     )
                 )
 
@@ -1544,15 +1544,13 @@ class FUSION:
         # Adding the layers to be a property for the edit_control callback
         self.current_overlays = new_children
 
-        # Adding fresh edit-control to the outputs
-        new_edit_control = dl.EditControl(
-            id={'type':'edit_control','index':np.random.randint(0,1000)},
-            draw = dict(line=False,circle=False,circlemarker=False),
-            geojson={'type':'FeatureCollection','features':[m['geojson'] for m in self.wsi.manual_rois]}
-            )
-        
-        print(f'new_edit_control geojson: {new_edit_control["geojson"]}')
-        
+        # Removes manual ROIs added via dl.EditControl
+        remove_old_edits = [{
+            'mode':'remove',
+            'n_clicks':0,
+            'action':'clear all'
+        }]
+
         # Populating FTU boundary options:
         combined_colors_dict = {}
         for f in self.wsi.map_dict['FTUs']:
@@ -1581,7 +1579,7 @@ class FUSION:
             for idx, struct in enumerate(list(combined_colors_dict.keys()))
         ]
 
-        return new_url, new_children, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, new_edit_control, self.wsi.properties_list, boundary_options_children
+        return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children
 
     def update_graph(self,ftu,plot,label):
         
@@ -1641,7 +1639,8 @@ class FUSION:
 
         img_list = []
         for idx,s in enumerate(sample_info):
-            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['structure'],s['annotation_id'])
+            print(f's: {s}')
+            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['layer_id'],s['annotation_id'])
             
             img_list.append(resize(np.array(image_region),output_shape=(512,512,3)))
 
@@ -1757,111 +1756,104 @@ class FUSION:
 
         if triggered_id == 'edit_control':
             if not new_geojson is None:
-                if self.wsi.new_slide_check>1:
-                    print(f'not a new slide: {self.wsi.slide_name}')
-                    if len(new_geojson['features'])>0:
-                        if not new_geojson['features'][len(self.wsi.manual_rois)]['properties']['type']=='marker':
-                            # Only getting the most recent to add
-                            new_geojson = {'type':'FeatureCollection','features':[new_geojson['features'][len(self.wsi.manual_rois)]]}
+                if len(new_geojson['features'])>0:
+                    if not new_geojson['features'][-1]['properties']['type']=='marker':
+                        # Only getting the most recent to add
+                        new_geojson = {'type':'FeatureCollection','features':[new_geojson['features'][len(self.wsi.manual_rois)]]}
 
-                            # New geojson has no properties which can be used for overlays or anything so we have to add those
-                            # Step 1, find intersecting spots:
-                            overlap_spot_props = self.wsi.find_intersecting_spots(shape(new_geojson['features'][0]['geometry']))
-                            
-                            # Adding Main_Cell_Types from intersecting spots data
-                            main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_spot_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
-                            main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
-                            main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
-                            main_counts_dict = main_counts_data.astype(float).to_dict()[0]
-
-                            # Aggregating cell state information from intersecting spots
-                            agg_cell_states = {}
-                            for m_c in list(main_counts_dict.keys()):
-
-                                cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_spot_props]).sum(axis=0).to_frame()
-                                cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
-                                cell_states[0] = cell_states[0].map('{:.19f}'.format)
-
-                                agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
-                            
-                            new_geojson['features'][0]['properties']['Main_Cell_Types'] = main_counts_dict
-                            new_geojson['features'][0]['properties']['Cell_States'] = agg_cell_states
-
-                            print(f'Length of wsi.manual_rois: {len(self.wsi.manual_rois)}')
-                            print(f'Length of current_overlays: {len(self.current_overlays)}')
-
-                            self.wsi.manual_rois.append(
-                                {
-                                    'geojson':new_geojson,
-                                    'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                    'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
-                                    'color':'white',
-                                    'hover_color':'#32a852'
-                                }
-                            )
-
-                            print(f'Length of wsi.manual_rois: {len(self.wsi.manual_rois)}')
-                            # Updating the hex color key with new values
-                            self.update_hex_color_key('cell_value')
-
-                            new_child = dl.Overlay(
-                                dl.LayerGroup(
-                                    dl.GeoJSON(data = new_geojson, id = {'type':'ftu-bounds','index':len(self.current_overlays)}, options = dict(style=self.ftu_style_handle),
-                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_vals),
-                                        hoverStyle = arrow_function(dict(weight=5, color = '#32a852',dashArray = '')),
-                                        children = [dl.Popup(id={'type':'ftu-popup','index':len(self.current_overlays)})]
-                                    )
-                                ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
-                            )
-
-                            self.current_overlays.append(new_child)
-                            print(f'Length of current_overlays: {len(self.current_overlays)}')
-
-                            # Updating data download options
-                            if len(self.wsi.manual_rois)>0:
-                                data_select_options = self.layout_handler.data_options
-                                data_select_options[4]['disabled'] = False
-                            else:
-                                data_select_options = self.layout_handler.data_options
-                            
-                            if len(self.wsi.marked_ftus)>0:
-                                data_select_options[3]['disabled'] = False
-
-                            return self.current_overlays, data_select_options
+                        # New geojson has no properties which can be used for overlays or anything so we have to add those
+                        # Step 1, find intersecting spots:
+                        overlap_spot_props = self.wsi.find_intersecting_spots(shape(new_geojson['features'][0]['geometry']))
                         
-                        elif new_geojson['features'][len(self.wsi.manual_rois)]['properties']['type']=='marker':
-                            # Find the ftu that this marker is included in if there is one otherwise 
-                            new_geojson = {'type':'FeatureCollection','features':[new_geojson['features'][len(self.wsi.manual_rois)]]}
+                        # Adding Main_Cell_Types from intersecting spots data
+                        main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_spot_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
+                        main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
+                        main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
+                        main_counts_dict = main_counts_data.astype(float).to_dict()[0]
 
-                            # TODO: placeholder for adding the marked FTU to the slide's list of marked FTUs
-                            print(new_geojson['features'][len(self.wsi.manual_rois)])
+                        # Aggregating cell state information from intersecting spots
+                        agg_cell_states = {}
+                        for m_c in list(main_counts_dict.keys()):
 
-                            # Find the ftu that intersects with this marker
-                            overlap_dict = self.wsi.find_intersecting_ftu(shape(new_geojson['features'][0]['geometry']))
-                            print(f'Intersecting FTUs with marker: {overlap_dict}')
-                            if len(overlap_dict['polys'])>0:
-                                self.wsi.marked_ftus.append(overlap_dict)
+                            cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_spot_props]).sum(axis=0).to_frame()
+                            cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
+                            cell_states[0] = cell_states[0].map('{:.19f}'.format)
 
-                            # Updating data download options
-                            if len(self.wsi.manual_rois)>0:
-                                data_select_options = self.layout_handler.data_options
-                                data_select_options[4]['disabled'] = False
-                            else:
-                                data_select_options = self.layout_handler.data_options
-                            
-                            if len(self.wsi.marked_ftus)>0:
-                                data_select_options[3]['disabled'] = False
+                            agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
+                        
+                        new_geojson['features'][0]['properties']['Main_Cell_Types'] = main_counts_dict
+                        new_geojson['features'][0]['properties']['Cell_States'] = agg_cell_states
+
+                        print(f'Length of wsi.manual_rois: {len(self.wsi.manual_rois)}')
+                        print(f'Length of current_overlays: {len(self.current_overlays)}')
+
+                        self.wsi.manual_rois.append(
+                            {
+                                'geojson':new_geojson,
+                                'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
+                                'color':'white',
+                                'hover_color':'#32a852'
+                            }
+                        )
+
+                        print(f'Length of wsi.manual_rois: {len(self.wsi.manual_rois)}')
+                        # Updating the hex color key with new values
+                        self.update_hex_color_key('cell_value')
+
+                        new_child = dl.Overlay(
+                            dl.LayerGroup(
+                                dl.GeoJSON(data = new_geojson, id = {'type':'ftu-bounds','index':len(self.current_overlays)}, options = dict(style=self.ftu_style_handle),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_vals),
+                                    hoverStyle = arrow_function(dict(weight=5, color = '#32a852',dashArray = '')),
+                                    children = [dl.Popup(id={'type':'ftu-popup','index':len(self.current_overlays)})]
+                                )
+                            ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
+                        )
+
+                        self.current_overlays.append(new_child)
+                        print(f'Length of current_overlays: {len(self.current_overlays)}')
+
+                        # Updating data download options
+                        if len(self.wsi.manual_rois)>0:
+                            data_select_options = self.layout_handler.data_options
+                            data_select_options[4]['disabled'] = False
+                        else:
+                            data_select_options = self.layout_handler.data_options
+                        
+                        if len(self.wsi.marked_ftus)>0:
+                            data_select_options[3]['disabled'] = False
+
+                        return self.current_overlays, data_select_options
+                    
+                    elif new_geojson['features'][-1]['properties']['type']=='marker':
+                        # Find the ftu that this marker is included in if there is one otherwise 
+                        new_geojson = {'type':'FeatureCollection','features':[new_geojson['features'][len(self.wsi.manual_rois)]]}
+
+                        # TODO: placeholder for adding the marked FTU to the slide's list of marked FTUs
+                        print(new_geojson['features'][len(self.wsi.manual_rois)])
+
+                        # Find the ftu that intersects with this marker
+                        overlap_dict = self.wsi.find_intersecting_ftu(shape(new_geojson['features'][0]['geometry']))
+                        print(f'Intersecting FTUs with marker: {overlap_dict}')
+                        if len(overlap_dict['polys'])>0:
+                            self.wsi.marked_ftus.append(overlap_dict)
+
+                        # Updating data download options
+                        if len(self.wsi.manual_rois)>0:
+                            data_select_options = self.layout_handler.data_options
+                            data_select_options[4]['disabled'] = False
+                        else:
+                            data_select_options = self.layout_handler.data_options
+                        
+                        if len(self.wsi.marked_ftus)>0:
+                            data_select_options[3]['disabled'] = False
 
 
-                            return self.current_overlays, data_select_options
-                    else:
-                        raise exceptions.PreventUpdate
+                        return self.current_overlays, data_select_options
                 else:
-                    # Attempt at fixing the manual ROIs crossing over to other slides after switching
-                    self.wsi.new_slide_check += 1
-                    print(f'Current check value: {self.wsi.new_slide_check}')
-
                     raise exceptions.PreventUpdate
+
             else:
                 raise exceptions.PreventUpdate
         else:
@@ -2098,7 +2090,12 @@ class FUSION:
             image_region = self.dataset_handler.get_image_region(self.wsi.item_id,[min_x,min_y,max_x,max_y])
 
             current_image_region = html.Div(
-                dcc.Graph(figure = go.Figure(px.imshow(image_region)))
+                dcc.Graph(
+                    figure = go.Figure(
+                                data = px.imshow(image_region)['data'],
+                                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                                )
+                    )
             )
 
             cli_results_followup = html.Div()

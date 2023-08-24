@@ -27,8 +27,6 @@ class DSASlide:
         self.manual_rois = manual_rois
         self.marked_ftus = marked_ftus
 
-        self.new_slide_check = 0
-
         self.visualization_properties = [
             'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
             'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction'
