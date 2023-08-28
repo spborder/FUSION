@@ -261,6 +261,19 @@ class DSASlide:
                 intersecting_ftu_props = [self.ftu_props[ftu][i] for i in ftu_intersect_idx]
 
             return intersecting_ftu_props
+        elif ftu=='all':
+
+            # Specific check for when adding a marker to the map, returns both the props and poly
+            intersecting_ftu_props = {}
+            intersecting_ftu_poly = None
+            for ftu in self.ftu_names:
+                ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
+
+                if len(ftu_intersect_idx)==1:
+                    intersecting_ftu_props = self.ftu_props[ftu][ftu_intersect_idx[0]]
+                    intersecting_ftu_poly = self.ftu_polys[ftu][ftu_intersect_idx[0]]
+
+            return intersecting_ftu_props, intersecting_ftu_poly
         else:
             raise ValueError
         
