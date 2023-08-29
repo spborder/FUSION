@@ -81,7 +81,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self,wsi, cli_list = None):
+    def gen_vis_layout(self, wsi, cli_list = None):
 
         #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
@@ -311,7 +311,8 @@ class LayoutHandler:
                             dbc.CardHeader(
                                 children = [
                                     dbc.Row([
-                                        dbc.Col('Plot Options',md=11),
+                                        dbc.Col('Plot Options',md=7),
+                                        dbc.Col(dbc.Button('Update Data!',id={'type':'update-graph-data','index':0},color='danger'),md=4),
                                         dbc.Col(self.gen_info_button('Select different plot options to update the graph!'),md=1)
                                     ])
 
@@ -1254,6 +1255,13 @@ class GirderHandler:
 
         return collections_data
 
+    def get_item_name(self,item_id):
+
+        # Getting the name of an item from it's unique id
+        item_name = self.gc.get(f'item/{item_id}')['name']
+
+        return item_name
+
     def get_resource_id(self,resource):
         # Get unique item id from resource path to file
         item_id = self.gc.get('resource/lookup',parameters={'path':resource})['_id']
@@ -1356,6 +1364,7 @@ class GirderHandler:
         for i in select_ids:
             start_time = timer()
             if i not in list(self.cached_annotation_metadata.keys()):
+                item_meta = []
                 #TODO: Chunking error is sometimes triggered here, might just be a local connectivity problem
                 try:
                     item_annotations = self.gc.get(f'/annotation/item/{i}')
@@ -1371,15 +1380,19 @@ class GirderHandler:
                                         e['user']['slide_id'] = i
                                         e['user']['annotation_id'] = e['id']
                                         e['user']['layer_id'] = g['_id']
-                                        metadata.append(e['user'])
-                                        self.cached_annotation_metadata[i] = e['user']
+                                        item_meta.append(e['user'])
+                    self.cached_annotation_metadata[i] = item_meta
+                    print(f'Added: {i} to cached annotation metadata')
+                    metadata.extend(item_meta)
                 except girder_client.HttpError:
                     print(f'{i} not found! Uh oh!')
             else:
-                metadata.append(self.cached_annotation_metadata[i])
+                metadata.extend(self.cached_annotation_metadata[i])
+                print(f'Added {i} FROM cached annotation metadata')
             end_time = timer()
             print(f'Getting: {i} took: {end_time-start_time}')
             
+
         return metadata
 
     def get_image_region(self,item_id,coords_list):

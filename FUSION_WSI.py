@@ -48,11 +48,9 @@ class DSASlide:
 
         # Step 2: get resource tile metadata
         tile_metadata = self.girder_handler.get_tile_metadata(item_id)
-        #print(f'tile_metadata: {tile_metadata}')
         # Step 3: get tile, base, zoom, etc.
         # Number of zoom levels for an image
         self.zoom_levels = tile_metadata['levels']
-        #print(f'zoom_levels: {self.zoom_levels}')
         # smallest level dimensions used to generate initial tiles
         self.base_dims = [
             tile_metadata['sizeX']/(2**(self.zoom_levels-1)),
@@ -69,10 +67,6 @@ class DSASlide:
             tile_metadata['sizeY']
         ]
 
-        #print(f'base_dims: {self.base_dims}')
-        #print(f'tile_dims: {self.tile_dims}')
-        #print(f'image_dims: {self.image_dims}')
-
         # Step 4: Defining bounds of map
         self.map_bounds = [[0,self.image_dims[1]],[0,self.image_dims[0]]]
 
@@ -84,8 +78,6 @@ class DSASlide:
 
         self.map_bounds[0][1]*=self.x_scale
         self.map_bounds[1][1]*=self.y_scale
-
-        #print(f'map_bounds: {self.map_bounds}')
 
         # Step 7: Getting user token and tile url
         self.user_token = self.girder_handler.get_token()
@@ -154,6 +146,9 @@ class DSASlide:
         # Processing geojson_annotations:
         self.ftu_names = np.unique([f['properties']['name'] for f in self.geojson_annotations['features']])
         self.ftu_names = [i for i in self.ftu_names if not i=='Spots']
+
+        # Checking if all ftu_names are in the ftu_colors list
+        
 
         #self.geojson_ftus = {'type':'FeatureCollection', 'features': []}
         self.ftu_polys = {
