@@ -11,19 +11,22 @@ import numpy as  np
 
 from PIL import Image
 from skimage.draw import polygon
-from skimage.color import rgb2hsv
+from skimage.color import rgb2hsv, rgb2lab, lab2rgb
 from skimage.morphology import remove_small_objects, remove_small_holes, disk
 from skimage.segmentation import watershed
 from skimage.measure import label
 from scipy import ndimage as ndi
 from skimage.feature import peak_local_max
-from skimage.filters import rank
+#from skimage.filters import rank
 from skimage import exposure
 
 from matplotlib import colormaps
 
 import dash_bootstrap_components as dbc
 from dash import dcc, html
+
+#from histomicstk.preprocessing import color_conversion
+
 
 
 class PrepHandler:
@@ -129,6 +132,7 @@ class PrepHandler:
         # Sub-compartment segmentation
         sub_comp_image = np.zeros((np.shape(image)[0],np.shape(image)[1],3))
         remainder_mask = np.ones((np.shape(image)[0],np.shape(image)[1]))
+
         hsv_image = np.uint8(255*rgb2hsv(image)[:,:,1])
 
         # Applying adaptive histogram equalization
@@ -141,7 +145,7 @@ class PrepHandler:
             masked_remaining_pixels = np.multiply(remaining_pixels,mask)
 
             # Applying manual threshold
-            masked_remaining_pixels[masked_remaining_pixels<param['threshold']] = 0
+            masked_remaining_pixels[masked_remaining_pixels<=param['threshold']] = 0
             masked_remaining_pixels[masked_remaining_pixels>0] = 1
 
 
@@ -174,8 +178,8 @@ class PrepHandler:
             remainder_mask -= sub_mask>0
 
         # Assigning remaining pixels within the boundary mask to the last sub-compartment
-        masked_remaining_pixels = np.multiply(remaining_pixels,mask)
-        sub_comp_image[masked_remaining_pixels>0] = param['color']
+        remaining_pixels = np.multiply(mask,remainder_mask)
+        sub_comp_image[remaining_pixels>0,:] = param['color']
 
         # have to add the final mask thing for the lowest segmentation hierarchy
         if view_method=='Side-by-side':
