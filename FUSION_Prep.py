@@ -148,7 +148,6 @@ class PrepHandler:
             masked_remaining_pixels[masked_remaining_pixels<=param['threshold']] = 0
             masked_remaining_pixels[masked_remaining_pixels>0] = 1
 
-
             # Check for if the current sub-compartment is nuclei
             if param['name'].lower()=='nuclei':
                 
@@ -226,7 +225,14 @@ class PrepHandler:
                 dbc.Card([
                     dbc.CardHeader('Features to extract'),
                     dbc.CardBody([
-                        html.Div('Selecting which types of features to extract here')
+                        html.Div('Selecting which types of features to extract here'),
+                        dcc.Dropdown(
+                            options = ['Distance Transform Features','Color Features','Texture Features', 'Morphological Features'],
+                            value = ['Distance Transform Features','Color Features','Texture Features','Morphological Features'],
+                            multi = True,
+                            placeholder = 'Select Feature Types to extract',
+                            id = 'include-feature-drop'
+                        )
                     ])
                 ])
             ],style = {'marginBottom':'20px'}),

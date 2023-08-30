@@ -140,35 +140,39 @@ class FUSION:
                 }
             } else if (current_cell==='max'){
                 // Extracting all the cell values for a given FTU/Spot
-                var cell_values = feature.properties.Main_Cell_Types;
-                // Initializing some comparison values
-                var cell_value = 0.0;
-                var use_cell_value = 0.0;
-                var cell_idx = -1.0;
-                // Iterating through each cell type in cell values
-                for (var key in cell_values){
-                    cell_idx += 1.0;
-                    var test_val = cell_values[key];
-                    // If the test value is greater than the cell_value, replace cell value with that test value
-                    if (test_val > cell_value) {
-                        cell_value = test_val;
-                        use_cell_value = cell_idx;
+                if (current_cell in feature.properties){       
+                    var cell_values = feature.properties.Main_Cell_Types;
+                    // Initializing some comparison values
+                    var cell_value = 0.0;
+                    var use_cell_value = 0.0;
+                    var cell_idx = -1.0;
+                    // Iterating through each cell type in cell values
+                    for (var key in cell_values){
+                        cell_idx += 1.0;
+                        var test_val = cell_values[key];
+                        // If the test value is greater than the cell_value, replace cell value with that test value
+                        if (test_val > cell_value) {
+                            cell_value = test_val;
+                            use_cell_value = cell_idx;
+                        }
                     }
+                    cell_value = (use_cell_value).toFixed(1);
+                } else {
+                    cell_value = Number.Nan;
                 }
-                cell_value = (use_cell_value).toFixed(1);
 
-            } else if (current_cell in feature.properties.Main_Cell_Types){
-                var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                
-                if (cell_value==1) {
-                    cell_value = (cell_value).toFixed(1);
-                } else if (cell_value==0) {
-                    cell_value = (cell_value).toFixed(1);
-                }
+            } else if ('Main_Cell_Types' in feature.properties){
+                if (current_cell in feature.properties.Main_Cell_Types){
                                        
-            } else if (current_cell in feature.properties){
-                var cell_value = feature.properties[current_cell];
-
+                    var cell_value = feature.properties.Main_Cell_Types[current_cell];
+                    if (cell_value==1) {
+                        cell_value = (cell_value).toFixed(1);
+                    } else if (cell_value==0) {
+                        cell_value = (cell_value).toFixed(1);
+                    }                                                    
+                } else if (current_cell in feature.properties){
+                    var cell_value = feature.properties[current_cell];
+                }
             } else {
                 var cell_value = Number.Nan;
             }
@@ -193,17 +197,19 @@ class FUSION:
 
         self.ftu_filter = assign("""function(feature,context){
                 const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.props.hideout;
-                                 
-                if (current_cell in feature.properties.Main_Cell_Types){
-                    var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                    if (cell_value >= filter_vals[0]){
-                        if (cell_value <= filter_vals[1]){
-                            return true;
+                
+                if ("Main_Cell_Types" in feature.properties){
+                    if (current_cell in feature.properties.Main_Cell_Types){
+                        var cell_value = feature.properties.Main_Cell_Types[current_cell];
+                        if (cell_value >= filter_vals[0]){
+                            if (cell_value <= filter_vals[1]){
+                                return true;
+                            } else {
+                                return false;
+                            }
                         } else {
                             return false;
                         }
-                    } else {
-                        return false;
                     }
                 } else if (current_cell in feature.properties){
                     var cell_value = feature.properties[current_cell];
@@ -250,9 +256,13 @@ class FUSION:
         if pathname in self.layout_handler.layout_dict:
             self.current_page = pathname
 
-            container_content = self.layout_handler.layout_dict[self.current_page]
-            description = self.layout_handler.description_dict[self.current_page]
-
+            if not pathname=='vis':
+                container_content = self.layout_handler.layout_dict[self.current_page]
+                description = self.layout_handler.description_dict[self.current_page]
+            else:
+                self.layout_handler.gen_vis_layout(self.wsi)
+                container_content = self.layout_handler.layout_dict[self.current_page]
+                description = self.layout_handler.description_dict[self.current_page]
         elif 'vis/' in pathname:
             # For specific slide visualization in FUSION
             self.current_page = 'vis'
@@ -1005,8 +1015,10 @@ class FUSION:
             for f in self.wsi.ftu_props:
                 for g in self.wsi.ftu_props[f]:
                     if 'Cluster' in g:
-                        cluster_label = g['Cluster']
+                        cluster_label = int(g['Cluster'])
                         raw_values_list.append(cluster_label)
+            
+            print(raw_values_list)
         else:
             # For specific morphometrics
             for f in self.wsi.ftu_props:
@@ -1035,6 +1047,8 @@ class FUSION:
             self.hex_color_key = {}
 
     def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color):
+
+        print(f'Updating overlays for current slide: {self.wsi.slide_name}')
 
         m_prop = None
 
@@ -1549,6 +1563,9 @@ class FUSION:
         new_slide = DSASlide(slide_name,slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
         self.wsi = new_slide
 
+        # Updating in the case that an FTU isn't in the previous set of ftu_colors
+        self.ftu_colors = self.wsi.ftu_colors
+
         # Updating overlays colors according to the current cell
         self.update_hex_color_key(self.current_cell)
 
@@ -1682,7 +1699,7 @@ class FUSION:
                             label_data.append(i[label])
                         else:
                             label_data.append(np.nan)
-                            
+
             graph_df = pd.DataFrame({'x':plot_data_x,'y':plot_data_y,'ID':custom_data,'Label':label_data})
 
             graph_df = graph_df.dropna()

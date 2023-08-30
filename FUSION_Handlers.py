@@ -59,6 +59,7 @@ class LayoutHandler:
         self.description_dict = {}
 
         self.info_button_idx = -1
+        self.cli_list = None
 
         self.gen_welcome_layout()
 
@@ -277,9 +278,9 @@ class LayoutHandler:
                     ],md=5),
                     dbc.Col([
                         dbc.Tabs([
-                            dbc.Tab(cell_graphic_tab, label = 'Cell Graphic'),
+                            dbc.Tab(cell_graphic_tab, label = 'Cell Graphic',tab_id = 'cell-graphic-tab'),
                             dbc.Tab(cell_hierarchy_tab, label = 'Cell Hierarchy')
-                        ])
+                        ],active_tab='cell-graphic-tab')
                     ],md=7)
                 ],align='center')
             ]),
@@ -463,7 +464,15 @@ class LayoutHandler:
 
         # Test CLI tab
         # Accessing analyses/cli plugins for applying to data in FUSION
-        available_clis = cli_list
+        if cli_list is None:
+            if self.cli_list is not None:
+                available_clis = self.cli_list
+            else:
+                available_clis = []
+        else:
+            available_clis = cli_list
+            self.cli_list = cli_list
+
         cli_tab = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
@@ -600,7 +609,7 @@ class LayoutHandler:
 
         # List of all tools tabs
         tool_tabs = [
-            dbc.Tab(overlays_tab, label = 'Overlays'),
+            dbc.Tab(overlays_tab, label = 'Overlays',tab_id='overlays-tab'),
             dbc.Tab(roi_pie, label = "Cell Compositions"),
             dbc.Tab(cell_card,label = "Cell Graphics"),
             dbc.Tab(cluster_card,label = 'Morphological Clustering'),
@@ -616,7 +625,7 @@ class LayoutHandler:
                     dbc.CardBody([
                         dbc.Form([
                             dbc.Row([
-                                dbc.Tabs(tool_tabs)
+                                dbc.Tabs(tool_tabs,active_tab = 'overlays-tab')
                             ])
                         ])
                     ])

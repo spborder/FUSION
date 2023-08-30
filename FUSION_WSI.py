@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 from shapely.geometry import shape
-
+import random
 
 class DSASlide:
     def __init__(self,
@@ -85,9 +85,12 @@ class DSASlide:
 
     def convert_json(self):
 
+        print(self.tile_dims)
+
         # Translation step
         base_x_scale = self.base_dims[0]/self.tile_dims[0]
         base_y_scale = self.base_dims[1]/self.tile_dims[1]
+        print(f'base_x_scale: {base_x_scale}, base_y_scale: {base_y_scale}')
 
         # image bounds [maxX, maxY]
         # bottom_right[0]-top_left[0] --> range of x values in target crs
@@ -96,6 +99,8 @@ class DSASlide:
         x_scale = self.tile_dims[0]/self.image_dims[0]
         y_scale = self.tile_dims[1]/self.image_dims[1]
         y_scale*=-1
+
+        print(f'x_scale: {x_scale}, y_scale: {y_scale}')
         # y_scale has to be inverted because y is measured upward in these maps
 
         ## Error occurs with tile sizes = 256, all work with tile size=240 ##
@@ -148,7 +153,9 @@ class DSASlide:
         self.ftu_names = [i for i in self.ftu_names if not i=='Spots']
 
         # Checking if all ftu_names are in the ftu_colors list
-        
+        for f in self.ftu_names:
+            if f not in self.ftu_colors:
+                self.ftu_colors[f] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
 
         #self.geojson_ftus = {'type':'FeatureCollection', 'features': []}
         self.ftu_polys = {
