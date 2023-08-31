@@ -764,6 +764,7 @@ class LayoutHandler:
                             ]
                         )
                     ),
+                    dbc.Col(self.gen_info_button('Select which type of spatial -omics data you are uploading to determine which files are needed for pre-processing steps')),
                     dbc.Col(
                         html.Div(
                             id='upload-requirements',
@@ -777,7 +778,10 @@ class LayoutHandler:
 
         # Slide QC card:
         slide_qc_card = dbc.Card([
-            dbc.CardHeader('Slide Quality Control Results'),
+            dbc.CardHeader([
+                'Slide Quality Control Results',
+                self.gen_info_button('HistoQC-derived metrics for slide quality. These can be used to determine resulting quality of segmentation results')
+                ]),
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col(
@@ -810,8 +814,9 @@ class LayoutHandler:
                         html.Div([
                             dbc.Label('Select Organ:',html_for='organ-type'),
                             dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True)
-                        ])
-                    )
+                        ]),md=11
+                    ),
+                    dbc.Col(self.gen_info_button('Selecting organ here determines which model to use to extract FTUs'),md=1)
                 ])
             ])
         ])
@@ -822,7 +827,10 @@ class LayoutHandler:
             {'label':'Use Plugin','value':'plugin','disabled':True}
         ]
         sub_comp_card = dbc.Card([
-            dbc.CardHeader('Sub-Compartment Segmentation'),
+            dbc.CardHeader([
+                'Sub-Compartment Segmentation',
+                self.gen_info_button('This step allows for specific morphometric calculation for major sub-compartments on all FTUs in a dataset')
+                ]),
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col(
@@ -887,6 +895,9 @@ class LayoutHandler:
                                 dcc.Dropdown(sub_comp_methods_list,placeholder='Available Methods',id='sub-comp-method')
                             ]
                         ),md=8
+                    ),
+                    dbc.Col(
+                        self.gen_info_button('Choose whether to use manual thresholds or a pre-loaded sub-compartment segmentation plugin')
                     )
                 ]),
                 dbc.Row(
@@ -910,7 +921,11 @@ class LayoutHandler:
                                     allowCross=False
                                 )
                             ]
-                        ),md=12, style = {'marginLeft':'20px','marginRight':'20px'}
+                        ),md=11, style = {'marginLeft':'20px','marginRight':'20px'}
+                    ),
+                    dbc.Col(
+                        self.gen_info_button('Adjust thresholds here to include/exclude pixels from each sub-compartment'),
+                        md = 1
                     )
                 )
             ])
@@ -918,7 +933,10 @@ class LayoutHandler:
 
         # Feature extraction card:
         feat_extract_card = dbc.Card([
-            dbc.CardHeader('Morphometric Feature Extraction'),
+            dbc.CardHeader([
+                'Morphometric Feature Extraction',
+                self.gen_info_button('Select which morphometrics and which FTUs to quantify and then hit the extract features button. These features are used for high-dimensional clustering and visualization.')
+                ]),
             dbc.CardBody(
                 dbc.Row([
                     dbc.Col(html.Div(id='feature-items'))
@@ -1377,18 +1395,20 @@ class GirderHandler:
                 #TODO: Chunking error is sometimes triggered here, might just be a local connectivity problem
                 try:
                     item_annotations = self.gc.get(f'/annotation/item/{i}')
-                    for g in item_annotations:
+                    for g_idx,g in enumerate(item_annotations):
                         if 'annotation' in g:
                             if 'elements' in g['annotation']:
                                 if not g['annotation']['name']=='Spots':
-                                    for e in tqdm(g['annotation']['elements']):
+                                    for e_idx,e in tqdm(enumerate(g['annotation']['elements'])):
                                         if 'user' not in e:
                                             e['user'] = {}
                                         
                                         # Adding slide and annotation ids
                                         e['user']['slide_id'] = i
                                         e['user']['annotation_id'] = e['id']
+                                        e['user']['compartment_idx'] = e_idx
                                         e['user']['layer_id'] = g['_id']
+                                        e['user']['layer_idx'] = g_idx
                                         item_meta.append(e['user'])
                     self.cached_annotation_metadata[i] = item_meta
                     print(f'Added: {i} to cached annotation metadata')
@@ -1436,22 +1456,14 @@ class GirderHandler:
 
         return image_region
 
-    def get_annotation_image(self,slide_id,layer_id,annotation_id):
+    def get_annotation_image(self,slide_id,layer_idx,compartment_idx):
 
         # Girder does the "annotation_id" a little differently. They have an endpoint that pulls annotation LAYERS by their id gc.get('annotation/{item}')
         # But not a SPECIFIC annotation. Makes sense because I guess you'd have to read the whole set of annotations anyways
         slide_annotations = self.get_annotations(slide_id)
 
-        #TODO: This needs to be more efficient
-        matching_annotation = None
-        for a in slide_annotations:
-            if 'annotation' in a:
-                if 'elements' in a['annotation']:
-                    print(list(a['annotation'].keys()))
-                    if a['_id']==layer_id:
-                        all_ids = [i['id'] for i in a['annotation']['elements']]
-                        matching_annotation = a['annotation']['elements'][all_ids.index(annotation_id)]
-        
+        matching_annotation = slide_annotations[layer_idx]['annotation']['elements'][compartment_idx]
+
         if not matching_annotation is None:
             ann_coords = np.squeeze(np.array(matching_annotation['points']))
             min_x = np.min(ann_coords[:,0])-self.padding_pixels

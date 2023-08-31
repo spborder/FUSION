@@ -1719,7 +1719,7 @@ class FUSION:
         img_list = []
         for idx,s in enumerate(sample_info):
             print(f's: {s}')
-            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['layer_id'],s['annotation_id'])
+            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['layer_idx'],s['compartment_idx'])
             
             img_list.append(resize(np.array(image_region),output_shape=(512,512,3)))
 
