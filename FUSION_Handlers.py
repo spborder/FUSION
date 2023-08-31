@@ -754,7 +754,10 @@ class LayoutHandler:
         collection_list = [i['name'] for i in dataset_handler.get_collections()]
         collection_list += ['New Collection']
         file_upload_card = dbc.Card([
-            dbc.CardHeader('File Uploads'),
+            dbc.CardHeader([
+                'File Uploads',
+                self.gen_info_button('Select which type of spatial -omics data you are uploading to determine which files are needed for pre-processing steps')
+                ]),
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col(
@@ -764,7 +767,6 @@ class LayoutHandler:
                             ]
                         )
                     ),
-                    dbc.Col(self.gen_info_button('Select which type of spatial -omics data you are uploading to determine which files are needed for pre-processing steps')),
                     dbc.Col(
                         html.Div(
                             id='upload-requirements',
@@ -807,16 +809,18 @@ class LayoutHandler:
             {'label':'Kidney','value':'Kidney','disabled':False}
         ]
         mc_model_card = dbc.Card([
-            dbc.CardHeader('Multi-Compartment Model Selection'),
+            dbc.CardHeader([
+                'Multi-Compartment Model Selection',
+                self.gen_info_button('Selecting organ here determines which model to use to extract FTUs')
+                ]),
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col(
                         html.Div([
                             dbc.Label('Select Organ:',html_for='organ-type'),
                             dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True)
-                        ]),md=11
-                    ),
-                    dbc.Col(self.gen_info_button('Selecting organ here determines which model to use to extract FTUs'),md=1)
+                        ]),md=12
+                    )
                 ])
             ])
         ])
@@ -900,7 +904,7 @@ class LayoutHandler:
                         self.gen_info_button('Choose whether to use manual thresholds or a pre-loaded sub-compartment segmentation plugin')
                     )
                 ]),
-                dbc.Row(
+                dbc.Row([
                     dbc.Col(
                         html.Div(
                             id='sub-comp-tabs',
@@ -927,7 +931,7 @@ class LayoutHandler:
                         self.gen_info_button('Adjust thresholds here to include/exclude pixels from each sub-compartment'),
                         md = 1
                     )
-                )
+                ])
             ])
         ])
 
