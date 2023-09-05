@@ -129,7 +129,7 @@ class FUSION:
         self.hex_color_key = {}
 
         self.ftu_style_handle = assign("""function(feature,context){
-            const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.props.hideout;
+            const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.hideout;
             
             if (current_cell==='cluster'){
                 if (current_cell in feature.properties){
@@ -196,7 +196,7 @@ class FUSION:
         )
 
         self.ftu_filter = assign("""function(feature,context){
-                const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.props.hideout;
+                const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.hideout;
                 
                 if ("Main_Cell_Types" in feature.properties){
                     if (current_cell in feature.properties.Main_Cell_Types){
@@ -346,8 +346,7 @@ class FUSION:
         # Updating Cell Composition pie charts
         self.app.callback(
             Output('roi-pie-holder','children'),
-            [Input('slide-map','zoom'),Input('slide-map','viewport')],
-            State('slide-map','bounds'),
+            Input('slide-map','bounds'),
         )(self.update_roi_pie)      
 
         # Updating cell hierarchy data
@@ -377,7 +376,7 @@ class FUSION:
         # Getting GeoJSON popup div with data
         self.app.callback(
             Output({'type':'ftu-popup','index':MATCH},'children'),
-            Input({'type':'ftu-bounds','index':MATCH},'click_feature'),
+            Input({'type':'ftu-bounds','index':MATCH},'clickData'),
             prevent_initial_call = True
         )(self.get_click_popup)
 
@@ -853,9 +852,8 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
-    def update_roi_pie(self,zoom,viewport,bounds):
+    def update_roi_pie(self,bounds):
         
-        #print(f'bounds:{bounds}')
         # Making a box-poly from the bounds
         if len(bounds)==2:
             bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
@@ -886,7 +884,6 @@ class FUSION:
         self.current_ftus = intersecting_ftus
         # Now we have main cell types, cell states, by ftu
         included_ftus = list(intersecting_ftus.keys())
-
         included_ftus = [i for i in included_ftus if len(intersecting_ftus[i])>0]
 
         if len(included_ftus)>0:
@@ -910,6 +907,8 @@ class FUSION:
                     counts_data = counts_data.reset_index()
 
                     f_pie = px.pie(counts_data,values=f,names='index')
+                    f_pie.update_traces(textposition='inside')
+                    f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
 
                     top_cell = counts_data['index'].tolist()[0]
 
@@ -1278,26 +1277,28 @@ class FUSION:
                     all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties'][i] for i in all_properties]}
                     all_properties_df = pd.DataFrame(all_props_dict)
 
-                    # popup div
                     main_cells_df = pd.DataFrame.from_dict({'Values':chart_data,'Labels':chart_labels,'Full':chart_full_labels})
+                    f_pie = go.Figure(
+                        data = [
+                            go.Pie(
+                                name = '',
+                                values = main_cells_df['Values'],
+                                labels = main_cells_df['Labels'],
+                                customdata = main_cells_df['Full'],
+                                hovertemplate = "Cell: %{customdata}: <br>Proportion: %{value}</br>"
+                            )],
+                        layout = {'autosize':True, 'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,'uniformtext_minsize':12,'uniformtext_mode':'hide'}
+                    )
+                    f_pie.update_traces(textposition='inside')
+
+                    # popup div
                     popup_div = html.Div([
                         dbc.Accordion([
                             dbc.AccordionItem([
                                 html.Div([
                                     dbc.Row([
                                         dbc.Col(
-                                            dcc.Graph(
-                                                figure=go.Figure(
-                                                    data = [
-                                                        go.Pie(
-                                                            name = '',
-                                                            values = main_cells_df['Values'],
-                                                            labels = main_cells_df['Labels'],
-                                                            customdata = main_cells_df['Full'],
-                                                            hovertemplate = "Cell: %{customdata}: <br>Proportion: %{value}</br>"
-                                                        )],
-                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False}
-                                                )),
+                                            dcc.Graph(figure = f_pie),
                                             md='auto')
                                         ],style={'height':'100%','width':'100%'})
                                     ],style = {'height':'250px','width':'250px','display':'inline-block'})
@@ -1316,7 +1317,8 @@ class FUSION:
                                                             hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
                                                         )
                                                     ],
-                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False}
+                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
+                                                              'uniformtext_minsize':12,'uniformtext_mode':'hide'}
                                                 )
                                             )
                                         ), label = cs
@@ -1364,32 +1366,6 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
         
-    def update_state_popup(self,cell_type):
-        print(f'cell_type: {cell_type}')
-        if not cell_type is None:
-            # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
-            cell_states = self.clicked_ftu['properties']['Cell_States']
-            cells_for_cell_states = list(cell_states.keys())
-            initial_cell_states = cell_states[cells_for_cell_states[0]]
-            cell_states_df = pd.DataFrame({'States':list(initial_cell_states.keys()),'Values':list(initial_cell_states.values())})
-
-            cell_states_fig = dcc.Graph(
-                figure = go.Figure(
-                            data = [
-                                go.Pie(
-                                    name = '',
-                                    values = cell_states_df['Values'],
-                                    labels = cell_states_df['States']
-                                )                    
-                            ],
-                            layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0}}
-                        )      
-            )      
-
-            return cell_states_fig
-        else:
-            raise exceptions.PreventUpdate
-
     def gen_cyto(self,cell_val):
 
         cyto_elements = []
@@ -1726,9 +1702,9 @@ class FUSION:
 
         return img_list        
 
-    def update_selected(self,hover,selected):
+    def update_selected(self,click,selected):
 
-        if hover is not None:
+        if click is not None:
             print(f'triggered_prop_ids: {ctx.triggered_prop_ids.keys()}')
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
                 sample_ids = [i['customdata'][0] for i in selected['points']]
@@ -1738,8 +1714,8 @@ class FUSION:
                         if f['ftu_name'] in sample_ids:
                             sample_info.append(f)
             else:
-                if hover is not None:
-                    sample_id = hover['points'][0]['customdata'][0]
+                if click is not None:
+                    sample_id = click['points'][0]['customdata'][0]
                     sample_info = []
                     for f in self.metadata:
                         if 'ftu_name' in f:
@@ -1764,7 +1740,7 @@ class FUSION:
                     )
             else:
                 print(f'No images found')
-                print(f'hover: {hover}')
+                print(f'hover: {click}')
                 print(f'selected:{selected}')
                 print(f'self.current_selected_samples: {self.current_selected_samples}')
 

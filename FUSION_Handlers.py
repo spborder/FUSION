@@ -123,10 +123,12 @@ class LayoutHandler:
                          url = wsi.map_dict['url'],
                          tileSize = wsi.tile_dims[0]
                         ),
+            dl.FullScreenControl(),
             dl.FeatureGroup(id='feature-group',
                             children = [
                                 dl.EditControl(id = {'type':'edit_control','index':0},
-                                                draw = dict(line=False, circle = False, circlemarker=False))
+                                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
+                                                position='topleft')
                             ]),
             html.Div(id='colorbar-div',
                      children = [

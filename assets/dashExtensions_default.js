@@ -7,7 +7,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     fillOpacity,
                     ftu_color,
                     filter_vals
-                } = context.props.hideout;
+                } = context.hideout;
 
                 if (current_cell === 'cluster') {
                     if (current_cell in feature.properties) {
@@ -79,7 +79,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 fillOpacity,
                 ftu_color,
                 filter_vals
-            } = context.props.hideout;
+            } = context.hideout;
 
             if ("Main_Cell_Types" in feature.properties) {
                 if (current_cell in feature.properties.Main_Cell_Types) {
