@@ -34,7 +34,6 @@ import dash_leaflet.express as dlx
 from dash_extensions.javascript import assign, arrow_function
 from dash_extensions.enrich import DashProxy, html, Input, Output, MultiplexerTransform, State
 import dash_mantine_components as dmc
-import dash_uploader as du
 
 from timeit import default_timer as timer
 
