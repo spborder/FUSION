@@ -124,7 +124,6 @@ class LayoutHandler:
                          tileSize = wsi.tile_dims[0]
                         ),
             dl.FullScreenControl(position='topleft'),
-            dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
             dl.FeatureGroup(id='feature-group',
                             children = [
                                 dl.EditControl(id = {'type':'edit_control','index':0},
@@ -137,7 +136,9 @@ class LayoutHandler:
                          ]),
             dl.LayersControl(id='layer-control',
                              children = self.initial_overlays
-                             )
+                             ),
+            dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
+            html.Div(id='ask-fusey-box',style={'visibility':'hidden','position':'absolute','top':'50px','right':'10px','zIndex':'1000'}),
         ]
 
         map_layer = dl.Map(
@@ -730,7 +731,6 @@ class LayoutHandler:
                     self.gen_info_button('Click on one of the circles in the far left of the table to load metadata for that dataset. You can also filter/sort the rows using the arrow icons in the column names and the text input in the first row'),
                     table_layout,
                     html.B(),
-                    p_bar_layout,
                     html.H3('Select Slides to include in current session'),
                     self.gen_info_button('Select/de-select slides to add/remove them from the metadata plot and current viewing session'),
                     html.Hr(),
@@ -738,7 +738,7 @@ class LayoutHandler:
                     html.Hr(),
                     html.H3('Current Metadata'),
                     self.gen_info_button('Select different metadata options to view the distribution of FTU values within each selected dataset or slide'),
-                    html.Div(id='slide-metadata-plots')
+                    dcc.Loading(html.Div(id='slide-metadata-plots'))
                 ]
 
         self.current_builder_layout = builder_layout
@@ -1817,22 +1817,4 @@ class DownloadHandler:
     """
 
     def extract_manual(self, slide, data):
-    """
-
-class UploadHandler(du.HttpRequestHandler):
-    def __init__(self,
-                 girder_api_url,
-                 user_session_token):
-        
-        self.girder_api_url = girder_api_url
-        self.user_session_token = user_session_token
-
-    """
-    def post(self):
-
-
-    def configure_post(self,parent_id,file_name):
-        self.parent_id = parent_id
-        self.file_name = file_name
-
     """

@@ -466,6 +466,15 @@ class FUSION:
              prevent_initial_call = True
         )(self.run_analysis)
 
+        # Callback for Ask Fusey
+        self.app.callback(
+            [Output('ask-fusey-box','children'),
+             Output('ask-fusey-box','style')],
+            Input('fusey-button','n_clicks'),
+            State('ask-fusey-box','style'),
+            prevent_initial_call = True
+        )(self.ask_fusey)
+
     def builder_callbacks(self):
 
         # Initializing plot after selecting dataset(s)
@@ -1080,7 +1089,7 @@ class FUSION:
                     self.current_cell = self.cell_names_key[cell_val]
                     self.update_hex_color_key('cell_value')
 
-                    color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                    color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
                     
                     filter_max_val = np.max(list(self.hex_color_key.keys()))
                     filter_disable = False
@@ -1089,7 +1098,7 @@ class FUSION:
                     self.current_cell = self.cell_names_key[cell_val]
                     self.update_hex_color_key('cell_state')
 
-                    color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                    color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
 
                     filter_max_val = np.max(list(self.hex_color_key.keys()))
                     filter_disable = False
@@ -1109,7 +1118,7 @@ class FUSION:
                 self.update_hex_color_key('cluster')
 
                 #TODO: This should probably be a categorical colorbar
-                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
 
                 filter_max_val = 1.0
                 filter_disable = True
@@ -1119,7 +1128,7 @@ class FUSION:
                 self.current_cell = cell_val
                 self.update_hex_color_key(cell_val)
 
-                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
 
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
                 filter_disable = False
@@ -2544,7 +2553,50 @@ class FUSION:
         else:
             return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
 
-    
+    def ask_fusey(self,butt_click,current_style):
+
+        # Generate some summary of the current view
+        fusey_child = []
+        fusey_style = {}
+        if not current_style is None:
+            if current_style['visibility']=='hidden':
+                fusey_style = {
+                    'visibility':'visible',
+                    'background':'white',
+                    'background':'rgba(255,255,255,0.8)',
+                    'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
+                    'border-radius':'5px',
+                    'display':'inline-block',
+                    'position':'absolute',
+                    'top':'75px',
+                    'right':'10px',
+                    'zIndex':'1000',
+                    'padding':'8px 10px'
+                }
+
+                fusey_child = [
+                    html.Div([
+                        dbc.Row([
+                            dbc.Col(html.Img(src='./assets/fusey_trans.png',height='75px',width='75px')),
+                        ]),
+                        dbc.Row([
+                            dbc.Col(html.H4('Hi, my name is Fusey!',style={'fontSize':12}))
+
+                        ]),
+                        html.Hr(),
+                        dbc.Row([
+                            dbc.Col(html.P('This current region is mostly CELL TYPE 1 (Percentage) which is mostly in the FTU WITH CELL TYPE 1 (# intersecting). Would you like to learn more about this cell type?',style={'fontSize':10}))
+                        ])
+                    ],style = fusey_style)
+                ]
+            elif current_style['visibility']=='visible': 
+                fusey_style = {
+                    'visibility':'hidden'
+                }
+        
+        return fusey_child, fusey_style
+
+        
 
 def app(*args):
     
@@ -2614,7 +2666,11 @@ def app(*args):
     # Adding functionality that is specifically implemented in FUSION
     fusion_cli = ['Segment Anything Model (SAM)','Contrastive Language-Image Pre-training (CLIP)']
 
-    external_stylesheets = [dbc.themes.LUX,dbc.icons.BOOTSTRAP]
+    external_stylesheets = [
+        dbc.themes.LUX,
+        dbc.icons.BOOTSTRAP,
+        dbc.icons.FONT_AWESOME
+        ]
 
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
