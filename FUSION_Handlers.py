@@ -123,7 +123,8 @@ class LayoutHandler:
                          url = wsi.map_dict['url'],
                          tileSize = wsi.tile_dims[0]
                         ),
-            dl.FullScreenControl(),
+            dl.FullScreenControl(position='topleft'),
+            dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
             dl.FeatureGroup(id='feature-group',
                             children = [
                                 dl.EditControl(id = {'type':'edit_control','index':0},
@@ -682,6 +683,13 @@ class LayoutHandler:
 
         dataset_df = pd.DataFrame.from_records(combined_dataset_dict)
 
+        # Progress bar and cancel button
+        p_bar_layout = html.Div([
+            dbc.Row([
+                dbc.Col(html.Progress(id='build-progress-bar',value="0"),md=10),
+                dbc.Col(html.Button(id='build-cancel-button',n_clicks=0,children = ['Cancel Dataset Load']),md=2)
+            ])
+        ])
 
         # Table with a bunch of filtering and tooltip info
         table_layout = html.Div([
@@ -721,6 +729,8 @@ class LayoutHandler:
                     html.Hr(),
                     self.gen_info_button('Click on one of the circles in the far left of the table to load metadata for that dataset. You can also filter/sort the rows using the arrow icons in the column names and the text input in the first row'),
                     table_layout,
+                    html.B(),
+                    p_bar_layout,
                     html.H3('Select Slides to include in current session'),
                     self.gen_info_button('Select/de-select slides to add/remove them from the metadata plot and current viewing session'),
                     html.Hr(),
@@ -728,7 +738,7 @@ class LayoutHandler:
                     html.Hr(),
                     html.H3('Current Metadata'),
                     self.gen_info_button('Select different metadata options to view the distribution of FTU values within each selected dataset or slide'),
-                    dcc.Loading(html.Div(id='slide-metadata-plots'))
+                    html.Div(id='slide-metadata-plots')
                 ]
 
         self.current_builder_layout = builder_layout
@@ -1466,10 +1476,14 @@ class GirderHandler:
 
         # Girder does the "annotation_id" a little differently. They have an endpoint that pulls annotation LAYERS by their id gc.get('annotation/{item}')
         # But not a SPECIFIC annotation. Makes sense because I guess you'd have to read the whole set of annotations anyways
+        start_time = timer()
         slide_annotations = self.get_annotations(slide_id)
+        end_time = timer()
+        print(f'Getting slides annotations took: {end_time-start_time}')
 
         matching_annotation = slide_annotations[layer_idx]['annotation']['elements'][compartment_idx]
 
+        start_time = timer()
         if not matching_annotation is None:
             ann_coords = np.squeeze(np.array(matching_annotation['points']))
             min_x = np.min(ann_coords[:,0])-self.padding_pixels
@@ -1487,6 +1501,9 @@ class GirderHandler:
             width = np.shape(image_region)[1]
             cc,rr = polygon_perimeter(y_coords,x_coords,(height,width))
             image_region[cc,rr,:] = 0
+
+            end_time = timer()
+            print(f'Formatting image annotations took: {end_time-start_time}')
 
             return image_region
         else:
