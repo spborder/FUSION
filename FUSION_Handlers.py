@@ -1533,22 +1533,25 @@ class GirderHandler:
 
         # Getting the items in the specified folder and then getting  the id of the newest item
         folder_items = self.gc.get(f'resource/{parent_folder}/items',parameters={'type':'folder'})
-        print(f'items in folder: {folder_items}')
 
         if len(folder_items)>0:
             # Getting all the updated datetime strings
             updated_list = [datetime.datetime.fromisoformat(i['updated']) for i in folder_items]
-            print(f'updated times list: {updated_list}')
             # Getting latest updated file
             latest_idx = np.argmax(updated_list)
-            print(f'latest_idx: {latest_idx}')
 
             new_upload_id = folder_items[latest_idx]['_id']
-            print(f'new_upload_id: {new_upload_id}')
 
             return new_upload_id
         else:
             return None
+
+    def get_job_status(self,job_id:str):
+
+        job_info = self.gc.get(f'/job/{job_id}')
+        print(f'job_info: {job_info}')
+
+        return job_info['status']
 
     def get_slide_thumbnail(self,item_id:str):
 

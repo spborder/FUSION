@@ -42,7 +42,7 @@ class PrepHandler:
         }
 
         # Info for spot annotation plugin
-        self.spot_annotatioion_info = {
+        self.spot_annotation_info = {
             'definitions_file':'64fa0f782d82d04be3e5daa3',
 
         }
@@ -275,11 +275,17 @@ class PrepHandler:
 
     def gen_spot_annotations(self,image_id,rds_id):
 
+        # Getting the fileId for the image item
+        image_item = self.girder_handler.gc.get(f'/item/{image_id}')
+        fileId = image_item['largeImage']['fileId']
+        folderId = image_item['folderId']
+
         job_response = self.girder_handler.gc.post('/slicer_cli_web/dpraveen511_spot_spot_ec2/SpotAnnotation/run',
                                         parameters = {
                                             'rds_file':rds_id,
-                                            'definitions_file':self.spot_annotatioion_info['definitions_file'],
-                                            'input_files':image_id
+                                            'definitions_file':self.spot_annotation_info['definitions_file'],
+                                            'input_files':fileId,
+                                            'base_dir':folderId
                                         })
         
 

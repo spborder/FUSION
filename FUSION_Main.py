@@ -20,6 +20,7 @@ import shapely
 from shapely.geometry import Point, shape, box
 from skimage.transform import resize
 import random
+import time
 
 import girder_client
 
@@ -524,7 +525,9 @@ class FUSION:
         # Uploading data to DSA collection
         self.app.callback(
             [Input({'type':'wsi-upload','index':ALL},'uploadComplete'),
-             Input({'type':'omics-upload','index':ALL},'uploadComplete')],
+             Input({'type':'omics-upload','index':ALL},'uploadComplete'),
+             Input({'type':'wsi-upload','index':ALL},'fileTypeFlag'),
+             Input({'type':'omics-upload','index':ALL},'fileTypeFlag')],
             [Output('slide-qc-results','children'),
              Output('slide-thumbnail-holder','children'),
              Output({'type':'wsi-upload-div','index':ALL},'children'),
@@ -2276,7 +2279,8 @@ class FUSION:
                                 uploadComplete=False,
                                 baseurl=self.dataset_handler.apiUrl,
                                 girderToken=self.dataset_handler.user_token,
-                                parentId=parentId                        
+                                parentId=parentId,
+                                filetypes=['svs','ndpi','scn','tiff','tif']                      
                             )
                         ],
                         style={'marginBottom':'10px','display':'inline-block'}
@@ -2292,7 +2296,8 @@ class FUSION:
                                 uploadComplete=False,
                                 baseurl=self.dataset_handler.apiUrl,
                                 girderToken=self.dataset_handler.user_token,
-                                parentId=parentId                 
+                                parentId=parentId,
+                                filetypes=['rds','csv']                 
                             )
                         ],
                         style = {'marginTop':'10px','display':'inline-block'}
@@ -2325,7 +2330,7 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def upload_data(self,wsi_file,omics_file):
+    def upload_data(self,wsi_file,omics_file,wsi_file_flag,omics_file_flag):
 
         print(f'Triggered id for upload_data: {ctx.triggered_id}')
         if ctx.triggered_id['type']=='wsi-upload':
@@ -2333,13 +2338,26 @@ class FUSION:
             # Getting the uploaded item id
             self.upload_wsi_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
 
-            print(self.upload_wsi_id)
             if not self.upload_wsi_id is None:
-                wsi_upload_children = [
-                    dbc.Alert('WSI Upload Success!',color='success')
-                ]
+                if not wsi_file_flag[0]:
+                    wsi_upload_children = [
+                        dbc.Alert('WSI Upload Success!',color='success')
+                    ]
 
-                self.upload_check['WSI'] = True
+                    self.upload_check['WSI'] = True
+
+                else:
+                    wsi_upload_children = [
+                        dbc.Alert('WSI Upload Failure! Accepted file types include svs, ndpi, scn, tiff, and tif',color='danger'),
+                        UploadComponent(
+                            id = {'type':'wsi-upload','index':0},
+                            uploadComplete=False,
+                            baseurl=self.dataset_handler.apiUrl,
+                            girderToken=self.dataset_handler.user_token,
+                            parentId=self.latest_upload_folder['id'],
+                            filetypes=['svs','ndpi','scn','tiff','tif']                      
+                        )
+                    ]
 
             else:
                 wsi_upload_children = no_update
@@ -2347,19 +2365,33 @@ class FUSION:
 
         elif ctx.triggered_id['type']=='omics-upload':
             
-            self.upload_check['Omics'] = True
 
             self.upload_omics_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
+            print(self.upload_omics_id)
+            if not self.upload_omics_id is None:
+                if not omics_file_flag[0]:
+                    omics_upload_children = [
+                        dbc.Alert('Omics Upload Success!')
+                    ]
+                    self.upload_check['Omics'] = True
+                else:
+                    omics_upload_children = [
+                        dbc.Alert('Omics Upload Failure! Accepted file types are: rds',color = 'danger'),
+                        UploadComponent(
+                            id = {'type':'omics-upload','index':0},
+                            uploadComplete=False,
+                            baseurl=self.dataset_handler.apiUrl,
+                            girderToken=self.dataset_handler.user_token,
+                            parentId=self.latest_upload_folder['id'],
+                            filetypes=['rds','csv']                 
+                            )
+                    ]
 
-            omics_upload_children = [
-                dbc.Alert('Omics Upload Success!')
-            ]
             wsi_upload_children = no_update
 
         else:
             print(f'ctx.triggered_id["type"]: {ctx.triggered_id["type"]}')
 
-        print(self.upload_check)
         # Checking the upload check
         if all([self.upload_check[i] for i in self.upload_check]):
             print('All set!')
@@ -2425,10 +2457,8 @@ class FUSION:
         #collection_contents = self.dataset_handler.get_collection_items(upload_id)
         thumbnail = self.dataset_handler.get_slide_thumbnail(upload_id)
         collection_contents = self.dataset_handler.gc.get(f'/item/{upload_id}')
-        print(collection_contents)
 
         histo_qc_run = self.dataset_handler.run_histo_qc(self.latest_upload_folder['id'])
-        print(histo_qc_run)
 
         #TODO: Activate the HistoQC plugin from here and return some metrics
         histo_qc_output = pd.DataFrame(collection_contents)
@@ -2446,17 +2476,19 @@ class FUSION:
             print(f'Running segmentation!')
             segmentation_info = self.prep_handler.segment_image(self.upload_wsi_id,organ_selection)
             print(f'Running spot annotation!')
-            spot_annotation_info = self.prep_handler.gen_spot_annotations(self.upload_wsi_id,self.upload_omics_id)
+            #spot_annotation_info = self.prep_handler.gen_spot_annotations(self.upload_wsi_id,self.upload_omics_id)
 
             # Monitoring the running jobs down here
+            seg_status = 0
+            spot_status = 0
+            while seg_status<3:
 
+                seg_status = self.dataset_handler.get_job_status(segmentation_info['_id'])
+                #spot_status = self.dataset_handler.get_job_status(spot_annotation_info['_id'])
 
-
-
-
-
-
-
+                print(f'seg_status: {seg_status}')
+                print(f'spot_status: {spot_status}')
+                time.sleep(3)
 
             # Extract annotation and initial sub-compartment mask
             self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
@@ -2498,7 +2530,7 @@ class FUSION:
             }
             
             self.feature_extract_ftus = ftu_names
-            image, mask = self.prep_handler.get_annotation_image_mask(self.upload_item_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+            image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
             self.layer_ann['current_image'] = image
             self.layer_ann['current_mask'] = mask
@@ -2560,7 +2592,7 @@ class FUSION:
 
         if ctx.triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
             
-            new_image, new_mask = self.prep_handler.get_annotation_image_mask(self.upload_item_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+            new_image, new_mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
             self.layer_ann['current_image'] = new_image
             self.layer_ann['current_mask'] = new_mask
 
