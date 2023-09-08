@@ -38,7 +38,13 @@ class PrepHandler:
 
         # Dictionary containing model and item id's
         self.model_zoo = {
-            'Kidney':'648123751019450486d13dcd'
+            'Kidney':'64f0b3f82d82d04be3e2b4ba'
+        }
+
+        # Info for spot annotation plugin
+        self.spot_annotatioion_info = {
+            'definitions_file':'64fa0f782d82d04be3e5daa3',
+
         }
 
         self.color_map = colormaps['jet']
@@ -109,15 +115,19 @@ class PrepHandler:
     def segment_image(self,item_id,model_type):
 
         # Get folder id from item id
-        folder_id = self.girder_handler.gc.get(f'/item/{item_id}')
-        print(f'item info: {folder_id}')
-        folder_id = folder_id['folderId']
+        item_info = self.girder_handler.gc.get(f'/item/{item_id}')
+        print(f'item info: {item_info}')
+        folder_id = item_info['folderId']
+        file_id = item_info['largeImage']['fileId']
 
         if model_type=='Kidney':
-            job_response = self.girder_handler.gc.post('/slicer_cli_web/sarderlab_histo-cloud_Segmentation/SegmentWSI/run',
+            job_response = self.girder_handler.gc.post('/slicer_cli_web/sayatmimar_histo-cloud_MultiCompartmentSegment_2/MultiCompartmentSegment/run',
                                         parameters={
-                                            'inputImageFile':item_id,
-                                            'outputAnnotationFile_folder':folder_id
+                                            'girderApiUrl':self.girder_handler.apiUrl,
+                                            'girderToken':self.girder_handler.user_token,
+                                            'input_file':file_id,
+                                            'base_dir':folder_id,
+                                            'modelfile':self.model_zoo[model_type]
                                         })
 
             print(f'job_response: {job_response}')
@@ -263,6 +273,14 @@ class PrepHandler:
 
         return card_children
 
+    def gen_spot_annotations(self,image_id,rds_id):
 
+        job_response = self.girder_handler.gc.post('/slicer_cli_web/dpraveen511_spot_spot_ec2/SpotAnnotation/run',
+                                        parameters = {
+                                            'rds_file':rds_id,
+                                            'definitions_file':self.spot_annotatioion_info['definitions_file'],
+                                            'input_files':image_id
+                                        })
+        
 
-
+        return job_response

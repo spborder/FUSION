@@ -12,6 +12,7 @@ import json
 
 from PIL import Image
 from io import BytesIO
+from datetime import datetime
 
 from tqdm import tqdm
 
@@ -26,7 +27,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from matplotlib import colormaps
 
-from dash import dcc, ctx, MATCH, ALL, dash_table, exceptions, callback_context, no_update
+from dash import dcc, ctx, MATCH, ALL, dash_table, exceptions, callback_context, no_update, DiskcacheManager
+import diskcache
 
 import dash_bootstrap_components as dbc
 import dash_leaflet as dl
@@ -40,6 +42,8 @@ from timeit import default_timer as timer
 from FUSION_WSI import DSASlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler
 from FUSION_Prep import PrepHandler
+
+from upload_component import UploadComponent
 
 
 class FUSION:
@@ -519,28 +523,29 @@ class FUSION:
 
         # Uploading data to DSA collection
         self.app.callback(
-            [Input({'type':'wsi-upload','index':ALL},'contents'),
-             Input({'type':'omics-upload','index':ALL},'contents')],
-             [State({'type':'wsi-upload','index':ALL},'filename'),
-              State({'type':'omics-upload','index':ALL},'filename')],
-              [Output('slide-qc-results','children'),
-               Output('slide-thumbnail-holder','children'),
-               Output({'type':'wsi-upload','index':ALL},'disabled'),
-               Output({'type':'omics-upload','index':ALL},'disabled'),
-               Output('organ-type','disabled'),
-               Output('post-upload-row','style')],
+            [Input({'type':'wsi-upload','index':ALL},'uploadComplete'),
+             Input({'type':'omics-upload','index':ALL},'uploadComplete')],
+            [Output('slide-qc-results','children'),
+             Output('slide-thumbnail-holder','children'),
+             Output({'type':'wsi-upload-div','index':ALL},'children'),
+             Output({'type':'omics-upload-div','index':ALL},'children'),
+             Output('organ-type','disabled'),
+             Output('post-upload-row','style')],
             prevent_initial_call=True
         )(self.upload_data)
 
         # Executing segmentation according to model selection
         self.app.callback(
-            [Input('organ-type','value')],
-            [Output('post-segment-row','style'),
+            inputs = [Input('organ-type','value')],
+            output = [Output('post-segment-row','style'),
              Output('organ-type','disabled'),
              Output('ftu-select','options'),
              Output('ftu-select','value'),
              Output('sub-comp-method','value'),
              Output('ex-ftu-img','figure')],
+            #background = True,
+            #running = [],
+            #progress = []
             prevent_initial_call=True
         )(self.apres_segmentation)
 
@@ -897,6 +902,7 @@ class FUSION:
         if len(included_ftus)>0:
 
             tab_list = []
+            self.fusey_data = {}
             #counts_data = pd.DataFrame()
             for f_idx,f in enumerate(included_ftus):
                 counts_data = pd.DataFrame()
@@ -907,6 +913,11 @@ class FUSION:
 
                 if not counts_data.empty:
                     counts_data.columns = [f]
+                    self.fusey_data[f] = {}
+
+                    # Storing some data for Fusey to use :3
+                    self.fusey_data[f]['structure_number'] = len(counts_dict_list)
+                    self.fusey_data[f]['normalized_counts'] = counts_data[f]/counts_data[f].sum()
 
                     # Normalizing to sum to 1
                     counts_data[f] = counts_data[f]/counts_data[f].sum()
@@ -920,11 +931,17 @@ class FUSION:
 
                     top_cell = counts_data['index'].tolist()[0]
 
+                    # Fusey data
+                    self.fusey_data[f]['top_cell'] = top_cell
+
                     pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
                     
                     pct_states = pct_states.reset_index()
                     pct_states.columns = ['Cell State','Proportion']
                     pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+
+                    # Fusey data
+                    self.fusey_data[f]['pct_states'] = pct_states
 
                     state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
 
@@ -2224,6 +2241,7 @@ class FUSION:
         input_disabled = True
         # Creating an upload div specifying which files are needed for a given upload type
         # Getting the collection id
+        """
         upload_style = {
             'width':'100%',
             'height':'40px',
@@ -2234,61 +2252,56 @@ class FUSION:
             'textAlign':'center',
             'margin':'10px'
         }
+        """
 
-        if upload_type=='Visium':
+        # Making a new folder for this upload in the user's Public (could also change to private?) folder
+        current_datetime = str(datetime.now())
+        current_datetime = current_datetime.replace('-','_').replace(' ','_').replace(':','_').replace('.','_')
+        parentId = self.dataset_handler.get_user_folder_id(f'Public/FUSION_Upload_{current_datetime}')
+        print(f'parentId: {parentId}')
+        self.latest_upload_folder = {
+            'id':parentId,
+            'path':f'Public/FUSION_Upload_{current_datetime}'
+        }    
+
+        if upload_type == 'Visium':
             upload_reqs = html.Div([
                 dbc.Row([
-                    dcc.Upload(
-                        id={'type':'wsi-upload','index':0},
-                        children = html.Div([
-                            'Drag and Drop or ',
-                            html.A('Select WSI File')
-                        ]),
-                        style = upload_style,
-                        multiple=False
-                    ),
-                    html.Div(id={'type':'wsi-upload-contents','index':0})
-                ]),
+                    html.Div(
+                        id = {'type':'wsi-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload Whole Slide Image Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-upload','index':0},
+                                uploadComplete=False,
+                                baseurl=self.dataset_handler.apiUrl,
+                                girderToken=self.dataset_handler.user_token,
+                                parentId=parentId                        
+                            )
+                        ],
+                        style={'marginBottom':'10px','display':'inline-block'}
+                    )
+                ],align='center'),
                 dbc.Row([
-                    dcc.Upload(
-                        id={'type':'omics-upload','index':0},
-                        children = html.Div([
-                            'Drag and Drop or ',
-                            html.A('Select Omics File')
-                        ]),
-                        style = upload_style,
-                        multiple = False
-                    ),
-                    html.Div(id={'type':'omics-upload-contents','index':0})
-                ])
+                    html.Div(
+                        id = {'type':'omics-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload your RDS file here!'),
+                            UploadComponent(
+                                id = {'type':'omics-upload','index':0},
+                                uploadComplete=False,
+                                baseurl=self.dataset_handler.apiUrl,
+                                girderToken=self.dataset_handler.user_token,
+                                parentId=parentId                 
+                            )
+                        ],
+                        style = {'marginTop':'10px','display':'inline-block'}
+                    )
+                ],align='center')
             ])
         
             self.upload_check = {'WSI':False,'Omics':False}
 
-        elif upload_type=='CODEX':
-
-            upload_reqs = html.Div([
-                dbc.Row([
-                    dcc.Upload(
-                        id={'type':'wsi-upload','index':1},
-                        children = html.Div([
-                            'Drag and Drop or ',
-                            html.A('Select qptiff File')
-                        ]),
-                        style = upload_style,
-                        multiple = False
-                    ),
-                    html.Div(id={'type':'wsi-upload-contents','index':1})
-                ])
-            ])
-
-            self.upload_check = {'WSI':False}
-
-        else:
-            upload_reqs = html.Div(
-                'You should not have done that'
-            )
-        
         return upload_reqs, input_disabled
 
     def girder_login(self,username,pword,p_butt):
@@ -2312,31 +2325,37 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def upload_data(self,wsi_file,omics_file,wsi_name,omics_name):
+    def upload_data(self,wsi_file,omics_file):
 
-        # Posting contents based on the ctx.triggered_id
-        print(f'wsi_file: {wsi_name}')
-        print(f'omics_file: {omics_name}')
-        wsi_file = wsi_file[0]
-        omics_file = omics_file[0]
-        wsi_name = wsi_name[0]
-        omics_name = omics_name[0]
+        print(f'Triggered id for upload_data: {ctx.triggered_id}')
+        if ctx.triggered_id['type']=='wsi-upload':
 
-        wsi_disabled = False
-        omics_disabled = False
+            # Getting the uploaded item id
+            self.upload_wsi_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
 
-        if ctx.triggered_id['type']=='wsi-upload' and not wsi_file is None:
-            self.upload_item_id = self.dataset_handler.upload_data(wsi_file,wsi_name)
+            print(self.upload_wsi_id)
+            if not self.upload_wsi_id is None:
+                wsi_upload_children = [
+                    dbc.Alert('WSI Upload Success!',color='success')
+                ]
 
-            self.upload_check['WSI'] = True
-            wsi_disabled = True
+                self.upload_check['WSI'] = True
 
-        elif ctx.triggered_id['type']=='omics-upload' and not omics_file is None:
+            else:
+                wsi_upload_children = no_update
+            omics_upload_children = no_update
 
-            self.upload_item_id = self.dataset_handler.upload_data(omics_file,omics_name)
+        elif ctx.triggered_id['type']=='omics-upload':
             
             self.upload_check['Omics'] = True
-            omics_disabled = True
+
+            self.upload_omics_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
+
+            omics_upload_children = [
+                dbc.Alert('Omics Upload Success!')
+            ]
+            wsi_upload_children = no_update
+
         else:
             print(f'ctx.triggered_id["type"]: {ctx.triggered_id["type"]}')
 
@@ -2344,11 +2363,16 @@ class FUSION:
         # Checking the upload check
         if all([self.upload_check[i] for i in self.upload_check]):
             print('All set!')
-            wsi_disabled = True
-            omics_disabled = True
 
-            slide_thumbnail, slide_qc_table = self.slide_qc(self.upload_item_id)
+            slide_thumbnail, slide_qc_table = self.slide_qc(self.upload_wsi_id)
             print(slide_qc_table)
+
+            omics_upload_children = [
+                dbc.Alert('Omics Upload Success!')
+            ]
+            wsi_upload_children = [
+                dbc.Alert('WSI Upload Success!',color='success')
+            ]
 
             thumb_fig = dcc.Graph(
                 figure=go.Figure(
@@ -2390,10 +2414,10 @@ class FUSION:
             organ_type_disabled = False
             post_upload_style = {'display':'flex'}
 
-            return slide_qc_results, thumb_fig, [wsi_disabled], [omics_disabled],organ_type_disabled, post_upload_style
+            return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], organ_type_disabled, post_upload_style
         
         else:
-            return no_update, no_update, [wsi_disabled], [omics_disabled],no_update, no_update
+            return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update
 
     def slide_qc(self, upload_id):
 
@@ -2402,6 +2426,9 @@ class FUSION:
         thumbnail = self.dataset_handler.get_slide_thumbnail(upload_id)
         collection_contents = self.dataset_handler.gc.get(f'/item/{upload_id}')
         print(collection_contents)
+
+        histo_qc_run = self.dataset_handler.run_histo_qc(self.latest_upload_folder['id'])
+        print(histo_qc_run)
 
         #TODO: Activate the HistoQC plugin from here and return some metrics
         histo_qc_output = pd.DataFrame(collection_contents)
@@ -2417,13 +2444,22 @@ class FUSION:
             disable_organ = True
 
             print(f'Running segmentation!')
-            try:
-                segmentation_info = self.prep_handler.segment_image(self.upload_item_id,organ_selection)
-            except girder_client.HttpError:
-                print('Error running job')
+            segmentation_info = self.prep_handler.segment_image(self.upload_wsi_id,organ_selection)
+            print(f'Running spot annotation!')
+            spot_annotation_info = self.prep_handler.gen_spot_annotations(self.upload_wsi_id,self.upload_omics_id)
+
+            # Monitoring the running jobs down here
+
+
+
+
+
+
+
+
 
             # Extract annotation and initial sub-compartment mask
-            self.upload_annotations = self.dataset_handler.get_annotations(self.upload_item_id)
+            self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
 
             # Populate with default sub-compartment parameters
             self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
@@ -2571,8 +2607,71 @@ class FUSION:
                     'top':'75px',
                     'right':'10px',
                     'zIndex':'1000',
-                    'padding':'8px 10px'
+                    'padding':'8px 10px',
+                    'width':'115px'
                 }
+
+                parent_style = {
+                    'visibility': 'visible',
+                    'display':'inline-block',
+                    'position':'absolute',
+                    'top':'75px',
+                    'right':'10px',
+                    'zIndex':'1000',
+                    'padding':'8px 10px',
+                    'width':'125px'
+                }
+
+                # Getting data for Fusey to use
+                if 'Spots' in self.fusey_data:
+
+                    # This will be the top cell type overall for a region
+                    top_cell = self.fusey_data['Spots']['top_cell']
+                    top_cell_states = self.fusey_data['Spots']['pct_states'].to_dict('records')
+                    top_cell_pct = round(self.fusey_data['Spots']['normalized_counts'].loc[top_cell]*100,2)
+
+                    table_data = self.table_df.dropna(subset=['CT/1/ABBR'])
+                    table_data = table_data[table_data['CT/1/ABBR'].str.match(top_cell)]
+
+                    try:
+                        id = table_data['CT/1/ID'].tolist()[0]
+                        # Modifying base url to make this link to UBERON
+                        base_url = self.node_cols['Cell Types']['base_url']
+                        new_url = base_url+id.replace('CL:','')
+                    except:
+                        new_url = ''
+
+                    cell_state_text = []
+                    for cs in top_cell_states:
+                        cell_state_text.append(f'{cs["Cell State"]} ({round(cs["Proportion"]*100,2)}%)')
+                    
+                    cell_state_text = ' '.join(cell_state_text)
+
+                    top_cell_text = f'The current region is mostly {self.cell_graphics_key[top_cell]["full"]} ({top_cell_pct}% in intersecting Spots).'
+                    top_cell_text += f' {self.cell_graphics_key[top_cell]["full"]} cells in this region exhibit {cell_state_text} cell states. '
+
+                    # Finding the FTU with most of this cell type:
+                    top_ftu_text = ''
+                    ftu_exp_list = []
+                    for f in self.fusey_data:
+                        if not f=='Spots':
+                            ftu_exp_list.append(round(self.fusey_data[f]['normalized_counts'].loc[top_cell]*100,2))
+                    
+                    if len(ftu_exp_list)>0:
+                        ftu_list = [i for i in list(self.fusey_data.keys()) if not i == 'Spots']
+                        ftu_exp_list = [i if not np.isnan(i) else 0 for i in ftu_exp_list]
+                        top_ftu = ftu_list[np.argmax(ftu_exp_list)]
+                        top_ftu_pct = np.max(ftu_exp_list)
+
+                        top_ftu_text = f'This cell type is mostly represented in {top_ftu} ({self.fusey_data[top_ftu]["structure_number"]} intersecting) with an average of {top_ftu_pct}%'
+                    else:
+                        top_ftu_text = ''
+
+                    final_text = top_cell_text+top_ftu_text
+
+                else:
+                    
+                    final_text = 'Uh oh! It looks like there are no Spots in this area!'
 
                 fusey_child = [
                     html.Div([
@@ -2580,21 +2679,24 @@ class FUSION:
                             dbc.Col(html.Img(src='./assets/fusey_trans.png',height='75px',width='75px')),
                         ]),
                         dbc.Row([
-                            dbc.Col(html.H4('Hi, my name is Fusey!',style={'fontSize':12}))
+                            dbc.Col(html.H4('Hi, my name is Fusey!',style={'fontSize':11}))
 
                         ]),
                         html.Hr(),
                         dbc.Row([
-                            dbc.Col(html.P('This current region is mostly CELL TYPE 1 (Percentage) which is mostly in the FTU WITH CELL TYPE 1 (# intersecting). Would you like to learn more about this cell type?',style={'fontSize':10}))
+                            dbc.Col(html.P(final_text,style={'fontSize':10}))
+                        ]),
+                        dbc.Row([
+                            dbc.Col(html.A('Learn more about this cell!',href=new_url))
                         ])
                     ],style = fusey_style)
                 ]
             elif current_style['visibility']=='visible': 
-                fusey_style = {
+                parent_style = {
                     'visibility':'hidden'
                 }
         
-        return fusey_child, fusey_style
+        return fusey_child, parent_style
 
         
 
@@ -2682,8 +2784,15 @@ def app(*args):
     download_handler = DownloadHandler(dataset_handler)
 
     prep_handler = PrepHandler(dataset_handler)
+    
+    cache = diskcache.Cache('./cache')
+    background_callback_manager = DiskcacheManager(cache)
 
-    main_app = DashProxy(__name__,external_stylesheets=external_stylesheets,transforms = [MultiplexerTransform()])
+    main_app = DashProxy(__name__,
+                         external_stylesheets=external_stylesheets,
+                         transforms = [MultiplexerTransform()],
+                         background_callback_manager = background_callback_manager
+                         )
     vis_app = FUSION(
         main_app,
         layout_handler,

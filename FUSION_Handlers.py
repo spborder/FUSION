@@ -27,6 +27,7 @@ from io import BytesIO
 import requests
 from math import ceil
 import base64
+import datetime
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -780,9 +781,11 @@ class LayoutHandler:
                         )
                     ),
                     dbc.Col(
-                        html.Div(
-                            id='upload-requirements',
-                            children = []
+                        dcc.Loading(
+                            html.Div(
+                                id='upload-requirements',
+                                children = []
+                            )
                         )
                     )
                 ],
@@ -1070,7 +1073,7 @@ class LayoutHandler:
         header = dbc.Navbar(
             dbc.Container([
                 dbc.Row([
-                    dbc.Col(html.Img(id='logo',src=('./assets/FUSION-LAB_navigator.png'),height='100px'),md='auto'),
+                    dbc.Col(html.Img(id='logo',src=('./assets/Fusion-Logo-Navigator-Color01.png'),height='100px'),md='auto'),
                     dbc.Col([
                         html.Div([
                             html.H3('FUSION',style={'color':'rgb(255,255,255)'}),
@@ -1509,56 +1512,56 @@ class GirderHandler:
         else:
             raise ValueError
 
-    def upload_data(self,data,data_name):
+    def get_user_folder_id(self,folder_name:str):
 
-        # Finding the current user's private folder
-        user_folder = f'/user/{self.gc.get("/user/me")["login"]}/Private'
-        private_folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder})['_id']
+        # Finding current user's private folder and returning the parent ID
+        user_folder = f'/user/{self.gc.get("/user/me")["login"]}/{folder_name}'
         print(f'user_folder: {user_folder}')
-        print(f'private_folder_id: {private_folder_id}')
+        try:
+            folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder})['_id']
+        except girder_client.HttpError:
+            # This is if the folder doesn't exist yet (only works with one nest so a folder in an already existing folder)
+            parent_id = self.gc.get('/resource/lookup',parameters={'path':'/'.join(user_folder.split('/')[0:-1])})['_id']
+            
+            self.gc.post('/folder',parameters={'parentId':parent_id,'name':folder_name.split('/')[-1],'description':'Folder created by FUSION'})
+            folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder})['_id']
 
-        # Testing folder ID containing small section of tissue with annotations
-        private_folder_id = '64dba32c287cfdce1e9c7105'
 
+        return folder_id
 
-        # Trying to just upload the entire file at once?
-        """
-        print('Starting upload')
+    def get_new_upload_id(self,parent_folder:str):
 
-        # Finding file size
-        print(f'len of bytes string: {len(data)}')
-        print(f'n_unique characters: {len(set(data))}')
-        print(f'type of data: {type(data)}')
-        #upload_size = 4*(ceil(len(data)/3))
-        upload_size = 8913183
-        print(f'upload_size: {upload_size}')
+        # Getting the items in the specified folder and then getting  the id of the newest item
+        folder_items = self.gc.get(f'resource/{parent_folder}/items',parameters={'type':'folder'})
+        print(f'items in folder: {folder_items}')
 
-        response = self.gc.post(f'/file?token={self.user_token}',
-                     data={'image':data},
-                     headers = {
-                         'X-HTTP-Metod':'POST',
-                         'Content-Type':'image/jpeg'
-                     },
-                     parameters={
-                         'parentType':'folder',
-                         'parentId':private_folder_id,
-                         'name':data_name,
-                         'size':upload_size,
-                         'mimeType':'image/jpeg'
-                         }
-                    )
-        self.gc.post(f'/file/completion?token={self.user_token}',
-                     parameters={'uploadId':response['_id']})
-        print(response)
-        print(f'Upload completed: {data_name}')
-        """
-        return private_folder_id
+        if len(folder_items)>0:
+            # Getting all the updated datetime strings
+            updated_list = [datetime.datetime.fromisoformat(i['updated']) for i in folder_items]
+            print(f'updated times list: {updated_list}')
+            # Getting latest updated file
+            latest_idx = np.argmax(updated_list)
+            print(f'latest_idx: {latest_idx}')
 
-    def get_slide_thumbnail(self,item_id):
+            new_upload_id = folder_items[latest_idx]['_id']
+            print(f'new_upload_id: {new_upload_id}')
+
+            return new_upload_id
+        else:
+            return None
+
+    def get_slide_thumbnail(self,item_id:str):
 
         #thumbnail = Image.open(BytesIO(self.gc.get(f'/item/{item_id}/tiles/thumbnail?token={self.user_token}')))
         thumbnail = Image.open(BytesIO(requests.get(f'{self.gc.urlBase}/item/{item_id}/tiles/thumbnail?width=200&height=200&token={self.user_token}').content))
         return thumbnail
+
+    def run_histo_qc(self,folder_id:str):
+
+        print('Running HistoQC')
+        response = self.gc.post(f'/folder/{folder_id}/histoqc')
+        print('Done!')
+        return response
 
     def get_asset_items(self,assets_path):
 
