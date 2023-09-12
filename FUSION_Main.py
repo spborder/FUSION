@@ -243,6 +243,20 @@ class FUSION:
         # Running server
         self.app.run_server(host = '0.0.0.0',debug=False,use_reloader=False,port=8000)
 
+    def __getstate__(self):
+
+        # Copying FUSION object's state from self.__dict__ which contains all attributes
+        state = self.__dict__.copy()
+        # Removing unpicklable entries (have to find which ones those are)
+
+        return state
+    
+    def __setstate__(self,state):
+        # Restoring instance attributes
+        self.__dict__.update(state)
+
+        # Manually restore unpicklable entries
+
     def view_instructions(self,n,is_open):
         if n:
             return not is_open
@@ -539,16 +553,13 @@ class FUSION:
 
         # Executing segmentation according to model selection
         self.app.callback(
-            inputs = [Input('organ-type','value')],
             output = [Output('post-segment-row','style'),
              Output('organ-type','disabled'),
              Output('ftu-select','options'),
              Output('ftu-select','value'),
              Output('sub-comp-method','value'),
              Output('ex-ftu-img','figure')],
-            #background = True,
-            #running = [],
-            #progress = []
+            inputs = Input('organ-type','value'),
             prevent_initial_call=True
         )(self.apres_segmentation)
 
@@ -572,7 +583,12 @@ class FUSION:
             prevent_initial_call = True
         )(self.update_sub_compartment)
 
-        # Enabling components after upload is complete
+        # Running feature extraction plugin
+        self.app.callback(
+            Input({'type':'start-feat','index':ALL},'n_clicks'),
+            Output({'type':'feat-logs','index':ALL},'children'),
+            prevent_initial_call=True
+        )(self.run_feature_extraction)
 
     def get_video(self,tutorial_category):
         tutorial_category = tutorial_category[0]
@@ -2244,18 +2260,6 @@ class FUSION:
         input_disabled = True
         # Creating an upload div specifying which files are needed for a given upload type
         # Getting the collection id
-        """
-        upload_style = {
-            'width':'100%',
-            'height':'40px',
-            'lineHeight':'40px',
-            'borderWidth':'1px',
-            'borderStyle':'dashed',
-            'borderRadius':'5px',
-            'textAlign':'center',
-            'margin':'10px'
-        }
-        """
 
         # Making a new folder for this upload in the user's Public (could also change to private?) folder
         current_datetime = str(datetime.now())
@@ -2365,27 +2369,35 @@ class FUSION:
 
         elif ctx.triggered_id['type']=='omics-upload':
             
-
             self.upload_omics_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
             print(self.upload_omics_id)
+            print(omics_file_flag)
             if not self.upload_omics_id is None:
-                if not omics_file_flag[0]:
-                    omics_upload_children = [
-                        dbc.Alert('Omics Upload Success!')
-                    ]
-                    self.upload_check['Omics'] = True
+                if type(omics_file_flag)==list:
+                    if len(omics_file_flag)>0:
+                        if not omics_file_flag[0]:
+                            omics_upload_children = [
+                                dbc.Alert('Omics Upload Success!')
+                            ]
+                            self.upload_check['Omics'] = True
+                        else:
+                            omics_upload_children = [
+                                dbc.Alert('Omics Upload Failure! Accepted file types are: rds',color = 'danger'),
+                                UploadComponent(
+                                    id = {'type':'omics-upload','index':0},
+                                    uploadComplete=False,
+                                    baseurl=self.dataset_handler.apiUrl,
+                                    girderToken=self.dataset_handler.user_token,
+                                    parentId=self.latest_upload_folder['id'],
+                                    filetypes=['rds','csv']                 
+                                    )
+                            ]
+                    else:
+                        omics_upload_children = no_update
                 else:
-                    omics_upload_children = [
-                        dbc.Alert('Omics Upload Failure! Accepted file types are: rds',color = 'danger'),
-                        UploadComponent(
-                            id = {'type':'omics-upload','index':0},
-                            uploadComplete=False,
-                            baseurl=self.dataset_handler.apiUrl,
-                            girderToken=self.dataset_handler.user_token,
-                            parentId=self.latest_upload_folder['id'],
-                            filetypes=['rds','csv']                 
-                            )
-                    ]
+                    omics_upload_children = no_update
+            else:
+                omics_upload_children = no_update
 
             wsi_upload_children = no_update
 
@@ -2467,6 +2479,7 @@ class FUSION:
 
     def apres_segmentation(self,organ_selection):
 
+        print(f'organ_selection: {organ_selection}')
         if not organ_selection is None:
 
             # Executing segmentation CLI for organ/model/FTU selections
@@ -2476,19 +2489,21 @@ class FUSION:
             print(f'Running segmentation!')
             segmentation_info = self.prep_handler.segment_image(self.upload_wsi_id,organ_selection)
             print(f'Running spot annotation!')
-            #spot_annotation_info = self.prep_handler.gen_spot_annotations(self.upload_wsi_id,self.upload_omics_id)
+            spot_annotation_info = self.prep_handler.gen_spot_annotations(self.upload_wsi_id,self.upload_omics_id)
 
             # Monitoring the running jobs down here
             seg_status = 0
             spot_status = 0
-            while seg_status<3:
+            while spot_status+seg_status<6:
 
                 seg_status = self.dataset_handler.get_job_status(segmentation_info['_id'])
-                #spot_status = self.dataset_handler.get_job_status(spot_annotation_info['_id'])
+                spot_status = self.dataset_handler.get_job_status(spot_annotation_info['_id'])
 
                 print(f'seg_status: {seg_status}')
                 print(f'spot_status: {spot_status}')
-                time.sleep(3)
+                #seg_progress(spot_status+seg_status+1,7,seg_status)
+
+                time.sleep(1)
 
             # Extract annotation and initial sub-compartment mask
             self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
@@ -2621,6 +2636,13 @@ class FUSION:
         else:
             return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
 
+    def run_feature_extraction(self,feat_butt):
+
+        feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
+
+        return [json.dumps(feat_ext_job)]
+
+
     def ask_fusey(self,butt_click,current_style):
 
         # Generate some summary of the current view
@@ -2730,7 +2752,12 @@ class FUSION:
         
         return fusey_child, parent_style
 
-        
+
+class MyDisk(diskcache.Disk):
+    def __init__(self, *args, **kwargs):
+        kwargs['pickle_protocol'] = 0
+        super(MyDisk, self).__init__(*args, **kwargs)
+
 
 def app(*args):
     
@@ -2817,7 +2844,7 @@ def app(*args):
 
     prep_handler = PrepHandler(dataset_handler)
     
-    cache = diskcache.Cache('./cache')
+    cache = diskcache.Cache('./cache',disk=MyDisk)
     background_callback_manager = DiskcacheManager(cache)
 
     main_app = DashProxy(__name__,

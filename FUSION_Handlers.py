@@ -836,6 +836,10 @@ class LayoutHandler:
                             dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True)
                         ]),md=12
                     )
+                ]),
+                dbc.Row([
+                    html.Div(id = 'seg-woodshed',children = [],style={'overflow':'scroll'}),
+                    html.Progress(id='seg-progress',value="0")
                 ])
             ])
         ])

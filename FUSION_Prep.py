@@ -44,8 +44,10 @@ class PrepHandler:
         # Info for spot annotation plugin
         self.spot_annotation_info = {
             'definitions_file':'64fa0f782d82d04be3e5daa3',
-
+            'plugin_name':'dpraveen511_spot_spot_ec2/SpotAnnotation'
         }
+
+        self.feature_extraction_plugin = 'sumanthdevarasetty_ftx_ftx_14/Ftx_sc'
 
         self.color_map = colormaps['jet']
 
@@ -116,7 +118,6 @@ class PrepHandler:
 
         # Get folder id from item id
         item_info = self.girder_handler.gc.get(f'/item/{item_id}')
-        print(f'item info: {item_info}')
         folder_id = item_info['folderId']
         file_id = item_info['largeImage']['fileId']
 
@@ -254,7 +255,7 @@ class PrepHandler:
                             'Start Extracting!',
                             color = 'success',
                             className='d-grid gap-2 col-12 mx-auto',
-                            id = 'start-feat'
+                            id = {'type':'start-feat','index':0}
                         )
                     )
                 ])
@@ -264,7 +265,7 @@ class PrepHandler:
                 dbc.Card([
                     dbc.CardHeader('Feature extraction progress'),
                     dbc.CardBody([
-                        html.Div('Record logs/progress here')
+                        html.Div('Record logs/progress here',id={'type':'feat-logs','index':0})
                     ])
                 ])
             ])
@@ -280,13 +281,51 @@ class PrepHandler:
         fileId = image_item['largeImage']['fileId']
         folderId = image_item['folderId']
 
-        job_response = self.girder_handler.gc.post('/slicer_cli_web/dpraveen511_spot_spot_ec2/SpotAnnotation/run',
+        # Getting fileId for rds item
+        rds_item = self.girder_handler.gc.get(f'/item/{rds_id}/files')
+        rds_file_id = rds_item[0]['_id']
+
+        # Getting fileId for definitions file
+        def_item = self.girder_handler.gc.get(f'/item/{self.spot_annotation_info["definitions_file"]}/files')
+        def_file_id = def_item[0]['_id']
+
+        job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.spot_annotation_info["plugin_name"]}/run',
                                         parameters = {
-                                            'rds_file':rds_id,
-                                            'definitions_file':self.spot_annotation_info['definitions_file'],
+                                            'rds_file':rds_file_id,
+                                            'definitions_file':def_file_id,
                                             'input_files':fileId,
-                                            'base_dir':folderId
+                                            'basedir':folderId,
+                                            'girderApiUrl':self.girder_handler.apiUrl,
+                                            'girderToken':self.girder_handler.user_token
                                         })
         
 
+        return job_response
+
+    def run_feature_extraction(self,image_id,sub_seg_params):
+        
+        # Getting the fileId for the image item
+        image_item = self.girder_handler.gc.get(f'/item/{image_id}')
+        fileId = image_item['largeImage']['fileId']
+        folderId = image_item['folderId']
+
+        # Parsing through sub-seg-params
+        _, thresh_nuc, minsize_nuc, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Nuclei'][0].values()))
+        _, thresh_pas, minsize_pas, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='PAS'][0].values()))
+        _, thresh_las, minsize_las, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Luminal Space'][0].values()))
+
+        job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.feature_extraction_plugin}/run',
+                                        parameters = {
+                                            'input_image':fileId,
+                                            'basedir':folderId,
+                                            'threshold_nuclei':thresh_nuc,
+                                            'minsize_nuclei':minsize_nuc,
+                                            'threshold_PAS':thresh_pas,
+                                            'minsize_PAS':minsize_pas,
+                                            'threshold_LAS':thresh_las,
+                                            'minsize_LAS':minsize_las,
+                                            'girderApiUrl':self.girder_handler.apiUrl,
+                                            'girderToken':self.girder_handler.user_token
+                                        })
+        
         return job_response
