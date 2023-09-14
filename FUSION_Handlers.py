@@ -1071,7 +1071,7 @@ class LayoutHandler:
         self.layout_dict['welcome'] = welcome_layout
         self.description_dict['welcome'] = welcome_description
 
-    def gen_initial_layout(self,slide_names):
+    def gen_initial_layout(self,slide_names,initial_user:str):
 
         # welcome layout after initialization and information and buttons to go to other areas
 
@@ -1189,7 +1189,7 @@ class LayoutHandler:
                     dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px'}),
                     dbc.Button('Registered User Login',id={'type':'login-butt','index':0},className='mb-3',style = {'marginLeft':'5px'}),
                     login_popover,
-                    html.Div(id='logged-in-user'),
+                    html.Div(id='logged-in-user',children = [f'Welcome, {initial_user}!']),
                     dbc.Collapse(
                         dbc.Row(
                             dbc.Col(

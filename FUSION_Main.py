@@ -2764,9 +2764,15 @@ class MyDisk(diskcache.Disk):
 def app(*args):
     
     # Using DSA as base directory for storage and accessing files
-    dsa_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1/'
-    username = os.environ.get('DSA_USER')
-    p_word = os.environ.get('DSA_PWORD')
+    #dsa_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1/'
+    dsa_url = os.environ.get('DSA_URL')
+    try:
+        username = os.environ.get('DSA_USER')
+        p_word = os.environ.get('DSA_PWORD')
+    except:
+        username = ''
+        p_word = ''
+        print(f'Be sure to set an initial user dummy!')
 
     # Initializing GirderHandler
     dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
@@ -2837,7 +2843,7 @@ def app(*args):
 
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
-    layout_handler.gen_initial_layout(slide_names)
+    layout_handler.gen_initial_layout(slide_names,username)
     layout_handler.gen_vis_layout(wsi,cli_list)
     layout_handler.gen_builder_layout(dataset_handler)
     layout_handler.gen_uploader_layout(dataset_handler)
@@ -2846,13 +2852,13 @@ def app(*args):
 
     prep_handler = PrepHandler(dataset_handler)
     
-    cache = diskcache.Cache('./cache',disk=MyDisk)
-    background_callback_manager = DiskcacheManager(cache)
+    #cache = diskcache.Cache('./cache',disk=MyDisk)
+    #background_callback_manager = DiskcacheManager(cache)
 
     main_app = DashProxy(__name__,
                          external_stylesheets=external_stylesheets,
                          transforms = [MultiplexerTransform()],
-                         background_callback_manager = background_callback_manager
+                         #background_callback_manager = background_callback_manager
                          )
     vis_app = FUSION(
         main_app,
