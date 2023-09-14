@@ -74,7 +74,9 @@ class LayoutHandler:
             id={'type':'info-button','index':self.info_button_idx}
             ),
             dbc.Popover(
-                text,
+                children = [
+                    html.Img(src='./assets/fusey_trans.png',height=20,width=20),
+                    text],
                 target = {'type':'info-button','index':self.info_button_idx},
                 body=True,
                 trigger='hover'
@@ -619,7 +621,7 @@ class LayoutHandler:
             dbc.Tab(cell_card,label = "Cell Graphics"),
             dbc.Tab(cluster_card,label = 'Morphological Clustering'),
             dbc.Tab(extract_card,label = 'Download Data'),
-            dbc.Tab(cli_tab,label = 'Run Analyses'),
+            dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True),
         ]
         
         tools = [
@@ -1139,10 +1141,10 @@ class LayoutHandler:
             dbc.Offcanvas([
                 html.Img(id='welcome-logo-side',src=('./assets/FUSION-LAB-FINAL.png'),height='315px',width='275px'),
                 dbc.Nav([
-                    dbc.NavLink('Welcome',href='/welcome',active='exact'),
-                    dbc.NavLink('FUSION Visualizer',href='/vis',active='exact'),
-                    dbc.NavLink('Dataset Builder',href='/dataset-builder',active='exact'),
-                    dbc.NavLink('Dataset Uploader',href='/dataset-uploader',active='exact')
+                    dbc.NavLink('Welcome',href='/welcome',active='exact',id='welcome-sidebar'),
+                    dbc.NavLink('FUSION Visualizer',href='/vis',active='exact',id='vis-sidebar'),
+                    dbc.NavLink('Dataset Builder',href='/dataset-builder',active='exact',id='builder-sidebar'),
+                    dbc.NavLink('Dataset Uploader',href='/dataset-uploader',active='exact',id='upload-sidebar')
                 ],vertical=True,pills=True)], id={'type':'sidebar-offcanvas','index':0},style={'background-color':"#f8f9fa"}
             )
         ])

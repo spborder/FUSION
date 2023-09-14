@@ -343,7 +343,8 @@ class FUSION:
         self.app.callback(
             [Output('login-submit','color'),
              Output('login-submit','children'),
-             Output('logged-in-user','children')],
+             Output('logged-in-user','children'),
+             Output('upload-sidebar','disabled')],
             [Input('username-input','value'),
              Input('pword-input','value'),
              Input('login-submit','n_clicks')],
@@ -2323,14 +2324,16 @@ class FUSION:
                 button_color = 'success'
                 button_text = 'Success!'
                 logged_in_user = f'Welcome: {username}'
+                upload_disabled = False
 
             except girder_client.AuthenticationError:
 
                 button_color = 'warning'
                 button_text = 'Login Failed'
                 logged_in_user = ''
+                upload_disabled = True
 
-            return button_color, button_text, logged_in_user
+            return button_color, button_text, logged_in_user, upload_disabled
         else:
             raise exceptions.PreventUpdate
 
@@ -2641,7 +2644,6 @@ class FUSION:
         feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
 
         return [json.dumps(feat_ext_job)]
-
 
     def ask_fusey(self,butt_click,current_style):
 
