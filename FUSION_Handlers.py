@@ -105,8 +105,9 @@ class LayoutHandler:
         self.initial_overlays = [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = wsi.map_dict['FTUs'][struct]['geojson'], id = wsi.map_dict['FTUs'][struct]['id'], options = dict(color = wsi.map_dict['FTUs'][struct]['color']),
-                        hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
+                    dl.GeoJSON(data = wsi.map_dict['FTUs'][struct]['geojson'], id = wsi.map_dict['FTUs'][struct]['id'], options = dict(style=dict(color = wsi.map_dict['FTUs'][struct]['color'])),
+                        hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
+                        children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
                 name = struct, checked = True, id = struct)
         for struct in wsi.map_dict['FTUs']
         ] 
@@ -114,7 +115,7 @@ class LayoutHandler:
         self.initial_overlays+= [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = wsi.spot_dict['geojson'], id = wsi.spot_dict['id'], options = dict(color = wsi.spot_dict['color']),
+                    dl.GeoJSON(data = wsi.spot_dict['geojson'], id = wsi.spot_dict['id'], options = dict(style=dict(color = wsi.spot_dict['color'])),
                         hoverStyle = arrow_function(dict(weight=5, color = wsi.spot_dict['hover_color'], dashArray = '')),
                         children = [dl.Popup(id=wsi.spot_dict['popup_id'])],
                         zoomToBounds=True)),
@@ -573,7 +574,8 @@ class LayoutHandler:
                             value = [0.0,1.0],
                             marks=None,
                             tooltip = {'placement':'bottom','always_visible':True},
-                            allowCross=False
+                            allowCross=False,
+                            disabled = True
                         )
                     ])
                 ]),
@@ -1503,16 +1505,16 @@ class GirderHandler:
             image_region = np.array(self.get_image_region(slide_id,[min_x,min_y,max_x,max_y]))
 
             # Creating boundary based on coordinates from annotation
-            scaled_coordinates = ann_coords.tolist()
-            x_coords = [i[0]-min_x for i in scaled_coordinates]
-            y_coords = [i[1]-min_y for i in scaled_coordinates]
-            height = np.shape(image_region)[0]
-            width = np.shape(image_region)[1]
-            cc,rr = polygon_perimeter(y_coords,x_coords,(height,width))
-            image_region[cc,rr,:] = 0
+            #scaled_coordinates = ann_coords.tolist()
+            #x_coords = [i[0]-min_x for i in scaled_coordinates]
+            #y_coords = [i[1]-min_y for i in scaled_coordinates]
+            #height = np.shape(image_region)[0]
+            #width = np.shape(image_region)[1]
+            #cc,rr = polygon_perimeter(y_coords,x_coords,(height,width))
+            #image_region[cc,rr,:] = 0
 
-            end_time = timer()
-            print(f'Formatting image annotations took: {end_time-start_time}')
+            #end_time = timer()
+            #print(f'Formatting image annotations took: {end_time-start_time}')
 
             return image_region
         else:

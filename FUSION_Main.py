@@ -134,48 +134,51 @@ class FUSION:
 
         self.ftu_style_handle = assign("""function(feature,context){
             const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.hideout;
-            
-            if (current_cell==='cluster'){
-                if (current_cell in feature.properties){
-                    var cell_value = feature.properties.Cluster;
-                    cell_value = (Number(cell_value)).toFixed(1);
-                } else {
-                    cell_value = Number.Nan;
-                }
-            } else if (current_cell==='max'){
-                // Extracting all the cell values for a given FTU/Spot
-                if (current_cell in feature.properties){       
-                    var cell_values = feature.properties.Main_Cell_Types;
-                    // Initializing some comparison values
-                    var cell_value = 0.0;
-                    var use_cell_value = 0.0;
-                    var cell_idx = -1.0;
-                    // Iterating through each cell type in cell values
-                    for (var key in cell_values){
-                        cell_idx += 1.0;
-                        var test_val = cell_values[key];
-                        // If the test value is greater than the cell_value, replace cell value with that test value
-                        if (test_val > cell_value) {
-                            cell_value = test_val;
-                            use_cell_value = cell_idx;
-                        }
+            console.log(current_cell);
+            if (current_cell){
+                if (current_cell==='cluster'){
+                    if (current_cell in feature.properties){
+                        var cell_value = feature.properties.Cluster;
+                        cell_value = (Number(cell_value)).toFixed(1);
+                    } else {
+                        cell_value = Number.Nan;
                     }
-                    cell_value = (use_cell_value).toFixed(1);
+                } else if (current_cell==='max'){
+                    // Extracting all the cell values for a given FTU/Spot
+                    if (current_cell in feature.properties){       
+                        var cell_values = feature.properties.Main_Cell_Types;
+                        // Initializing some comparison values
+                        var cell_value = 0.0;
+                        var use_cell_value = 0.0;
+                        var cell_idx = -1.0;
+                        // Iterating through each cell type in cell values
+                        for (var key in cell_values){
+                            cell_idx += 1.0;
+                            var test_val = cell_values[key];
+                            // If the test value is greater than the cell_value, replace cell value with that test value
+                            if (test_val > cell_value) {
+                                cell_value = test_val;
+                                use_cell_value = cell_idx;
+                            }
+                        }
+                        cell_value = (use_cell_value).toFixed(1);
+                    } else {
+                        cell_value = Number.Nan;
+                    }
+                } else if ('Main_Cell_Types' in feature.properties){
+                    if (current_cell in feature.properties.Main_Cell_Types){
+                                        
+                        var cell_value = feature.properties.Main_Cell_Types[current_cell];
+                        if (cell_value==1) {
+                            cell_value = (cell_value).toFixed(1);
+                        } else if (cell_value==0) {
+                            cell_value = (cell_value).toFixed(1);
+                        }                                                    
+                    } else if (current_cell in feature.properties){
+                        var cell_value = feature.properties[current_cell];
+                    }
                 } else {
-                    cell_value = Number.Nan;
-                }
-
-            } else if ('Main_Cell_Types' in feature.properties){
-                if (current_cell in feature.properties.Main_Cell_Types){
-                                       
-                    var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                    if (cell_value==1) {
-                        cell_value = (cell_value).toFixed(1);
-                    } else if (cell_value==0) {
-                        cell_value = (cell_value).toFixed(1);
-                    }                                                    
-                } else if (current_cell in feature.properties){
-                    var cell_value = feature.properties[current_cell];
+                    var cell_value = Number.Nan;
                 }
             } else {
                 var cell_value = Number.Nan;
@@ -190,8 +193,7 @@ class FUSION:
                 style.color = ftu_color;
 
             } else {
-                style.display = none;
-                style.fillOpacity = 0.0;
+                style.color = ftu_color;
             }           
                                        
             return style;
@@ -202,9 +204,22 @@ class FUSION:
         self.ftu_filter = assign("""function(feature,context){
                 const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.hideout;
                 
-                if ("Main_Cell_Types" in feature.properties){
-                    if (current_cell in feature.properties.Main_Cell_Types){
-                        var cell_value = feature.properties.Main_Cell_Types[current_cell];
+                if (current_cell){
+                    if ("Main_Cell_Types" in feature.properties){
+                        if (current_cell in feature.properties.Main_Cell_Types){
+                            var cell_value = feature.properties.Main_Cell_Types[current_cell];
+                            if (cell_value >= filter_vals[0]){
+                                if (cell_value <= filter_vals[1]){
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                        }
+                    } else if (current_cell in feature.properties){
+                        var cell_value = feature.properties[current_cell];
                         if (cell_value >= filter_vals[0]){
                             if (cell_value <= filter_vals[1]){
                                 return true;
@@ -214,18 +229,9 @@ class FUSION:
                         } else {
                             return false;
                         }
-                    }
-                } else if (current_cell in feature.properties){
-                    var cell_value = feature.properties[current_cell];
-                    if (cell_value >= filter_vals[0]){
-                        if (cell_value <= filter_vals[1]){
-                            return true;
-                        } else {
-                            return false;
-                        }
                     } else {
-                        return false;
-                    }
+                        return true;
+                    }        
                 } else {
                     return true;
                 }
@@ -1113,8 +1119,8 @@ class FUSION:
                     
             self.filter_vals = filter_vals
 
+        # Extracting cell val if there are sub-properties
         if not cell_val is None:
-            # Extracting cell val if there are sub-properties
             if '-->' in cell_val:
                 cell_val_parts = cell_val.split(' --> ')
                 m_prop = cell_val_parts[0]
@@ -1160,70 +1166,74 @@ class FUSION:
                 filter_max_val = 1.0
                 filter_disable = True
             
-            else:
-                # For other morphometric properties
-                self.current_cell = cell_val
+        else:
+            # For other morphometric properties
+            self.current_cell = cell_val
+            if not cell_val is None:
                 self.update_hex_color_key(cell_val)
 
                 color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
 
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
                 filter_disable = False
+            else:
+                filter_disable = True
+                filter_max_val = 1
+                color_bar = no_update
 
-            self.cell_vis_val = vis_val/100
+        self.cell_vis_val = vis_val/100
 
-            new_children = [
+        new_children = [
+            dl.Overlay(
+                dl.LayerGroup(
+                    dl.GeoJSON(data = self.wsi.map_dict['FTUs'][struct]['geojson'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
+                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=self.cell_vis_val, ftu_color = self.ftu_colors[struct],filter_vals = self.filter_vals),
+                                hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'],dashArray='')),
+                                children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
+                ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
+            )
+            for struct in self.wsi.map_dict['FTUs']
+        ]
+        new_children += [
+            dl.Overlay(
+                dl.LayerGroup(
+                    dl.GeoJSON(data = self.wsi.spot_dict['geojson'], id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = self.ftu_colors['Spots'],filter_vals = self.filter_vals),
+                                hoverStyle = arrow_function(dict(weight=5,color=self.wsi.spot_dict['hover_color'],dashArray='')),
+                                children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],
+                                zoomToBounds=False)
+                ),name = 'Spots', checked = False, id = self.wsi.item_id+'_Spots'
+            )
+        ]
+
+        for m_idx,man in enumerate(self.wsi.manual_rois):
+            new_children.append(
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = self.wsi.map_dict['FTUs'][struct]['geojson'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=self.cell_vis_val, ftu_color = self.ftu_colors[struct],filter_vals = self.filter_vals),
-                                    hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'],dashArray='')),
-                                    children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
-                    ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
+                        dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white',filter_vals = self.filter_vals),
+                                    hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'],dashArray='')),
+                                    children = [dl.Popup(id=man['popup_id'])])
+                    ), name = f'Manual ROI {m_idx+1}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
                 )
-                for struct in self.wsi.map_dict['FTUs']
-            ]
-            new_children += [
+            )
+
+        for mark_idx,mark in enumerate(self.wsi.marked_ftus):
+            new_children.append(
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = self.wsi.spot_dict['geojson'], id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = self.ftu_colors['Spots'],filter_vals = self.filter_vals),
-                                    hoverStyle = arrow_function(dict(weight=5,color=self.wsi.spot_dict['hover_color'],dashArray='')),
-                                    children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],
-                                    zoomToBounds=False)
-                    ),name = 'Spots', checked = False, id = self.wsi.item_id+'_Spots'
+                        dl.GeoJSON(data = mark['geojson'], id = mark['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white', filter_vals = self.filter_vals),
+                                    hoverStyle = arrow_function(dict(weight=5,color = mark['hover_color'],dashArray='')),
+                                    children = [])
+                    ), name = f'Marked FTUs {mark_idx+1}', checked = True, id = self.wsi.item_id+f'_marked_ftus{mark_idx}'
                 )
-            ]
+            )
 
-            for m_idx,man in enumerate(self.wsi.manual_rois):
-                new_children.append(
-                    dl.Overlay(
-                        dl.LayerGroup(
-                            dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
-                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white',filter_vals = self.filter_vals),
-                                        hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'],dashArray='')),
-                                        children = [dl.Popup(id=man['popup_id'])])
-                        ), name = f'Manual ROI {m_idx+1}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
-                    )
-                )
+        self.current_overlays = new_children
+                    
+        return new_children, color_bar, filter_max_val, filter_disable
 
-            for mark_idx,mark in enumerate(self.wsi.marked_ftus):
-                new_children.append(
-                    dl.Overlay(
-                        dl.LayerGroup(
-                            dl.GeoJSON(data = mark['geojson'], id = mark['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
-                                       hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white', filter_vals = self.filter_vals),
-                                       hoverStyle = arrow_function(dict(weight=5,color = mark['hover_color'],dashArray='')),
-                                       children = [])
-                        ), name = f'Marked FTUs {mark_idx+1}', checked = True, id = self.wsi.item_id+f'_marked_ftus{mark_idx}'
-                    )
-                )
-
-            self.current_overlays = new_children
-                        
-            return new_children, color_bar, filter_max_val, filter_disable
-        else:
-            raise exceptions.PreventUpdate
 
     def update_cell_hierarchy(self,cell_clickData):
         # Loading the cell-graphic and hierarchy image
@@ -1739,7 +1749,7 @@ class FUSION:
 
         img_list = []
         for idx,s in enumerate(sample_info):
-            print(f's: {s}')
+            #print(f's: {s}')
             image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['layer_idx'],s['compartment_idx'])
             
             img_list.append(resize(np.array(image_region),output_shape=(512,512,3)))
