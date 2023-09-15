@@ -1373,7 +1373,7 @@ class GirderHandler:
             self.current_collection['id'].append(self.gc.get('resource/lookup',parameters={'path':p,})['_id'])
 
             # Getting contents of base collection
-            collection_contents = self.gc.get(f'resource/{self.current_collection["id"][-1]}/items',parameters={'type':p_type})
+            collection_contents = self.gc.get(f'resource/{self.current_collection["id"][-1]}/items',parameters={'type':p_type,'limit':1000}) 
             # Reducing list to only images
             collection_slides = [i for i in collection_contents if 'largeImage' in i]
             # folderIds for each item (determining ordering of slides)
