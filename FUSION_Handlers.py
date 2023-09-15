@@ -25,24 +25,28 @@ import shutil
 from PIL import Image
 from io import BytesIO
 import requests
+from math import ceil
+import base64
+import datetime
 
 import plotly.express as px
 import plotly.graph_objects as go
+from skimage.draw import polygon_perimeter
 
 from dash import dcc, ctx, Dash, dash_table
 import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 import dash_leaflet as dl
+import dash_mantine_components as dmc
+import dash_uploader as du
 
 from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function
 
-from dataclasses import dataclass, field
-from typing import Callable, List, Union
-from dash.dependencies import handle_callback_args
-from dash.dependencies import Input, Output, State
-
 import girder_client
+from tqdm import tqdm
+from timeit import default_timer as timer
+
 
 
 class LayoutHandler:
@@ -56,9 +60,9 @@ class LayoutHandler:
         self.description_dict = {}
 
         self.info_button_idx = -1
+        self.cli_list = None
 
         self.gen_welcome_layout()
-        #self.gen_uploader_layout()
 
     def gen_info_button(self,text):
         
@@ -70,7 +74,9 @@ class LayoutHandler:
             id={'type':'info-button','index':self.info_button_idx}
             ),
             dbc.Popover(
-                text,
+                children = [
+                    html.Img(src='./assets/fusey_trans.png',height=20,width=20),
+                    text],
                 target = {'type':'info-button','index':self.info_button_idx},
                 body=True,
                 trigger='hover'
@@ -79,10 +85,11 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self,cell_types, center_point, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds, cli_list = None):
+    def gen_vis_layout(self, wsi, cli_list = None):
 
+        #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
-
+        center_point = [0.5*(wsi.map_bounds[0][0]+wsi.map_bounds[1][0]),0.5*(wsi.map_bounds[0][1]+wsi.map_bounds[1][1])]
         # Description and instructions card
         vis_description = [
             html.P('FUSION was designed by the members of the CMI Lab at the University of Florida in collaboration with HuBMAP'),
@@ -98,35 +105,48 @@ class LayoutHandler:
         self.initial_overlays = [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = map_dict['FTUs'][struct]['geojson'], id = map_dict['FTUs'][struct]['id'], options = dict(color = map_dict['FTUs'][struct]['color']),
-                        hoverStyle = arrow_function(dict(weight=5, color = map_dict['FTUs'][struct]['hover_color'], dashArray = '')))),
+                    dl.GeoJSON(data = wsi.map_dict['FTUs'][struct]['geojson'], id = wsi.map_dict['FTUs'][struct]['id'], options = dict(style=dict(color = wsi.map_dict['FTUs'][struct]['color'])),
+                        hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
+                        children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
                 name = struct, checked = True, id = struct)
-        for struct in map_dict['FTUs']
+        for struct in wsi.map_dict['FTUs']
         ] 
 
         self.initial_overlays+= [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = spot_dict['geojson'], id = spot_dict['id'], options = dict(color = spot_dict['color']),
-                        hoverStyle = arrow_function(dict(weight=5, color = spot_dict['hover_color'], dashArray = '')))),
+                    dl.GeoJSON(data = wsi.spot_dict['geojson'], id = wsi.spot_dict['id'], options = dict(style=dict(color = wsi.spot_dict['color'])),
+                        hoverStyle = arrow_function(dict(weight=5, color = wsi.spot_dict['hover_color'], dashArray = '')),
+                        children = [dl.Popup(id=wsi.spot_dict['popup_id'])],
+                        zoomToBounds=True)),
                 name = 'Spots', checked = False, id = 'Spots')
         ]
 
-
         map_children = [
-            dl.TileLayer(url = map_dict['url'], tileSize = tile_size, id = 'slide-tile'),
+            dl.TileLayer(id = 'slide-tile',
+                         url = wsi.map_dict['url'],
+                         tileSize = wsi.tile_dims[0]
+                        ),
+            dl.FullScreenControl(position='topleft'),
             dl.FeatureGroup(id='feature-group',
                             children = [
                                 dl.EditControl(id = {'type':'edit_control','index':0},
-                                                draw = dict(line=False, circle = False, circlemarker=False))
+                                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
+                                                position='topleft')
                             ]),
-            dl.LayerGroup(id='mini-label'),
-            html.Div(id='colorbar-div',children = [dl.Colorbar(id='map-colorbar')]),
-            dl.LayersControl(id='layer-control',children = self.initial_overlays)
+            html.Div(id='colorbar-div',
+                     children = [
+                         dl.Colorbar(id='map-colorbar')
+                         ]),
+            dl.LayersControl(id='layer-control',
+                             children = self.initial_overlays
+                             ),
+            dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
+            html.Div(id='ask-fusey-box',style={'visibility':'hidden','position':'absolute','top':'50px','right':'10px','zIndex':'1000'}),
         ]
 
         map_layer = dl.Map(
-            center = center_point, zoom = 3, minZoom = 0, maxZoom = zoom_levels, crs='Simple',bounds = map_bounds,
+            center = center_point, zoom = 3, minZoom = 0, maxZoom = wsi.zoom_levels-1, crs='Simple',bounds = wsi.map_bounds,
             style = {'width':'100%','height':'80vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             children = map_children
@@ -142,13 +162,16 @@ class LayoutHandler:
                 html.Div(
                     map_layer
                 )
-            ]),
-            dbc.Row([html.Div(id='current-hover')])
+            ])
         ], style = {'marginBottom':'20px'})
 
         # Cell type proportions and cell state distributions
         roi_pie = dbc.Card([
             dbc.CardBody([
+                dbc.Row([
+                    html.P('This tab displays the cell type and state proportions for cell types contained within specific FTU & Spot boundaries')
+                ]),
+                html.Hr(),
                 html.Div(id = 'roi-pie-holder')
             ])
         ])
@@ -248,6 +271,10 @@ class LayoutHandler:
         cell_card = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
+                    html.P('Use this tab for graphical selection of specific cell types along the nephron')
+                ]),
+                html.Hr(),
+                dbc.Row([
                     dbc.Col([
                         dbc.Row([
                             html.H2('Nephron Diagram')
@@ -259,9 +286,9 @@ class LayoutHandler:
                     ],md=5),
                     dbc.Col([
                         dbc.Tabs([
-                            dbc.Tab(cell_graphic_tab, label = 'Cell Graphic'),
+                            dbc.Tab(cell_graphic_tab, label = 'Cell Graphic',tab_id = 'cell-graphic-tab'),
                             dbc.Tab(cell_hierarchy_tab, label = 'Cell Hierarchy')
-                        ])
+                        ],active_tab='cell-graphic-tab')
                     ],md=7)
                 ],align='center')
             ]),
@@ -278,9 +305,13 @@ class LayoutHandler:
 
         ftu_list = ['glomerulus','Tubules']
         plot_types = ['TSNE','UMAP']
-        labels = ['Cluster','image_id']+cell_types.copy()
+        labels = ['Cluster','image_id']+wsi.properties_list
         # Cluster viewer tab
         cluster_card = dbc.Card([
+            dbc.Row([
+                html.P('Use this tab to dynamically view clustering results of morphological properties for select FTUs')
+            ]),
+            html.Hr(),
             dbc.Row([
                 dbc.Col([
                     dbc.Card(
@@ -289,7 +320,8 @@ class LayoutHandler:
                             dbc.CardHeader(
                                 children = [
                                     dbc.Row([
-                                        dbc.Col('Plot Options',md=11),
+                                        dbc.Col('Plot Options',md=7),
+                                        dbc.Col(dbc.Button('Update Data!',id={'type':'update-graph-data','index':0},color='danger'),md=4),
                                         dbc.Col(self.gen_info_button('Select different plot options to update the graph!'),md=1)
                                     ])
 
@@ -388,8 +420,8 @@ class LayoutHandler:
                                                     dbc.Col([
                                                         dcc.Graph(id='selected-cell-types',figure=go.Figure()),
                                                         self.gen_info_button('Click on a section of the pie chart to view cell state proportions')
-                                                        ]),
-                                                    dbc.Col(dcc.Graph(id='selected-cell-states',figure=go.Figure()))
+                                                        ],md=6),
+                                                    dbc.Col(dcc.Graph(id='selected-cell-states',figure=go.Figure()),md=6)
                                                 ]
                                             )
                                         ]
@@ -407,7 +439,7 @@ class LayoutHandler:
         # Converting the cell_types list into a dictionary to disable some
         disable_list = []
         cell_types_list = []
-        for c in slide_properties:
+        for c in wsi.properties_list:
             if c not in disable_list:
                 cell_types_list.append({'label':c,'value':c,'disabled':False})
             else:
@@ -424,6 +456,10 @@ class LayoutHandler:
         extract_card = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
+                    html.P('Use this tab for exporting data from current views')
+                ]),
+                html.Hr(),
+                dbc.Row([
                     dbc.Label('Select data for download',html_for = 'data-select'),
                     dcc.Dropdown(self.data_options,placeholder = 'Select Data for Download',multi=True,id='data-select')
                 ]),
@@ -436,9 +472,21 @@ class LayoutHandler:
 
         # Test CLI tab
         # Accessing analyses/cli plugins for applying to data in FUSION
-        available_clis = cli_list
+        if cli_list is None:
+            if self.cli_list is not None:
+                available_clis = self.cli_list
+            else:
+                available_clis = []
+        else:
+            available_clis = cli_list
+            self.cli_list = cli_list
+
         cli_tab = dbc.Card([
             dbc.CardBody([
+                dbc.Row([
+                    html.P('Use this tab for running custom plugins')
+                ]),
+                html.Hr(),
                 dbc.Row([
                     dbc.Label('Select CLI to run:',html_for='cli-drop'),
                     html.B(),
@@ -469,64 +517,124 @@ class LayoutHandler:
             ])
         ])
 
+        # Overlays control tab
+        combined_colors_dict = {}
+        for f in wsi.map_dict['FTUs']:
+            combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
+        
+        combined_colors_dict['Spots'] = {'color':wsi.spot_dict['color']}
+
+        overlays_tab = dbc.Card([
+            dbc.CardBody([
+                dbc.Row([
+                    html.P('Use this tab for controlling properties of FTU & Spot overlays')
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        html.H6("Select Cell for Overlaid Heatmap Viewing",className="cell-select"),
+                        self.gen_info_button('Select a cell type or metadata property to change FTU overlay colors'),
+                        html.Div(
+                            id = 'cell-select-div',
+                            children=[
+                                dcc.Dropdown(cell_types_list,placeholder='Select Property for Overlaid Heatmap',id='cell-drop')
+                            ]
+                        )
+                    ])
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Label(
+                            "Adjust Transparency of Heatmap",
+                            html_for="vis-slider"
+                        ),
+                        self.gen_info_button('Change transparency of overlaid FTU colors between 0(fully see-through) to 100 (fully opaque)'),
+                        dcc.Slider(
+                            id='vis-slider',
+                            min=0,
+                            max=100,
+                            step=10,
+                            value=50
+                        )
+                    ])
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Label(
+                            "FTUs Filter by Overlay Value",html_for="filter-slider"
+                        ),
+                        self.gen_info_button('Set a range of values to only view FTUs with that overlay value'),
+                        dcc.RangeSlider(
+                            id = 'filter-slider',
+                            min=0.0,
+                            max=1.0,
+                            step = 0.01,
+                            value = [0.0,1.0],
+                            marks=None,
+                            tooltip = {'placement':'bottom','always_visible':True},
+                            allowCross=False,
+                            disabled = True
+                        )
+                    ])
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Label(
+                            'FTU Boundary Color Picker',
+                            html_for = 'ftu-bound-opts'
+                        )
+                    ])
+                ]),
+                dbc.Row([
+                    dbc.Tabs(
+                        id = 'ftu-bound-opts',
+                        children = [
+                            dbc.Tab(
+                                children = [
+                                    dbc.Row([
+                                        dbc.Col([
+                                            html.Div(
+                                                dmc.ColorPicker(
+                                                    id =  {'type':'ftu-bound-color','index':idx},
+                                                    format = 'hex',
+                                                    value = combined_colors_dict[struct]['color'],
+                                                    fullWidth=True
+                                                ),
+                                                style = {'width':'30vh'}
+                                            )
+                                        ],md=12,align='center')
+                                    ],align='center',style={'marginTop':'5px','marginLeft':'10px'})
+                                ], label = struct
+                            )
+                            for idx,struct in enumerate(list(combined_colors_dict.keys()))
+                        ]
+                    )
+                ])
+            ])
+        ])
+
+        # List of all tools tabs
         tool_tabs = [
-            dbc.Tab(roi_pie, label = "Cell Composition"),
-            dbc.Tab(cell_card,label = "Cell Card"),
+            dbc.Tab(overlays_tab, label = 'Overlays',tab_id='overlays-tab'),
+            dbc.Tab(roi_pie, label = "Cell Compositions"),
+            dbc.Tab(cell_card,label = "Cell Graphics"),
             dbc.Tab(cluster_card,label = 'Morphological Clustering'),
             dbc.Tab(extract_card,label = 'Download Data'),
-            dbc.Tab(cli_tab,label = 'Run Analyses')
+            dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True),
         ]
         
-
-        mini_options = ['All Main Cell Types','Cell States for Current Cell Type','None']
         tools = [
             dbc.Card(
                 id='tools-card',
                 children=[
                     dbc.CardHeader("Tools"),
                     dbc.CardBody([
-                        dbc.Row([
-                            dbc.Col([
-                                html.H6("Select Cell for Overlaid Heatmap Viewing",className="cell-select"),
-                                self.gen_info_button('Select a cell type or metadata property to change FTU overlay colors'),
-                                html.Div(
-                                    id = 'cell-select-div',
-                                    children=[
-                                        dcc.Dropdown(cell_types_list,cell_types_list[0]['value'],id='cell-drop')
-                                    ]
-                                )
-                            ],md=6),
-                            dbc.Col([
-                                html.H6("Options for Overlaid Minicharts",className='mini-select'),
-                                self.gen_info_button('Select an option to change what information is presented in overlaid pie charts'),
-                                html.Div(
-                                    id='mini-select-div',
-                                    children=[
-                                        dcc.Dropdown(mini_options,mini_options[0],id='mini-drop')
-                                    ]
-                                )
-                            ])
-                        ]),
-                        html.Hr(),
                         dbc.Form([
                             dbc.Row([
-                                dbc.Col([
-                                    dbc.Label(
-                                        "Adjust Transparency of Heatmap",
-                                        html_for="vis-slider"
-                                    ),
-                                    self.gen_info_button('Change transparency of overlaid FTU colors between 0(fully see-through) to 100 (fully opaque)'),
-                                    dcc.Slider(
-                                        id='vis-slider',
-                                        min=0,
-                                        max=100,
-                                        step=10,
-                                        value=50
-                                    )
-                                ])
-                            ]),
-                            dbc.Row([
-                                dbc.Tabs(tool_tabs)
+                                dbc.Tabs(tool_tabs,active_tab = 'overlays-tab')
                             ])
                         ])
                     ])
@@ -581,6 +689,13 @@ class LayoutHandler:
 
         dataset_df = pd.DataFrame.from_records(combined_dataset_dict)
 
+        # Progress bar and cancel button
+        p_bar_layout = html.Div([
+            dbc.Row([
+                dbc.Col(html.Progress(id='build-progress-bar',value="0"),md=10),
+                dbc.Col(html.Button(id='build-cancel-button',n_clicks=0,children = ['Cancel Dataset Load']),md=2)
+            ])
+        ])
 
         # Table with a bunch of filtering and tooltip info
         table_layout = html.Div([
@@ -620,6 +735,7 @@ class LayoutHandler:
                     html.Hr(),
                     self.gen_info_button('Click on one of the circles in the far left of the table to load metadata for that dataset. You can also filter/sort the rows using the arrow icons in the column names and the text input in the first row'),
                     table_layout,
+                    html.B(),
                     html.H3('Select Slides to include in current session'),
                     self.gen_info_button('Select/de-select slides to add/remove them from the metadata plot and current viewing session'),
                     html.Hr(),
@@ -655,29 +771,55 @@ class LayoutHandler:
         collection_list = [i['name'] for i in dataset_handler.get_collections()]
         collection_list += ['New Collection']
         file_upload_card = dbc.Card([
-            dbc.CardHeader('File Uploads'),
+            dbc.CardHeader([
+                'File Uploads',
+                self.gen_info_button('Select which type of spatial -omics data you are uploading to determine which files are needed for pre-processing steps')
+                ]),
             dbc.CardBody([
                 dbc.Row([
-                    #dbc.Col([
-                    #    dbc.Label('Select Collection or Make New Collection',html_for='collect-select'),
-                    #    dcc.Dropdown(collection_list,placeholder='Collections',id='collect-select'),
-                    #    html.B(),
-                    #    dcc.Input(type='text',placeholder='New Collection Name',id='new-collect-entry',disabled=True,style={'marginTop':'2px'})
-                    #],md=2),
-                    dbc.Col([
-                        dbc.Label('Select Upload type:',html_for='upload-type'),
-                        dcc.Dropdown(upload_types, placeholder = 'Select Spatial -omics method', id = 'upload-type')
-                    ],md=6,style={'marginRight':'20px'}),
-                    dbc.Col(html.Div(id='upload-requirements'),md=6,style={'marginLeft':'20px'})
-                ],align='center')
+                    dbc.Col(
+                        html.Div([
+                            dbc.Label('Select Upload type:',html_for='upload-type'),
+                            dcc.Dropdown(upload_types, placeholder = 'Select Spatial -omics method', id = 'upload-type')
+                            ]
+                        )
+                    ),
+                    dbc.Col(
+                        dcc.Loading(
+                            html.Div(
+                                id='upload-requirements',
+                                children = []
+                            )
+                        )
+                    )
+                ],
+                align='center')
             ])
         ])
 
         # Slide QC card:
         slide_qc_card = dbc.Card([
-            dbc.CardHeader('Slide Quality Control Results'),
+            dbc.CardHeader([
+                'Slide Quality Control Results',
+                self.gen_info_button('HistoQC-derived metrics for slide quality. These can be used to determine resulting quality of segmentation results')
+                ]),
             dbc.CardBody([
-                html.Div(id='slide-qc-results')
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            id = 'slide-thumbnail-holder',
+                            children = []
+                        )
+                    )
+                ]),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            id='slide-qc-results',
+                            children = []
+                        )
+                    )
+                ])
             ])
         ])
 
@@ -686,13 +828,22 @@ class LayoutHandler:
             {'label':'Kidney','value':'Kidney','disabled':False}
         ]
         mc_model_card = dbc.Card([
-            dbc.CardHeader('Multi-Compartment Model Selection'),
+            dbc.CardHeader([
+                'Multi-Compartment Model Selection',
+                self.gen_info_button('Selecting organ here determines which model to use to extract FTUs')
+                ]),
             dbc.CardBody([
                 dbc.Row([
-                    dbc.Col([
-                        dbc.Label('Select Organ:',html_for='organ-type'),
-                        dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True)
-                    ])
+                    dbc.Col(
+                        html.Div([
+                            dbc.Label('Select Organ:',html_for='organ-type'),
+                            dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True)
+                        ]),md=12
+                    )
+                ]),
+                dbc.Row([
+                    html.Div(id = 'seg-woodshed',children = [],style={'overflow':'scroll'}),
+                    html.Progress(id='seg-progress',value="0")
                 ])
             ])
         ])
@@ -703,49 +854,121 @@ class LayoutHandler:
             {'label':'Use Plugin','value':'plugin','disabled':True}
         ]
         sub_comp_card = dbc.Card([
-            dbc.CardHeader('Sub-Compartment Segmentation'),
+            dbc.CardHeader([
+                'Sub-Compartment Segmentation',
+                self.gen_info_button('This step allows for specific morphometric calculation for major sub-compartments on all FTUs in a dataset')
+                ]),
             dbc.CardBody([
                 dbc.Row([
-                    dbc.Col([
-                        dbc.Label('Select FTU',html_for='ftu-select'),
-                        dcc.Dropdown(placeholder='FTU Options',id='ftu-select')
-                    ],md=6),
-                    dbc.Col(html.Div(id='seg-qc-results'),md=6)
-                ]),
-                html.Hr(),
-                dbc.Row([
-                    dbc.Col(dcc.Graph(figure=go.Figure(),id='ex-ftu-img'),md=8),
-                    dbc.Col([
-                        dbc.Label('Example FTU Segmentation Options',html_for='ex-ftu-opts'),
-                        html.Hr(),
-                        html.Div(id='ex-ftu-opts',children = [
-                            dcc.RadioItems(['Overlaid','Side-by-Side'],value='Overlaid',inline=True,id='ex-ftu-view'),
-                            html.B(),
-                            dbc.Label('Overlaid Mask Transparency:',html_for='ex-ftu-slider'),
-                            dcc.Slider(0,100,5,value=50,marks=None,vertical=False,tooltip={'placement':'bottom'})
-                        ]),
-
-                    ],md=4)
-                ]),
-                html.Hr(),
-                dbc.Row([
-                    dbc.Col(dbc.Label('Sub-compartment Segmentation Method:',html_for='sub-comp-method'),md=4),
                     dbc.Col(
-                        [
-                            dcc.Dropdown(sub_comp_methods_list,placeholder='Available Methods',id='sub-comp-method')
-                        ],md=8
+                        html.Div([
+                            dbc.Label('Select FTU',html_for='ftu-select'),
+                            dcc.Dropdown(placeholder='FTU Options',id='ftu-select')
+                        ]),md=12)
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            children = [
+                                dcc.Graph(figure=go.Figure(),id='ex-ftu-img')
+                            ]
+                        ),md=12)
+                ]),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            children = [
+                                dbc.Label('Example FTU Segmentation Options',html_for='ex-ftu-opts'),
+                                html.Hr(),
+                                html.Div(
+                                    id='ex-ftu-opts',
+                                    children = [
+                                        dcc.RadioItems(
+                                            [
+                                                {'label':html.Span('Overlaid',style={'marginBottom':'5px','marginLeft':'5px','marginRight':'10px'}),'value':'Overlaid'},
+                                                {'label':html.Span('Side-by-side',style={'marginLeft':'5px'}),'value':'Side-by-side'}
+                                            ],
+                                                value='Overlaid',inline=True,id='ex-ftu-view'),
+                                        html.B(),
+                                        dbc.Label('Overlaid Mask Transparency:',html_for='ex-ftu-slider',style={'marginTop':'10px'}),
+                                        dcc.Slider(0,1,0.05,value=0,marks=None,vertical=False,tooltip={'placement':'bottom'},id='ex-ftu-slider'),
+                                        html.B(),
+                                        dbc.Row([
+                                            dbc.Col(dbc.Button('Previous',id='prev-butt',outline=True,color='secondary',className='d-grid gap-2 col-6 mx-auto')),
+                                            dbc.Col(dbc.Button('Next',id='next-butt',outline=True,color='secondary',className='d-grid gap-2 col-6 mx-auto'))
+                                        ],style={'marginBottom':'15px','display':'flex'}),
+                                        html.Hr(),
+                                        dbc.Row([
+                                            dbc.Col(dbc.Button('Go to Feature Extraction',id='go-to-feat',color='success',className='d-grid gap-2 col-12 mx-auto'))
+                                        ])
+
+                                    ]
+                                )
+                            ]
+                        ),md=12)
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            children = [
+                                dbc.Label('Sub-compartment Segmentation Method:',html_for='sub-comp-method')
+                            ]
+                        ),md=4),
+                    dbc.Col(
+                        html.Div(
+                            children = [
+                                dcc.Dropdown(sub_comp_methods_list,placeholder='Available Methods',id='sub-comp-method')
+                            ]
+                        ),md=8
+                    ),
+                    dbc.Col(
+                        self.gen_info_button('Choose whether to use manual thresholds or a pre-loaded sub-compartment segmentation plugin')
                     )
                 ]),
-                dbc.Row(html.Div(id='sub-comp-tabs'))
+                dbc.Row([
+                    dbc.Col(
+                        html.Div(
+                            id='sub-comp-tabs',
+                            children = [
+                                dbc.Label('Sub-Compartment Thresholds',html_for='sub-thresh-slider'),
+                                dcc.RangeSlider(
+                                    id = 'sub-thresh-slider',
+                                    min = 0.0,
+                                    max = 255.0,
+                                    step = 5.0,
+                                    value = [0.0,50.0,120.0],
+                                    marks = {
+                                        0.0:{'label':'Luminal Space: 0','style':'rgb(0,255,0)'},
+                                        50.0:{'label':'PAS: 50','style':'rgb(255,0,0)'},
+                                        120.0:{'label':'Nuclei: 120','style':'rgb(0,0,255)'}
+                                    },
+                                    tooltip = {'placement':'top','always_visible':False},
+                                    allowCross=False
+                                )
+                            ]
+                        ),md=11, style = {'marginLeft':'20px','marginRight':'20px'}
+                    ),
+                    dbc.Col(
+                        self.gen_info_button('Adjust thresholds here to include/exclude pixels from each sub-compartment'),
+                        md = 1
+                    )
+                ])
             ])
         ])
 
         # Feature extraction card:
         feat_extract_card = dbc.Card([
-            dbc.CardHeader('Morphometric Feature Extraction'),
-            dbc.CardBody([
-                html.Div(id='feature-items')
-            ])
+            dbc.CardHeader([
+                'Morphometric Feature Extraction',
+                self.gen_info_button('Select which morphometrics and which FTUs to quantify and then hit the extract features button. These features are used for high-dimensional clustering and visualization.')
+                ]),
+            dbc.CardBody(
+                dbc.Row([
+                    dbc.Col(html.Div(id='feature-items'))
+                ])
+            )
         ])
 
         # Progressbar
@@ -755,18 +978,44 @@ class LayoutHandler:
                 html.H1('Dataset Uploader'),
                 html.Hr(),
                 dbc.Row(
-                    file_upload_card
+                    children = [
+                        dbc.Col(file_upload_card,md=12)
+                    ]
                 ),
                 html.Hr(),
-                dbc.Row([
-                    dbc.Col(slide_qc_card,style={'margin-right':'20px'}),
-                    dbc.Col(mc_model_card,style={'margin-left':'20px'})
-                ]),
+                dbc.Row(
+                    children = [
+                        dbc.Col(
+                            dbc.Row(
+                                children = [
+                                    dbc.Col(slide_qc_card,md=6),
+                                    dbc.Col(mc_model_card,md=6)
+                                ]
+                            ),md=12
+                        )
+                    ],
+                    align='center',
+                    id = 'post-upload-row',
+                    style = {'display':'none'}
+                ),
                 html.Hr(),
-                dbc.Row([
-                    dbc.Col(sub_comp_card,style={'margin-right':'20px'}),
-                    dbc.Col(feat_extract_card,style={'margin-left':'20px'})
-                ]),
+                dbc.Row(
+                    children = [
+                        dbc.Col(
+                            html.Div(
+                                dbc.Row(
+                                    children = [
+                                        dbc.Col(html.Div(sub_comp_card),md=6),
+                                        dbc.Col(html.Div(feat_extract_card),md=6)
+                                    ]
+                                )
+                            ),md=12
+                        )
+                    ],
+                    align='center',
+                    id = 'post-segment-row',
+                    style={'display':'none'}
+                ),
                 html.Hr(),
                 dbc.Row(p_bar)
 
@@ -824,7 +1073,7 @@ class LayoutHandler:
         self.layout_dict['welcome'] = welcome_layout
         self.description_dict['welcome'] = welcome_description
 
-    def gen_initial_layout(self,slide_names):
+    def gen_initial_layout(self,slide_names,initial_user:str):
 
         # welcome layout after initialization and information and buttons to go to other areas
 
@@ -832,7 +1081,7 @@ class LayoutHandler:
         header = dbc.Navbar(
             dbc.Container([
                 dbc.Row([
-                    dbc.Col(html.Img(id='logo',src=('./assets/FUSION-LAB_navigator.png'),height='100px'),md='auto'),
+                    dbc.Col(html.Img(id='logo',src=('./assets/Fusion-Logo-Navigator-Color01.png'),height='100px'),md='auto'),
                     dbc.Col([
                         html.Div([
                             html.H3('FUSION',style={'color':'rgb(255,255,255)'}),
@@ -850,7 +1099,7 @@ class LayoutHandler:
                                         'User Survey',
                                         id = 'user-survey-button',
                                         outline = True,
-                                        color = 'secondary',
+                                        color = 'primary',
                                         href = ' https://ufl.qualtrics.com/jfe/form/SV_1A0CcKNLhTnFCHI',
                                         style = {'textTransform':'none'}
                                     )
@@ -860,7 +1109,7 @@ class LayoutHandler:
                                         "Cell Cards",
                                         id='cell-cards-button',
                                         outline=True,
-                                        color="secondary",
+                                        color="primary",
                                         href="https://cellcards.org/index.php",
                                         style={"textTransform":"none"}
                                     )
@@ -870,7 +1119,7 @@ class LayoutHandler:
                                         "Lab Website",
                                         id='lab-web-button',
                                         outline=True,
-                                        color='secondary',
+                                        color='primary',
                                         href='https://cmilab.nephrology.medicine.ufl.edu',
                                         style={"textTransform":"none"}
                                     )
@@ -884,7 +1133,7 @@ class LayoutHandler:
                 align='center')
                 ], fluid=True),
             dark=True,
-            color="primary",
+            color="dark",
             sticky='fixed',
             style={'marginBottom':'20px'}
         )
@@ -892,12 +1141,12 @@ class LayoutHandler:
         # Sidebar
         sider = html.Div([
             dbc.Offcanvas([
-                html.Img(id='welcome-logo-side',src=('./assets/FUSION-LAB-FINAL.png'),height='315px',width='250px'),
+                html.Img(id='welcome-logo-side',src=('./assets/FUSION-LAB-FINAL.png'),height='315px',width='275px'),
                 dbc.Nav([
-                    dbc.NavLink('Welcome',href='/welcome',active='exact'),
-                    dbc.NavLink('FUSION Visualizer',href='/vis',active='exact'),
-                    dbc.NavLink('Dataset Builder',href='/dataset-builder',active='exact'),
-                    dbc.NavLink('Dataset Uploader',href='/dataset-uploader',active='exact')
+                    dbc.NavLink('Welcome',href='/welcome',active='exact',id='welcome-sidebar'),
+                    dbc.NavLink('FUSION Visualizer',href='/vis',active='exact',id='vis-sidebar'),
+                    dbc.NavLink('Dataset Builder',href='/dataset-builder',active='exact',id='builder-sidebar'),
+                    dbc.NavLink('Dataset Uploader',href='/dataset-uploader',active='exact',id='upload-sidebar')
                 ],vertical=True,pills=True)], id={'type':'sidebar-offcanvas','index':0},style={'background-color':"#f8f9fa"}
             )
         ])
@@ -942,7 +1191,7 @@ class LayoutHandler:
                     dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px'}),
                     dbc.Button('Registered User Login',id={'type':'login-butt','index':0},className='mb-3',style = {'marginLeft':'5px'}),
                     login_popover,
-                    html.Div(id='logged-in-user'),
+                    html.Div(id='logged-in-user',children = [f'Welcome, {initial_user}!']),
                     dbc.Collapse(
                         dbc.Row(
                             dbc.Col(
@@ -1020,14 +1269,27 @@ class LayoutHandler:
 
 class GirderHandler:
     def __init__(self,
-                apiUrl: str):
+                apiUrl: str,
+                username: str,
+                password: str):
         
         self.apiUrl = apiUrl
         self.gc = girder_client.GirderClient(apiUrl = self.apiUrl)
-    
+
+        self.authenticate(username, password)
+        self.get_token()
+
+        self.padding_pixels = 50
+
+        # Initializing blank annotation metadata cache to prevent multiple dsa requests
+        self.cached_annotation_metadata = {}
+
     def authenticate(self, username, password):
         # Getting authentication for user
         #TODO: Add some handling here for incorrect username or password
+        self.username = username
+        self.password = password
+        
         self.gc.authenticate(username,password)
 
     def get_token(self):
@@ -1046,6 +1308,13 @@ class GirderHandler:
         collections_data = self.gc.get('/collection')
 
         return collections_data
+
+    def get_item_name(self,item_id):
+
+        # Getting the name of an item from it's unique id
+        item_name = self.gc.get(f'item/{item_id}')['name']
+
+        return item_name
 
     def get_resource_id(self,resource):
         # Get unique item id from resource path to file
@@ -1077,129 +1346,6 @@ class GirderHandler:
         annotations = self.gc.get(f'annotation/item/{item_id}')
 
         return annotations
-    
-    def convert_json(self,annotations,image_dims,base_dims,tile_dims):
-
-        # Top left and bottom right should be in (x,y) or (lng,lat) format
-        #top_left = [0,tile_dims[0]]
-        #bottom_right = [0,tile_dims[1]]
-
-        # Translation step
-        #base_x_scale = base_dims[0]/(bottom_right[0]-top_left[0])
-        #base_y_scale = base_dims[1]/(bottom_right[1]-top_left[1])
-        base_x_scale = base_dims[0]/tile_dims[0]
-        base_y_scale = base_dims[1]/tile_dims[1]
-
-        # image bounds [maxX, maxY]
-        # bottom_right[0]-top_left[0] --> range of x values in target crs
-        # bottom_right[1]-top_left[1] --> range of y values in target crs
-        # scaling values so they fall into the current map (pixels)
-        #x_scale = (bottom_right[0]-top_left[0])/(image_dims[0])
-        #y_scale = (bottom_right[1]-top_left[1])/(image_dims[1])
-        x_scale = tile_dims[0]/image_dims[0]
-        y_scale = tile_dims[1]/image_dims[1]
-        y_scale*=-1
-        # y_scale has to be inverted because y is measured upward in these maps
-
-        final_ann = {'type':'FeatureCollection','features':[]}
-        for a in annotations:
-            if 'elements' in a['annotation']:
-                f_name = a['annotation']['name']
-                for f in a['annotation']['elements']:
-                    f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]},'properties':{}}
-                    
-                    # This is only for polyline type elements
-                    if f['type']=='polyline':
-                        og_coords = np.squeeze(np.array(f['points']))
-                        
-                        scaled_coords = og_coords.tolist()
-                        scaled_coords = [i[0:-1] for i in scaled_coords]
-                        scaled_coords = [[base_x_scale*((i[0]*x_scale)),base_y_scale*((i[1]*y_scale))] for i in scaled_coords]
-                        f_dict['geometry']['coordinates'] = [scaled_coords]
-
-                    elif f['type']=='rectangle':
-                        width = f['width']
-                        height = f['height']
-                        center = f['center'][0:-1]
-                        # Coords: top left, top right, bottom right, bottom left
-                        bbox_coords = [
-                            [int(center[0])-int(width/2),int(center[1])-int(height/2)],
-                            [int(center[0])+int(width/2),int(center[1])-int(height/2)],
-                            [int(center[0])+int(width/2),int(center[1])+int(height/2)],
-                            [int(center[0])-int(width/2),int(center[1])+int(height/2)]
-                        ]
-                        scaled_coords = [[base_x_scale*(i[0]*x_scale),base_y_scale*(i[1]*y_scale)] for i in bbox_coords]
-                        f_dict['geometry']['coordinates'] = [scaled_coords]
-
-                    # Who even cares about circles and ellipses??
-
-                    # If any user-provided metadata is provided per element add it to "properties" key                       
-                    if 'user' in f:
-                        f_dict['properties'] = f['user']
-
-                    f_dict['properties']['name'] = f_name
-
-                    final_ann['features'].append(f_dict)
-
-
-        return final_ann, base_x_scale*x_scale, base_y_scale*y_scale
-
-    def get_resource_map_data(self,resource):
-        # Getting all of the necessary materials for loading a new slide
-
-        # Step 1: get resource item id
-        # lol
-        if os.sep in resource:
-            item_id = self.get_resource_id(resource)
-        else:
-            item_id = resource
-
-        # Step 2: get resource tile metadata
-        tile_metadata = self.get_tile_metadata(item_id)
-        print(f'tile_metadata: {tile_metadata}')
-        # Step 3: get tile, base, zoom, etc.
-        # Number of zoom levels for an image
-        zoom_levels = tile_metadata['levels']
-        print(f'zoom_levels: {zoom_levels}')
-        # smallest level dimensions used to generate initial tiles
-        base_dims = [
-            tile_metadata['sizeX']/(2**(zoom_levels-1)),
-            tile_metadata['sizeY']/(2**(zoom_levels-1))
-        ]
-        # Getting the tile dimensions (used for all tiles)
-        tile_dims = [
-            tile_metadata['tileWidth'],
-            tile_metadata['tileHeight']
-        ]
-        # Original image dimensions used for scaling annotations
-        image_dims = [
-            tile_metadata['sizeX'],
-            tile_metadata['sizeY']
-        ]
-
-        print(f'base_dims: {base_dims}')
-        print(f'tile_dims: {tile_dims}')
-        print(f'image_dims: {image_dims}')
-
-        # Step 4: Defining bounds of map
-        map_bounds = [[0,image_dims[1]],[0,image_dims[0]]]
-
-        # Step 5: Getting annotations for a resource
-        annotations = self.get_annotations(item_id)
-
-        # Step 6: Converting Histomics/large-image annotations to GeoJSON
-        geojson_annotations, x_scale, y_scale = self.convert_json(annotations,image_dims,base_dims,tile_dims)
-
-        map_bounds[0][1]*=x_scale
-        map_bounds[1][1]*=y_scale
-
-        print(f'map_bounds: {map_bounds}')
-
-        # Step 7: Getting user token and tile url
-        user_token = self.get_token()
-        tile_url = self.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+user_token
-
-        return map_bounds, base_dims, image_dims, tile_dims[0], zoom_levels-1, geojson_annotations, x_scale, y_scale, tile_url
 
     def get_cli_list(self):
         # Get a list of possible CLIs available for current user
@@ -1212,59 +1358,239 @@ class GirderHandler:
 
     def initialize_folder_structure(self,path,path_type):
 
-        self.current_collection_path = path
-        self.current_collection_id = self.gc.get('resource/lookup',parameters={'path':self.current_collection_path})['_id']
+        self.current_collection = {
+            'path':[],
+            'id':[]
+        }
 
-        # Getting contents of base collection
-        collection_contents = self.gc.get(f'resource/{self.current_collection_id}/items',parameters={'type':path_type})
-        # Reducing list to only images
-        collection_slides = [i for i in collection_contents if 'largeImage' in i]
-        # folderIds for each item (determining ordering of slides)
-        slide_folderIds = [i['folderId'] for i in collection_slides]
-        # Assigning each slide to a dictionary by shared folderId
+        # Adding ability to add multiple collections to initialization
+        if type(path)==str:
+            path = [path]
+            path_type = [path_type]
+
         self.slide_datasets = {}
-        for f in np.unique(slide_folderIds):
-            self.slide_datasets[f] = {}
-            folder_name = self.gc.get(f'/folder/{f}')['name']
-            self.slide_datasets[f]['name'] = folder_name
-        
-            folder_slides = [i for i in collection_slides if i['folderId']==f]
 
-            # The item dictionaries for each of the slides will also include metadata, id, etc.
-            self.slide_datasets[f]['Slides'] = folder_slides
+        for p,p_type in zip(path,path_type):
+            self.current_collection['path'].append(p)
+            self.current_collection['id'].append(self.gc.get('resource/lookup',parameters={'path':p,})['_id'])
 
-            # Aggregating non-dictionary metadata
-            folder_slide_meta = [i['meta'] for i in folder_slides]
-            # Get all the unique keys present in this folder's metadata
-            meta_keys = []
-            for i in folder_slide_meta:
-                meta_keys.extend(list(i.keys()))
+            # Getting contents of base collection
+            collection_contents = self.gc.get(f'resource/{self.current_collection["id"][-1]}/items',parameters={'type':p_type,'limit':1000}) 
+            # Reducing list to only images
+            collection_slides = [i for i in collection_contents if 'largeImage' in i]
+            # folderIds for each item (determining ordering of slides)
+            slide_folderIds = [i['folderId'] for i in collection_slides]
+            # Assigning each slide to a dictionary by shared folderId
+            for f in np.unique(slide_folderIds):
+                self.slide_datasets[f] = {}
+                folder_name = self.gc.get(f'/folder/{f}')['name']
+                self.slide_datasets[f]['name'] = folder_name
+            
+                folder_slides = [i for i in collection_slides if i['folderId']==f]
 
-            # Not adding dictionaries to the folder metadata
-            # Assuming the same type is shared for each item sharing a key 
-            #TODO: Include check for types of each member of an item metadata just for safety
-            self.slide_datasets[f]['Metadata'] = {}
-            for m in meta_keys:
-                item_metadata = [item[m] for item in folder_slide_meta if m in item]
-                if type(item_metadata[0])==str:
-                    self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
-                elif type(item_metadata[0])==int or type(item_metadata[0])==float:
-                    self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+                # The item dictionaries for each of the slides will also include metadata, id, etc.
+                self.slide_datasets[f]['Slides'] = folder_slides
+
+                # Aggregating non-dictionary metadata
+                folder_slide_meta = [i['meta'] for i in folder_slides]
+                # Get all the unique keys present in this folder's metadata
+                meta_keys = []
+                for i in folder_slide_meta:
+                    meta_keys.extend(list(i.keys()))
+
+                # Not adding dictionaries to the folder metadata
+                # Assuming the same type is shared for each item sharing a key 
+                #TODO: Include check for types of each member of an item metadata just for safety
+                self.slide_datasets[f]['Metadata'] = {}
+                for m in meta_keys:
+                    item_metadata = [item[m] for item in folder_slide_meta if m in item]
+                    if type(item_metadata[0])==str:
+                        self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
+                    elif type(item_metadata[0])==int or type(item_metadata[0])==float:
+                        self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+    
+    def get_collection_annotation_meta(self,select_ids:list):
+
+        # Iterate through select_ids and extract annotation metadata
+        #TODO: This needs to be more efficient somehow
+        print(f'select_ids: {select_ids}')
+        metadata = []
+        for i in select_ids:
+            start_time = timer()
+            if i not in list(self.cached_annotation_metadata.keys()):
+                item_meta = []
+                #TODO: Chunking error is sometimes triggered here, might just be a local connectivity problem
+                try:
+                    item_annotations = self.gc.get(f'/annotation/item/{i}')
+                    for g_idx,g in enumerate(item_annotations):
+                        if 'annotation' in g:
+                            if 'elements' in g['annotation']:
+                                if not g['annotation']['name']=='Spots':
+                                    for e_idx,e in tqdm(enumerate(g['annotation']['elements'])):
+                                        if 'user' not in e:
+                                            e['user'] = {}
+                                        
+                                        # Adding slide and annotation ids
+                                        e['user']['slide_id'] = i
+                                        e['user']['annotation_id'] = e['id']
+                                        e['user']['compartment_idx'] = e_idx
+                                        e['user']['layer_id'] = g['_id']
+                                        e['user']['layer_idx'] = g_idx
+                                        item_meta.append(e['user'])
+                    self.cached_annotation_metadata[i] = item_meta
+                    print(f'Added: {i} to cached annotation metadata')
+                    metadata.extend(item_meta)
+                except girder_client.HttpError:
+                    print(f'{i} not found! Uh oh!')
+            else:
+                metadata.extend(self.cached_annotation_metadata[i])
+                print(f'Added {i} FROM cached annotation metadata')
+            end_time = timer()
+            print(f'Getting: {i} took: {end_time-start_time}')
+            
+
+        return metadata
 
     def get_image_region(self,item_id,coords_list):
 
-        # Pulling specific region from an image using provided coordinates
-        image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
+        # Checking to make sure coords are within the slide boundaries
+        slide_metadata = self.gc.get(f'/item/{item_id}/tiles')
+
+        # coords_list is organized: [min_x, min_y, max_x, max_y]
+        if coords_list[0]>=0 and coords_list[1]>=0 and coords_list[2]<=slide_metadata['sizeX'] and coords_list[3]<=slide_metadata['sizeY']:
+            # Pulling specific region from an image using provided coordinates
+            image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
+        else:
+            # Wish there was a shorter way to write this
+            if coords_list[0]<0:
+                coords_list[0] = 0
+            if coords_list[1]<0:
+                coords_list[1] = 0
+            if coords_list[2]>slide_metadata['sizeX']:
+                coords_list[2] = slide_metadata['sizeX']
+            if coords_list[3]>slide_metadata['sizeY']:
+                coords_list[3] = slide_metadata['sizeY']
+
+            try:
+                image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
+            except:
+                print('-------------------------------------------------')
+                print(f'Error reading image region from item: {item_id}')
+                print(f'Provided coordinates: {coords_list}')
+                print(f'------------------------------------------------')
+
+                return np.zeros((100,100))
 
         return image_region
 
-    def upload_data(self,data,data_name,target_id):
+    def get_annotation_image(self,slide_id,layer_idx,compartment_idx):
 
-        # Trying to just upload the entire file at once?
-        self.gc.post('/file',data=data,parameters={'parentType':'folder','parentId':target_id,'name':data_name})
+        # Girder does the "annotation_id" a little differently. They have an endpoint that pulls annotation LAYERS by their id gc.get('annotation/{item}')
+        # But not a SPECIFIC annotation. Makes sense because I guess you'd have to read the whole set of annotations anyways
+        start_time = timer()
+        slide_annotations = self.get_annotations(slide_id)
+        end_time = timer()
+        print(f'Getting slides annotations took: {end_time-start_time}')
+
+        matching_annotation = slide_annotations[layer_idx]['annotation']['elements'][compartment_idx]
+
+        start_time = timer()
+        if not matching_annotation is None:
+            ann_coords = np.squeeze(np.array(matching_annotation['points']))
+            min_x = np.min(ann_coords[:,0])-self.padding_pixels
+            min_y = np.min(ann_coords[:,1])-self.padding_pixels
+            max_x = np.max(ann_coords[:,0])+self.padding_pixels
+            max_y = np.max(ann_coords[:,1])+self.padding_pixels
+
+            image_region = np.array(self.get_image_region(slide_id,[min_x,min_y,max_x,max_y]))
+
+            # Creating boundary based on coordinates from annotation
+            #scaled_coordinates = ann_coords.tolist()
+            #x_coords = [i[0]-min_x for i in scaled_coordinates]
+            #y_coords = [i[1]-min_y for i in scaled_coordinates]
+            #height = np.shape(image_region)[0]
+            #width = np.shape(image_region)[1]
+            #cc,rr = polygon_perimeter(y_coords,x_coords,(height,width))
+            #image_region[cc,rr,:] = 0
+
+            #end_time = timer()
+            #print(f'Formatting image annotations took: {end_time-start_time}')
+
+            return image_region
+        else:
+            raise ValueError
+
+    def get_user_folder_id(self,folder_name:str):
+
+        # Finding current user's private folder and returning the parent ID
+        user_folder = f'/user/{self.gc.get("/user/me")["login"]}/{folder_name}'
+        print(f'user_folder: {user_folder}')
+        try:
+            folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder})['_id']
+        except girder_client.HttpError:
+            # This is if the folder doesn't exist yet (only works with one nest so a folder in an already existing folder)
+            parent_id = self.gc.get('/resource/lookup',parameters={'path':'/'.join(user_folder.split('/')[0:-1])})['_id']
+            
+            self.gc.post('/folder',parameters={'parentId':parent_id,'name':folder_name.split('/')[-1],'description':'Folder created by FUSION'})
+            folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder})['_id']
 
 
+        return folder_id
 
+    def get_new_upload_id(self,parent_folder:str):
+
+        # Getting the items in the specified folder and then getting  the id of the newest item
+        folder_items = self.gc.get(f'resource/{parent_folder}/items',parameters={'type':'folder'})
+
+        if len(folder_items)>0:
+            # Getting all the updated datetime strings
+            updated_list = [datetime.datetime.fromisoformat(i['updated']) for i in folder_items]
+            # Getting latest updated file
+            latest_idx = np.argmax(updated_list)
+
+            new_upload_id = folder_items[latest_idx]['_id']
+
+            return new_upload_id
+        else:
+            return None
+
+    def get_job_status(self,job_id:str):
+
+        job_info = self.gc.get(f'/job/{job_id}')
+        print(f'job_info: {job_info}')
+
+        return job_info['status']
+
+    def get_slide_thumbnail(self,item_id:str):
+
+        #thumbnail = Image.open(BytesIO(self.gc.get(f'/item/{item_id}/tiles/thumbnail?token={self.user_token}')))
+        thumbnail = Image.open(BytesIO(requests.get(f'{self.gc.urlBase}/item/{item_id}/tiles/thumbnail?width=200&height=200&token={self.user_token}').content))
+        return thumbnail
+
+    def run_histo_qc(self,folder_id:str):
+
+        print('Running HistoQC')
+        response = self.gc.post(f'/folder/{folder_id}/histoqc')
+        print('Done!')
+        return response
+
+    def get_asset_items(self,assets_path):
+
+        # Key items to grab from assets:
+        # cell_graphics_key
+        # asct+b table
+
+        # Downloading JSON resource
+        cell_graphics_resource = self.gc.get('resource/lookup',parameters={'path':assets_path+'cell_graphics/graphic_reference.json'})
+        self.cell_graphics_key = self.gc.get(f'/item/{cell_graphics_resource["_id"]}/download')
+
+        self.cell_names = []
+        for ct in self.cell_graphics_key:
+            self.cell_names.append(self.cell_graphics_key[ct]['full'])
+
+        # Getting asct+b table
+        asct_b_table_id = self.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
+        self.asct_b_table = pd.read_csv(self.apiUrl+f'item/{asct_b_table_id}/download?token={self.user_token}',skiprows=list(range(10)))
 
     """
     def get_cli_input_list(self,cli_id):
@@ -1506,5 +1832,3 @@ class DownloadHandler:
 
     def extract_manual(self, slide, data):
     """
-
-
