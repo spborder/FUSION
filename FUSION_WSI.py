@@ -10,6 +10,8 @@ import numpy as np
 from shapely.geometry import shape
 import random
 
+from tqdm import tqdm
+
 class DSASlide:
     def __init__(self,
                  slide_name,
@@ -72,7 +74,7 @@ class DSASlide:
 
         # Step 5: Getting annotations for a resource
         self.annotations = self.girder_handler.get_annotations(item_id)
-
+        print(f'Found: {len(self.annotations)} Annotations')
         # Step 6: Converting Histomics/large-image annotations to GeoJSON
         self.geojson_annotations, self.x_scale, self.y_scale = self.convert_json()
 
@@ -106,10 +108,11 @@ class DSASlide:
         ## Error occurs with tile sizes = 256, all work with tile size=240 ##
 
         final_ann = {'type':'FeatureCollection','features':[]}
-        for a in self.annotations:
+        print('Processing annotations')
+        for a in tqdm(self.annotations):
             if 'elements' in a['annotation']:
                 f_name = a['annotation']['name']
-                for f in a['annotation']['elements']:
+                for f in tqdm(a['annotation']['elements']):
                     f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]},'properties':{}}
                     
                     # This is only for polyline type elements
@@ -158,10 +161,15 @@ class DSASlide:
                 self.ftu_colors[f] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
 
         #self.geojson_ftus = {'type':'FeatureCollection', 'features': []}
-        self.ftu_polys = {
-            ftu: [shape(f['geometry']) for f in self.geojson_annotations['features'] if f['properties']['name']==ftu]
-            for ftu in self.ftu_names
-        }
+        self.ftu_polys = {}
+        for ftu in self.ftu_names:
+            self.ftu_polys[ftu] = []
+            for f in self.geojson_annotations['features']:
+                if f['properties']['name']==ftu:
+                    try:
+                        self.ftu_polys[ftu].append(shape(f['geometry']))
+                    except:
+                        print(f'Bad annotation detected')
 
         self.geojson_ftus = {
             'type':'FeatureCollection',

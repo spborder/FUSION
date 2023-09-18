@@ -987,7 +987,7 @@ class FUSION:
                                     figure = go.Figure(state_bar)
                                 )
                             ],md=6)
-                        ]),label = f,tab_id = f'tab_{f_idx}'
+                        ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
                     )
 
                     tab_list.append(f_tab)
@@ -1233,7 +1233,6 @@ class FUSION:
         self.current_overlays = new_children
                     
         return new_children, color_bar, filter_max_val, filter_disable
-
 
     def update_cell_hierarchy(self,cell_clickData):
         # Loading the cell-graphic and hierarchy image
