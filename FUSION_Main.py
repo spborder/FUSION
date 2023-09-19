@@ -939,11 +939,10 @@ class FUSION:
 
                 if not counts_data.empty:
                     counts_data.columns = [f]
-                    self.fusey_data[f] = {}
-
+                    
                     # Storing some data for Fusey to use :3
-                    self.fusey_data[f]['structure_number'] = len(counts_dict_list)
-                    self.fusey_data[f]['normalized_counts'] = counts_data[f]/counts_data[f].sum()
+                    structure_number = len(counts_dict_list)
+                    normalized_counts = counts_data[f]/counts_data[f].sum()
 
                     # Normalizing to sum to 1
                     counts_data[f] = counts_data[f]/counts_data[f].sum()
@@ -958,7 +957,7 @@ class FUSION:
                     top_cell = counts_data['index'].tolist()[0]
 
                     # Fusey data
-                    self.fusey_data[f]['top_cell'] = top_cell
+                    top_cell = top_cell
 
                     pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
                     
@@ -967,8 +966,11 @@ class FUSION:
                     pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
 
                     # Fusey data
-                    self.fusey_data[f]['pct_states'] = pct_states
-
+                    self.fusey_data[f] = {
+                        'structure_number':structure_number,
+                        'normalized_counts':normalized_counts,
+                        'pct_states':pct_states
+                    }
                     state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
 
                     f_tab = dbc.Tab(
@@ -2763,12 +2765,12 @@ class FUSION:
         
         return fusey_child, parent_style
 
-
+"""
 class MyDisk(diskcache.Disk):
     def __init__(self, *args, **kwargs):
         kwargs['pickle_protocol'] = 0
         super(MyDisk, self).__init__(*args, **kwargs)
-
+"""
 
 def app(*args):
     

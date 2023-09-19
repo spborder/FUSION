@@ -26,8 +26,10 @@ import dash_bootstrap_components as dbc
 from dash import dcc, html
 
 #from histomicstk.preprocessing import color_conversion
-
-
+from wsi_annotations_kit import wsi_annotations_kit as wak
+from shapely.geometry import Polygon, Point
+import pandas as pd
+import json
 
 class PrepHandler:
     def __init__(self,
@@ -47,7 +49,7 @@ class PrepHandler:
             'plugin_name':'dpraveen511_spot_spot_ec2/SpotAnnotation'
         }
 
-        self.feature_extraction_plugin = 'sumanthdevarasetty_ftx_ftx_14/Ftx_sc'
+        self.feature_extraction_plugin = 'sumanthdevarasetty_ftx_ftx_19/Ftx_sc'
 
         self.color_map = colormaps['jet']
 
@@ -329,3 +331,255 @@ class PrepHandler:
                                         })
         
         return job_response
+    
+
+
+class CellAnnotations:
+    def __init__(self,
+                 item_id,
+                 ftus,
+                 spots,
+                 counts_definitions,
+                 gc,
+                 output_file,
+                 trial_run=False,
+                 names_key=None
+                 ):
+        
+        self.item_id = item_id
+        self.ftus = ftus
+        self.spots = spots
+        self.counts_definitions = counts_definitions
+        self.gc = gc
+        self.names_key = names_key
+        self.output_file = output_file
+        self.trial_run = trial_run
+
+        self.user_token = self.gc.get('token/session')['token']
+
+        self.spot_polys, self.spot_properties = self.process_spots()
+        self.ftu_annotations = self.process_ftus()
+
+        self.post_outputs()
+
+    def process_spots(self):
+
+        # Iterating through spot annotation elements
+        spot_polys = []
+        spot_properties = []
+        for s_idx, s in enumerate(self.spots['annotation']['elements']):
+            og_coords = np.squeeze(np.array(s['points'])).tolist()
+
+            # Converting spot into shapely Polygon
+            coords = [(i[0],i[1]) for i in og_coords]
+            spot_poly = Polygon(coords)
+
+            # Adding spot properties to list
+            if 'user' in s:
+                spot_props = s['user']
+            else:
+                spot_props = {}
+
+            spot_polys.append(spot_poly)
+            spot_properties.append(spot_props)
+
+        return spot_polys, spot_properties
+
+    def process_ftus(self):
+
+        # Initialize annotations object
+        ftu_annotations = wak.Annotation()
+
+        # Iterate through annotations
+        for a in self.ftus:
+            # If someone runs nuclei segmentation this doesn't have a "name" so we don't have to aggregate over each nucleus
+            if 'name' in a['annotation']:
+
+                # Changing the name if it's in the names key
+                ftu_name = a['annotation']['name']
+                if not self.names_key is None:
+                    if a['annotation']['name'] in self.names_key:
+                        ftu_name = self.names_key[a['annotation']['name']]
+                    
+                ftu_annotations.add_names([ftu_name])
+
+                if 'elements' in a['annotation']:
+
+                    for f_idx,f in enumerate(a['annotation']['elements']):
+
+                        # For polyline annotations
+                        if f['type']=='polyline':
+                            og_coords = np.squeeze(np.array(f['points']))
+                            coords = [(i[0],i[1]) for i in og_coords]
+
+                            ftu_poly = Polygon(coords)
+                        
+                        elif f['type'] =='rectangle':
+                            width = f['width']
+                            height = f['height']
+                            center = f['center'][0:-1]
+
+                            bbox_coords = [
+                                [int(center[0])-int(width/2),int(center[1])-int(height/2)],
+                                [int(center[0])+int(width/2),int(center[1])-int(height/2)],
+                                [int(center[0])+int(width/2),int(center[1])+int(height/2)],
+                                [int(center[0])-int(width/2),int(center[1])+int(height/2)]
+                            ]
+
+                            ftu_poly = Polygon([
+                                (bbox_coords[0],bbox_coords[3]),
+                                (bbox_coords[0],bbox_coords[1]),
+                                (bbox_coords[2],bbox_coords[1]),
+                                (bbox_coords[2],bbox_coords[3]),
+                                (bbox_coords[0],bbox_coords[3])
+                            ])
+
+                        intersecting_spot_props = []
+                        intersecting_spot_areas = []
+                        intersecting_spot_keys = []
+                        for s_idx,s in enumerate(self.spot_polys):
+                            
+                            # Checking if a given FTU intersects with any spots
+                            if ftu_poly.intersects(s):
+                                try:
+                                    intersecting_spot_areas.append(ftu_poly.intersection(s).area)
+                                    intersecting_spot_props.append(self.spot_properties[s_idx])
+                                    intersecting_spot_keys.extend(list(self.spot_properties[s_idx].keys()))
+                                except:
+                                    print(f'shapely error')
+                                    continue
+                        if len(intersecting_spot_areas)>0:
+                            
+                            agg_props = np.unique(intersecting_spot_keys)
+
+                            ftu_props = {}
+                            for a in agg_props:
+                                
+                                # This should be a list of either dictionaries or single valuesH
+                                i_prop_list = [i[a] for i in intersecting_spot_props if a in i]
+                                has_sub_props = False
+                                str_prop = False
+                                # Convert the prop to some kind of table
+                                if type(i_prop_list[0])==dict:
+                                    if not type(i_prop_list[0][list(i_prop_list[0].keys())[0]])==dict:
+                                        # Where each shared key becomes a column in the dataframe
+                                        i_prop_table = pd.DataFrame.from_records(i_prop_list)
+                                    else:
+                                        has_sub_props = True
+
+                                elif type(i_prop_list[0])==float or type(i_prop_list[0])==int:
+                                    # Where each value in the list becomes a single row in the dataframe (This might need to be a series).
+                                    i_prop_table = pd.DataFrame(data = i_prop_list, columns=[a])
+                                elif type(i_prop_list[0])==str:
+                                    # Where each value in the list becomes a single row in the dataframe
+                                    i_prop_table = pd.DataFrame(data = i_prop_list,columns=[a])
+                                    str_prop = True
+                                else:
+                                    print(f'Unsupported property type: {a} has type: {type(i_prop_list[0])}')
+                                    raise TypeError
+                                                                
+                                if not has_sub_props and not str_prop:
+                                    # Multiplying rows of the prop table by overlap area and re-normalizing to sum to 1
+                                    weighted_prop_table = i_prop_table.mul(intersecting_spot_areas,axis=0)
+                                    # Summing on rows axis
+                                    sum_prop = weighted_prop_table.sum(axis=0)
+                                    # Normalizing by sum of sums
+                                    norm_prop = (sum_prop/(sum_prop.sum())).fillna(0)
+                                    # Adding weighted and normalized property to ftu properties dictionary
+                                    ftu_props[a] = norm_prop.to_dict()
+                                
+                                if has_sub_props and not str_prop:
+                                    ftu_props[a] = {}
+                                    # Iterating through sub-props
+                                    sub_props_list = []
+                                    for i_s in i_prop_list:
+                                        sub_props_list.extend(list(i_s.keys()))
+
+                                    sub_props_list = np.unique(sub_props_list)
+                                    for s_p in sub_props_list:
+                                        s_prop = [i[s_p] for i in i_prop_list if s_p in i]
+
+                                        if type(s_prop[0])==dict:
+                                            if not type(s_prop[0][list(s_prop[0].keys())[0]])==dict:
+                                                s_prop_table = pd.DataFrame.from_records(s_prop)
+                                            else:
+                                                print(f'Property: {a} exceeds number of allowed subproperties (2)')
+                                                raise TypeError
+                                        elif type(s_prop[0])==float or type(s_prop[0])==int:
+                                            s_prop_table = pd.DataFrame(data = s_prop,columns=[s_p])
+                                        elif type(s_prop[0])==str:
+                                            s_prop_table = pd.DataFrame(data = s_prop,columns=[s_p])
+                                            str_prop = True
+
+                                    if not str_prop:
+                                        weighted_prop_table = s_prop_table.mul(intersecting_spot_areas,axis=0)
+                                        sum_prop = weighted_prop_table.sum(axis=0)
+                                        norm_prop = (sum_prop/(sum_prop.sum())).fillna(0)
+                                        ftu_props[a][s_p] = norm_prop.to_dict()
+
+                                    #TODO: Some method for string properties in spots, maybe just present a list of all those?
+
+                        else:
+                            ftu_props = {}
+                            
+                        # Adding shape to full ftu_annotations object
+                        ftu_annotations.add_shape(
+                            poly = ftu_poly,
+                            box_crs = [0,0],
+                            structure = ftu_name,
+                            name = f'{ftu_name.strip()}_{f_idx}',
+                            properties = ftu_props
+                        )
+
+        return ftu_annotations
+
+    def post_outputs(self):
+
+        # Saving outputs, reading them, then posting them
+        # Don't have a direct return json formatted method for wak yet
+
+        self.ftu_annotations.json_save(self.output_file)
+        #self.spots.json_save(self.output_file.replace('.json','_Spots.json'))
+
+        new_annotations = json.load(open(self.output_file))
+        new_annotations.append(json.load(open(self.output_file.replace('.json','_Spots.json'))))
+        if not self.trial_run:
+            # Deleting old annotations
+            self.gc.delete(f'/annotation/item/{self.item_id}?token={self.user_token}')
+            self.gc.post(f'/annotation/item/{self.item_id}?token={self.user_token}',
+                         data = json.dumps(new_annotations),
+                         headers={'X-HTTP-Method':'POST','Content-Type':'application/json'}
+                         )
+        else:
+            print(f'Generated annotations for: {len(new_annotations)} structures')
+            for n_idx,n_a in enumerate(new_annotations):
+                print(f'Structure {n_idx}: {n_a["name"]}')
+                print(f'{len(n_a["elements"])} elements')
+
+    def post_outputs(self):
+
+        # Saving outputs, reading them, then posting them
+        # Don't have a direct return json formatted method for wak yet
+
+        self.ftu_annotations.json_save(self.output_file)
+        #self.spots.json_save(self.output_file.replace('.json','_Spots.json'))
+
+        new_annotations = json.load(open(self.output_file))
+        new_annotations.append(self.spots)
+        if not self.trial_run:
+            # Deleting old annotations
+            self.gc.delete(f'/annotation/item/{self.item_id}?token={self.user_token}')
+            self.gc.post(f'/annotation/item/{self.item_id}?token={self.user_token}',
+                         data = json.dumps(new_annotations),
+                         headers={'X-HTTP-Method':'POST','Content-Type':'application/json'}
+                         )
+        else:
+            print(f'Generated annotations for: {len(new_annotations)} structures')
+            for n_idx,n_a in enumerate(new_annotations):
+                if 'name' in n_a:
+                    print(f'Structure {n_idx}: {n_a["name"]}')
+                    print(f'{len(n_a["elements"])} elements')
+
+
+
+
