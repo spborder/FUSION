@@ -217,6 +217,17 @@ class FUSION:
                             } else {
                                 return false;
                             }
+                        } else if (current_cell in feature.properties){
+                            var cell_value = feature.properties[current_cell];
+                            if (cell_value >= filter_vals[0]){
+                                if (cell_value <= filter_vals[1]){
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
                         }
                     } else if (current_cell in feature.properties){
                         var cell_value = feature.properties[current_cell];
@@ -1070,7 +1081,6 @@ class FUSION:
                         cluster_label = int(g['Cluster'])
                         raw_values_list.append(cluster_label)
             
-            print(raw_values_list)
         else:
             # For specific morphometrics
             for f in self.wsi.ftu_props:
@@ -1167,21 +1177,24 @@ class FUSION:
 
                 filter_max_val = 1.0
                 filter_disable = True
-            
-        else:
-            # For other morphometric properties
-            self.current_cell = cell_val
-            if not cell_val is None:
+                
+            else:
+                # For other morphometric properties
+                print(cell_val)
+                self.current_cell = cell_val
                 self.update_hex_color_key(cell_val)
 
                 color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
 
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
                 filter_disable = False
-            else:
-                filter_disable = True
-                filter_max_val = 1
-                color_bar = no_update
+
+        else:
+            self.current_cell = cell_val
+            self.update_hex_color_key(cell_val)
+            color_bar = no_update
+            filter_disable = True
+            filter_max_val = 1
 
         self.cell_vis_val = vis_val/100
 

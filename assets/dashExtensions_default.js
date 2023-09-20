@@ -96,6 +96,17 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                         } else {
                             return false;
                         }
+                    } else if (current_cell in feature.properties) {
+                        var cell_value = feature.properties[current_cell];
+                        if (cell_value >= filter_vals[0]) {
+                            if (cell_value <= filter_vals[1]) {
+                                return true;
+                            } else {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
                     }
                 } else if (current_cell in feature.properties) {
                     var cell_value = feature.properties[current_cell];
