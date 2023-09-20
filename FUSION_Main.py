@@ -110,7 +110,7 @@ class FUSION:
         # TODO:Add cell states in there later, need to figure out how to view proportions of different cell states in the same overlay
         self.visualization_properties = [
             'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
-            'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction'
+            'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction','Max Cell Type'
         ]
 
         # Initializing some parameters
