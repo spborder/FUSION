@@ -38,7 +38,6 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 import dash_leaflet as dl
 import dash_mantine_components as dmc
-import dash_uploader as du
 
 from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function

@@ -223,6 +223,11 @@ class DSASlide:
         
         self.properties_list = np.unique(self.properties_list).tolist()
 
+        # Adding max cell type if main_cell_types are in the properties list
+        main_cell_types_test = [1 if 'Main_Cell_Types' in i else 0 for i in self.properties_list]
+        if any(main_cell_types_test):
+            self.properties_list.append('Max Cell Type')
+
         # Making dictionaries for input into vis layout
         self.map_dict = {
             'url': self.tile_url,
