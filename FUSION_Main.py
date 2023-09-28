@@ -248,7 +248,6 @@ class FUSION:
                             
                             var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
                             cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
-                            console.log(cell_value);
                             if (cell_value >= filter_vals[0]){
                                 if (cell_value <= filter_vals[1]){
                                     return true;
@@ -1205,7 +1204,6 @@ class FUSION:
                 if m_prop == 'Main_Cell_Types':
 
                     if ctx.triggered_id == 'cell-drop':
-
                         # Getting all possible cell states for this cell type:
                         possible_cell_states = np.unique(self.cell_graphics_key[self.current_cell]['states'])
                         # Creating dropdown for cell states
