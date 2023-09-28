@@ -242,13 +242,13 @@ class FUSION:
                                 return false;
                             }
                         } else if (current_cell.includes('_')) {
-                            var split_cell_value = current_cell.split('_');
+                            var split_cell_value = current_cell.split("_");
                             var main_cell_value = split_cell_value[0];
                             var sub_cell_value = split_cell_value[1];
                             
                             var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
                             cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
-                            
+                            console.log(cell_value);
                             if (cell_value >= filter_vals[0]){
                                 if (cell_value <= filter_vals[1]){
                                     return true;
@@ -259,7 +259,6 @@ class FUSION:
                                 return false;
                             }
                                  
-
                         } else {
                             return true;
                         }
@@ -1206,13 +1205,6 @@ class FUSION:
                 if m_prop == 'Main_Cell_Types':
 
                     if ctx.triggered_id == 'cell-drop':
-                        self.current_cell = self.cell_names_key[cell_val]
-                        self.update_hex_color_key('cell_value')
-
-                        color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
-                        
-                        filter_max_val = np.max(list(self.hex_color_key.keys()))
-                        filter_disable = False
 
                         # Getting all possible cell states for this cell type:
                         possible_cell_states = np.unique(self.cell_graphics_key[self.current_cell]['states'])
@@ -1224,26 +1216,37 @@ class FUSION:
                                 id = {'type':'cell-sub-drop','index':0}
                             )
                         ]
-                    elif not type(ctx.triggered_id) == str:
-                        # Selecting a sub-property of a main cell type (usually cell state)
-                        print(f'Generating sub-cell vis for {cell_val} {cell_sub_val[0]}')
-                        if ctx.triggered_id['type']=='cell-sub-drop':
-                            if not cell_sub_val == 'All':
-                                self.current_cell = self.cell_names_key[cell_val]+'_'+cell_sub_val[0]
-                                self.update_hex_color_key('cell_sub_value')
+                    else:
+                        cell_sub_select_children = no_update
 
-                                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                    if len(cell_sub_val)==0:
 
-                                filter_max_val = np.max(list(self.hex_color_key.keys()))
-                                filter_disable = False
-                            else:
-                                self.current_cell = self.cell_names_key[cell_val]
-                                self.update_hex_color_key('cell_value')
+                        self.current_cell = self.cell_names_key[cell_val]
+                        self.update_hex_color_key('cell_value')
 
-                                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
-                                
-                                filter_max_val = np.max(list(self.hex_color_key.keys()))
-                                filter_disable = False
+                        color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                        
+                        filter_max_val = np.max(list(self.hex_color_key.keys()))
+                        filter_disable = False
+                    
+                    elif cell_sub_val[0]=='All':
+                        self.current_cell = self.cell_names_key[cell_val]
+                        self.update_hex_color_key('cell_value')
+
+                        color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                        
+                        filter_max_val = np.max(list(self.hex_color_key.keys()))
+                        filter_disable = False
+                    
+                    else:
+                        # Visualizing a sub-property of a main cell type
+                        self.current_cell = self.cell_names_key[cell_val]+'_'+cell_sub_val[0]
+                        self.update_hex_color_key('cell_sub_value')
+
+                        color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+
+                        filter_max_val = np.max(list(self.hex_color_key.keys()))
+                        filter_disable = False
                 
                 elif m_prop == 'Cell_States':
                     self.current_cell = self.cell_names_key[cell_val]
@@ -1258,6 +1261,8 @@ class FUSION:
                 self.current_cell = 'max'
                 self.update_hex_color_key('max_cell')
 
+                cell_sub_select_children = []
+
                 cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
                 color_bar = dlx.categorical_colorbar(categories = cell_types, colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
 
@@ -1267,6 +1272,8 @@ class FUSION:
             elif cell_val == 'Morphometrics Clusters':
                 self.current_cell = 'cluster'
                 self.update_hex_color_key('cluster')
+
+                cell_sub_select_children = []
 
                 #TODO: This should probably be a categorical colorbar
                 color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
@@ -1280,6 +1287,8 @@ class FUSION:
                 self.current_cell = cell_val
                 self.update_hex_color_key(cell_val)
 
+                cell_sub_select_children = []
+
                 color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
 
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
@@ -1288,6 +1297,9 @@ class FUSION:
         else:
             self.current_cell = cell_val
             self.update_hex_color_key(cell_val)
+
+            cell_sub_select_children = []
+
             color_bar = no_update
             filter_disable = True
             filter_max_val = 1

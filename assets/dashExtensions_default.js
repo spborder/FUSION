@@ -49,6 +49,20 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                             }
                         } else if (current_cell in feature.properties) {
                             var cell_value = feature.properties[current_cell];
+                        } else if (current_cell.includes('_')) {
+
+                            var split_cell_value = current_cell.split("_");
+                            var main_cell_value = split_cell_value[0];
+                            var sub_cell_value = split_cell_value[1];
+
+                            var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
+                            cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
+
+                            if (cell_value == 1) {
+                                cell_value = (cell_value).toFixed(1);
+                            } else if (cell_value == 0) {
+                                cell_value = (cell_value).toFixed(1);
+                            }
                         }
                     } else {
                         var cell_value = Number.Nan;
@@ -106,6 +120,24 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                         } else {
                             return false;
                         }
+                    } else if (current_cell.includes('_')) {
+                        var split_cell_value = current_cell.split("_");
+                        var main_cell_value = split_cell_value[0];
+                        var sub_cell_value = split_cell_value[1];
+
+                        var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
+                        cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
+                        console.log(cell_value);
+                        if (cell_value >= filter_vals[0]) {
+                            if (cell_value <= filter_vals[1]) {
+                                return true;
+                            } else {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+
                     } else {
                         return true;
                     }
