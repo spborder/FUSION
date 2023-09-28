@@ -134,7 +134,6 @@ class FUSION:
 
         self.ftu_style_handle = assign("""function(feature,context){
             const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.hideout;
-            console.log(current_cell);
             if (current_cell){
                 if (current_cell==='cluster'){
                     if (current_cell in feature.properties){
@@ -145,7 +144,7 @@ class FUSION:
                     }
                 } else if (current_cell==='max'){
                     // Extracting all the cell values for a given FTU/Spot
-                    if (current_cell in feature.properties){       
+                    if ("Main_Cell_Types" in feature.properties){       
                         var cell_values = feature.properties.Main_Cell_Types;
                         // Initializing some comparison values
                         var cell_value = 0.0;
@@ -195,7 +194,7 @@ class FUSION:
             } else {
                 style.color = ftu_color;
             }           
-                                       
+                                                                              
             return style;
             }
             """
@@ -228,6 +227,8 @@ class FUSION:
                             } else {
                                 return false;
                             }
+                        } else {
+                            return true;
                         }
                     } else if (current_cell in feature.properties){
                         var cell_value = feature.properties[current_cell];
@@ -1068,10 +1069,9 @@ class FUSION:
             #TODO: For slides without any ftu's, search through the spots for cell names
             # Also search through manual ROIs
             for s in self.wsi.spot_props:
-                for g in self.wsi.spot_props[s]:
-                    if 'Main_Cell_Types' in g:
-                        all_cell_type_counts = float(np.argmax(list(g['Main_Cell_Types'].values())))
-                        raw_values_list.append(all_cell_type_counts)
+                if 'Main_Cell_Types' in s:
+                    all_cell_type_counts = float(np.argmax(list(s['Main_Cell_Types'].values())))
+                    raw_values_list.append(all_cell_type_counts)
 
         elif color_type == 'cluster':
             # iterating through current ftus

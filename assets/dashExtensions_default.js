@@ -8,7 +8,6 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     ftu_color,
                     filter_vals
                 } = context.hideout;
-                console.log(current_cell);
                 if (current_cell) {
                     if (current_cell === 'cluster') {
                         if (current_cell in feature.properties) {
@@ -19,7 +18,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                         }
                     } else if (current_cell === 'max') {
                         // Extracting all the cell values for a given FTU/Spot
-                        if (current_cell in feature.properties) {
+                        if ("Main_Cell_Types" in feature.properties) {
                             var cell_values = feature.properties.Main_Cell_Types;
                             // Initializing some comparison values
                             var cell_value = 0.0;
@@ -107,6 +106,8 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                         } else {
                             return false;
                         }
+                    } else {
+                        return true;
                     }
                 } else if (current_cell in feature.properties) {
                     var cell_value = feature.properties[current_cell];
