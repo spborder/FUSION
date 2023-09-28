@@ -175,6 +175,20 @@ class FUSION:
                         }                                                    
                     } else if (current_cell in feature.properties){
                         var cell_value = feature.properties[current_cell];
+                    } else if (current_cell.includes('_')){
+                        
+                        var split_cell_value = current_cell.split("_");
+                        var main_cell_value = split_cell_value[0];
+                        var sub_cell_value = split_cell_value[1];
+                        
+                        var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
+                        cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
+                        
+                        if (cell_value==1) {
+                            cell_value = (cell_value).toFixed(1);
+                        } else if (cell_value==0) {
+                            cell_value = (cell_value).toFixed(1);
+                        }                        
                     }
                 } else {
                     var cell_value = Number.Nan;
@@ -227,6 +241,25 @@ class FUSION:
                             } else {
                                 return false;
                             }
+                        } else if (current_cell.includes('_')) {
+                            var split_cell_value = current_cell.split('_');
+                            var main_cell_value = split_cell_value[0];
+                            var sub_cell_value = split_cell_value[1];
+                            
+                            var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
+                            cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
+                            
+                            if (cell_value >= filter_vals[0]){
+                                if (cell_value <= filter_vals[1]){
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                                 
+
                         } else {
                             return true;
                         }
@@ -374,9 +407,11 @@ class FUSION:
         # Updating GeoJSON fill/color/filter
         self.app.callback(
             [Output('layer-control','children'),Output('colorbar-div','children'),
-             Output('filter-slider','max'),Output('filter-slider','disabled')],
+             Output('filter-slider','max'),Output('filter-slider','disabled'),
+             Output('cell-sub-select-div','children')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
-             Input('filter-slider','value'),Input({'type':'ftu-bound-color','index':ALL},'value')],
+             Input('filter-slider','value'),Input({'type':'ftu-bound-color','index':ALL},'value'),
+             Input({'type':'cell-sub-drop','index':ALL},'value')],
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -1057,6 +1092,33 @@ class FUSION:
                 manual_counts = f['geojson']['features'][0]['properties']['Main_Cell_Types'][self.current_cell]
                 raw_values_list.append(manual_counts)
 
+        elif color_type =='cell_sub_value':
+            # Visualizing a main cell type + cell state combination
+            main_cell = self.current_cell.split('_')[0]
+            sub_cell = self.current_cell.split('_')[1]
+            # Iterating through current ftus
+            for f in self.wsi.ftu_props:
+                for g in self.wsi.ftu_props[f]:
+                    # Getting main counts for this ftu
+                    if 'Main_Cell_Types' in g:
+                        ftu_counts = g['Main_Cell_Types'][main_cell]
+                        cell_sub_values = g['Cell_States'][main_cell][sub_cell]
+                        raw_values_list.append(ftu_counts*cell_sub_values)
+
+
+            # Iterating through spots
+            for f in self.wsi.spot_props:
+                spot_counts = f['Main_Cell_Types'][main_cell]
+                spot_sub_counts = f['Cell_States'][main_cell][sub_cell]
+                raw_values_list.append(spot_counts*spot_sub_counts)
+
+            # Iterating through manual ROIs
+            for f in self.wsi.manual_rois:
+                if 'Main_Cell_Types' in f['geojson']['features'][0]['properties']:
+                    manual_counts = f['geojson']['features'][0]['properties']['Main_Cell_Types'][main_cell]
+                    manual_subcounts = f['geojson']['features'][0]['properties']['Cell_States'][main_cell][sub_cell]
+                    raw_values_list.append(manual_counts*manual_subcounts)
+
         elif color_type == 'max_cell':
 
             # Iterating through current ftus
@@ -1108,11 +1170,12 @@ class FUSION:
         else:
             self.hex_color_key = {}
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color):
+    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color,cell_sub_val):
 
         print(f'Updating overlays for current slide: {self.wsi.slide_name}')
 
         m_prop = None
+        cell_sub_select_children = no_update
 
         if not ftu_color is None:
             # Getting these to align with the ftu-colors property order
@@ -1141,13 +1204,46 @@ class FUSION:
             # Updating current_cell property
             if cell_val in self.cell_names_key:
                 if m_prop == 'Main_Cell_Types':
-                    self.current_cell = self.cell_names_key[cell_val]
-                    self.update_hex_color_key('cell_value')
 
-                    color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
-                    
-                    filter_max_val = np.max(list(self.hex_color_key.keys()))
-                    filter_disable = False
+                    if ctx.triggered_id == 'cell-drop':
+                        self.current_cell = self.cell_names_key[cell_val]
+                        self.update_hex_color_key('cell_value')
+
+                        color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                        
+                        filter_max_val = np.max(list(self.hex_color_key.keys()))
+                        filter_disable = False
+
+                        # Getting all possible cell states for this cell type:
+                        possible_cell_states = np.unique(self.cell_graphics_key[self.current_cell]['states'])
+                        # Creating dropdown for cell states
+                        cell_sub_select_children = [
+                            dcc.Dropdown(
+                                options = [{'label':p,'value':p,'disabled':False} for p in possible_cell_states]+[{'label':'All','value':'All','disabled':False}],
+                                placeholder = 'Select A Cell State Value',
+                                id = {'type':'cell-sub-drop','index':0}
+                            )
+                        ]
+                    elif not type(ctx.triggered_id) == str:
+                        # Selecting a sub-property of a main cell type (usually cell state)
+                        print(f'Generating sub-cell vis for {cell_val} {cell_sub_val[0]}')
+                        if ctx.triggered_id['type']=='cell-sub-drop':
+                            if not cell_sub_val == 'All':
+                                self.current_cell = self.cell_names_key[cell_val]+'_'+cell_sub_val[0]
+                                self.update_hex_color_key('cell_sub_value')
+
+                                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+
+                                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                                filter_disable = False
+                            else:
+                                self.current_cell = self.cell_names_key[cell_val]
+                                self.update_hex_color_key('cell_value')
+
+                                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                                
+                                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                                filter_disable = False
                 
                 elif m_prop == 'Cell_States':
                     self.current_cell = self.cell_names_key[cell_val]
@@ -1247,7 +1343,7 @@ class FUSION:
 
         self.current_overlays = new_children
                     
-        return new_children, color_bar, filter_max_val, filter_disable
+        return new_children, color_bar, filter_max_val, filter_disable, cell_sub_select_children
 
     def update_cell_hierarchy(self,cell_clickData):
         # Loading the cell-graphic and hierarchy image

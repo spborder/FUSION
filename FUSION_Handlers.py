@@ -536,7 +536,8 @@ class LayoutHandler:
                         html.Div(
                             id = 'cell-select-div',
                             children=[
-                                dcc.Dropdown(cell_types_list,placeholder='Select Property for Overlaid Heatmap',id='cell-drop')
+                                dcc.Dropdown(cell_types_list,placeholder='Select Property for Overlaid Heatmap',id='cell-drop'),
+                                html.Div(id='cell-sub-select-div',children = [],style={'marginTop':'5px'})
                             ]
                         )
                     ])
