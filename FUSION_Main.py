@@ -107,7 +107,6 @@ class FUSION:
         self.pie_ftu = self.current_ftu_layers[-1]
 
         # Specifying available properties with visualizations implemented
-        # TODO:Add cell states in there later, need to figure out how to view proportions of different cell states in the same overlay
         self.visualization_properties = [
             'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
             'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction','Max Cell Type'
@@ -1001,9 +1000,6 @@ class FUSION:
 
                     top_cell = counts_data['index'].tolist()[0]
 
-                    # Fusey data
-                    top_cell = top_cell
-
                     pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
                     
                     pct_states = pct_states.reset_index()
@@ -1014,7 +1010,8 @@ class FUSION:
                     self.fusey_data[f] = {
                         'structure_number':structure_number,
                         'normalized_counts':normalized_counts,
-                        'pct_states':pct_states
+                        'pct_states':pct_states,
+                        'top_cell':top_cell
                     }
                     state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
 
@@ -1175,6 +1172,11 @@ class FUSION:
         m_prop = None
         cell_sub_select_children = no_update
 
+        if not type(cell_sub_val) is list:
+            cell_sub_val = [cell_sub_val]
+        if len(cell_sub_val)==0:
+            cell_sub_val = [None]
+
         if not ftu_color is None:
             # Getting these to align with the ftu-colors property order
             current_ftu_colors = list(self.ftu_colors.values())
@@ -1204,6 +1206,9 @@ class FUSION:
                 if m_prop == 'Main_Cell_Types':
 
                     if ctx.triggered_id == 'cell-drop':
+                        
+                        cell_sub_val= [None]
+                        self.current_cell = self.cell_names_key[cell_val]
                         # Getting all possible cell states for this cell type:
                         possible_cell_states = np.unique(self.cell_graphics_key[self.current_cell]['states'])
                         # Creating dropdown for cell states
@@ -1217,7 +1222,7 @@ class FUSION:
                     else:
                         cell_sub_select_children = no_update
 
-                    if len(cell_sub_val)==0:
+                    if cell_sub_val[0] is None:
 
                         self.current_cell = self.cell_names_key[cell_val]
                         self.update_hex_color_key('cell_value')
@@ -2114,7 +2119,17 @@ class FUSION:
                     if len(self.wsi.marked_ftus)>0:
                         data_select_options[3]['disabled'] = False
 
-                    self.update_hex_color_key('cell_value')
+                    if self.current_cell in self.cell_names_key:
+                        self.update_hex_color_key('cell_value')
+                    elif '_' in self.current_cell:
+                        self.update_hex_color_key('cell_sub_value')
+                    elif self.current_cell=='max':
+                        self.update_hex_color_key('max_cell')
+                    elif self.current_cell == 'cluster':
+                        self.update_hex_color_key('cluster')
+                    else:
+                        self.update_hex_color_key(self.current_cell)
+                    
 
                     return self.current_overlays, data_select_options
                 else:
@@ -2124,7 +2139,17 @@ class FUSION:
                     self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
                     data_select_options = self.layout_handler.data_options
 
-                    self.update_hex_color_key('cell_value')
+                    if self.current_cell in self.cell_names_key:
+                        self.update_hex_color_key('cell_value')
+                    elif '_' in self.current_cell:
+                        self.update_hex_color_key('cell_sub_value')
+                    elif self.current_cell=='max':
+                        self.update_hex_color_key('max_cell')
+                    elif self.current_cell == 'cluster':
+                        self.update_hex_color_key('cluster')
+                    else:
+                        self.update_hex_color_key(self.current_cell)
+                    
 
                     return self.current_overlays, data_select_options
             else:

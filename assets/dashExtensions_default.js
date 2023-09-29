@@ -127,7 +127,6 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
 
                         var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
                         cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
-                        console.log(cell_value);
                         if (cell_value >= filter_vals[0]) {
                             if (cell_value <= filter_vals[1]) {
                                 return true;
