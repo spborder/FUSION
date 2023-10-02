@@ -39,10 +39,11 @@ class BulkProcessApp:
         self.dataset_handler = dataset_handler
         self.prep_handler = prep_handler
 
-        all_datasets = [dataset_handler.slide_datasets[i]['name'] for i in list(dataset_handler.slide_datasets.keys())]
-        self.current_dataset = all_datasets[0]
-        self.current_slides = dataset_handler.slide_datasets[list(dataset_handler.slide_datasets.keys())[all_datasets.index(self.current_dataset)]]['Slides']
+        self.all_datasets = [dataset_handler.slide_datasets[i]['name'] for i in list(dataset_handler.slide_datasets.keys())]
+        self.current_dataset = self.all_datasets[0]
+        self.current_slides = dataset_handler.slide_datasets[list(dataset_handler.slide_datasets.keys())[self.all_datasets.index(self.current_dataset)]]['Slides']
         self.done_slides = []
+        self.current_slide_index = 0
 
         self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
 
@@ -55,11 +56,14 @@ class BulkProcessApp:
         # Loading new slide either from folder drop, slide drop, or next-slide button
         self.app.callback(
             [Input('folder-drop','value'),
-             Input('slide-drop','value'),
-             Input('next-slide-butt','n_clicks')],
+             Input('slide-drop','value')],
             [Output('ex-ftu-img','figure'),
              Output('ftu-select','options'),
-             Output('feature-items','children')]
+             Output('feature-items','children'),
+             Output('sub-thresh-slider','disabled'),
+             Output('sub-comp-method','disabled'),
+             Output('go-to-feat','disabled'),
+             Output('slide-drop','options')]
         )(self.update_slide)
 
         # Updating sub-compartment segmentation
@@ -89,15 +93,32 @@ class BulkProcessApp:
             prevent_initial_call=True
         )(self.run_feature_extraction)
 
-    def update_slide(self,folder,slide,next_click):
+    def update_slide(self,folder,slide):
 
         # no matter what the triggered_id, a new slide is loaded
+        if type(slide)==dict:
+            slide = slide['value']
+        
+        if ctx.triggered_id == 'folder-drop':
+            self.current_dataset = folder
+            self.current_slides = self.dataset_handler.slide_datasets[list(self.dataset_handler.slide_datasets.keys())[self.all_datasets.index(self.current_dataset)]]['Slides']
+
+            new_slides = [
+                {'label':i['name'],'value':i['_id'],'disabled':False}
+                if i['_id'] not in self.done_slides
+                else {'label':i['name'],'value':i['_id'],'disabled':True}
+                for i in self.current_slides
+            ]
+            slide = new_slides[0]['value']
+        else:
+            new_slides = no_update
+
 
         ex_ftu_img = go.Figure()
         ftu_options = []
 
         # Getting annotations for the new slide
-        slide_annotations = self.dataset_handler.get_annotations(slide['value'])
+        slide_annotations = self.dataset_handler.get_annotations(slide)
         for idx,i in enumerate(slide_annotations):
             if 'annotation' in i:
                 if 'elements' in i['annotation']:
@@ -128,7 +149,7 @@ class BulkProcessApp:
             'max_layers':[len(i['annotation']['elements']) for i in slide_annotations]
         }
 
-        image, mask = self.prep_handler.get_annotation_image_mask(slide['value'],slide_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+        image, mask = self.prep_handler.get_annotation_image_mask(slide,slide_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
         self.layer_ann['current_image'] = image
         self.layer_ann['current_mask'] = mask
@@ -138,12 +159,11 @@ class BulkProcessApp:
             layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
         )
 
-        self.upload_wsi_id = slide['value']
+        self.upload_wsi_id = slide
         self.upload_annotations = slide_annotations
         self.feature_extract_ftus = ftu_options
 
-
-        return ex_ftu_img, ftu_options, []
+        return ex_ftu_img, ftu_options, [], False, False, False, new_slides
 
     def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state):
 
@@ -224,21 +244,32 @@ class BulkProcessApp:
     def run_feature_extraction(self,feat_butt):
         
         print(ctx.triggered_id)
-        feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
+        print(feat_butt)
+        if not ctx.triggered_id is None:
+            if type(feat_butt) == list:
+                if len(feat_butt)>0:
+                    if feat_butt[0]>0:
+                        feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
 
-        self.done_slides.append(self.upload_wsi_id)
+                        self.done_slides.append(self.upload_wsi_id)
 
-        # Updating slide-drop options
-        updated_slide_drop = [
-            {'label':i['name'],'value':i['_id'], 'disabled':False}
-            if i['_id'] not in self.done_slides
-            else {'label':i['name'],'value':i['_id'],'disabled':True}
-            for i in self.current_slides
-        ]
-        
-        return ['Submitted!'], updated_slide_drop
-
-
+                        # Updating slide-drop options
+                        updated_slide_drop = [
+                            {'label':i['name'],'value':i['_id'], 'disabled':False}
+                            if i['_id'] not in self.done_slides
+                            else {'label':i['name'],'value':i['_id'],'disabled':True}
+                            for i in self.current_slides
+                        ]
+                        
+                        return ['Submitted!'], updated_slide_drop
+                    else:
+                        return [no_update], no_update
+                else:
+                    return [no_update], no_update
+            else:
+                return [no_update], no_update
+        else:
+            raise exceptions.PreventUpdate
 
 # Special layout
 def gen_bulk_prep_layout(dataset_handler):
@@ -267,7 +298,7 @@ def gen_bulk_prep_layout(dataset_handler):
                         value = first_dataset,
                         id = 'folder-drop'
                     )
-                ],md=5),
+                ],md=6),
                 dbc.Col([
                     'Slides in current folder:',
                     dcc.Dropdown(
@@ -278,14 +309,7 @@ def gen_bulk_prep_layout(dataset_handler):
                         value = {'label':first_dataset_slides[0]['name'],'value':first_dataset_slides[0]['_id']},
                         id = 'slide-drop'
                     )
-                ],md=5),
-                dbc.Col([
-                    dbc.Button(
-                        'Next Slide!',
-                        id = 'next-slide-butt',
-                        disabled = False
-                    )
-                ],md=2)
+                ],md=6)
             ],align='center')
         ])
     ]
