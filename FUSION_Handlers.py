@@ -1266,6 +1266,156 @@ class LayoutHandler:
         self.layout_dict['initial'] = welcome_layout
         self.description_dict['initial'] = initial_description
 
+    def gen_single_page_layout(self,description_text,container_children):
+
+        # Useful for bulk pre-processing and maybe other individual analyses later on
+        # Header
+        header = dbc.Navbar(
+            dbc.Container([
+                dbc.Row([
+                    dbc.Col(html.Img(id='logo',src=('./assets/Fusion-Logo-Navigator-Color01.png'),height='100px'),md='auto'),
+                    dbc.Col([
+                        html.Div([
+                            html.H3('FUSION',style={'color':'rgb(255,255,255)'}),
+                            html.P('Functional Unit State Identification and Navigation with WSI',style={'color':'rgb(255,255,255)'})
+                        ],id='app-title')
+                    ],md=True,align='center')
+                ],align='center'),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.NavbarToggler(id='navbar-toggler'),
+                        dbc.Collapse(
+                            dbc.Nav([
+                                dbc.NavItem(
+                                    dbc.Button(
+                                        'User Survey',
+                                        id = 'user-survey-button',
+                                        outline = True,
+                                        color = 'primary',
+                                        href = ' https://ufl.qualtrics.com/jfe/form/SV_1A0CcKNLhTnFCHI',
+                                        style = {'textTransform':'none'}
+                                    )
+                                ),
+                                dbc.NavItem(
+                                    dbc.Button(
+                                        "Cell Cards",
+                                        id='cell-cards-button',
+                                        outline=True,
+                                        color="primary",
+                                        href="https://cellcards.org/index.php",
+                                        style={"textTransform":"none"}
+                                    )
+                                ),
+                                dbc.NavItem(
+                                    dbc.Button(
+                                        "Lab Website",
+                                        id='lab-web-button',
+                                        outline=True,
+                                        color='primary',
+                                        href='https://cmilab.nephrology.medicine.ufl.edu',
+                                        style={"textTransform":"none"}
+                                    )
+                                )
+                            ],navbar=True),
+                        id="navbar-collapse",
+                        navbar=True)
+                    ],
+                    md=2)
+                    ],
+                align='center')
+                ], fluid=True),
+            dark=True,
+            color="dark",
+            sticky='fixed',
+            style={'marginBottom':'20px'}
+        )
+
+        # Sidebar
+        sider = html.Div([
+            dbc.Offcanvas([
+                html.Img(id='welcome-logo-side',src=('./assets/FUSION-LAB-FINAL.png'),height='315px',width='275px'),
+                'Single-page mode'
+                #dbc.Nav([
+                #    dbc.NavLink('Welcome',href='/welcome',active='exact',id='welcome-sidebar'),
+                #    dbc.NavLink('FUSION Visualizer',href='/vis',active='exact',id='vis-sidebar'),
+                #    dbc.NavLink('Dataset Builder',href='/dataset-builder',active='exact',id='builder-sidebar'),
+                #    dbc.NavLink('Dataset Uploader',href='/dataset-uploader',active='exact',id='upload-sidebar')
+                #],vertical=True,pills=True)], id={'type':'sidebar-offcanvas','index':0},style={'background-color':"#f8f9fa"}
+                ]
+            )
+        ])
+
+        initial_description = [
+            html.P(description_text)
+        ]
+        
+        # Login popover
+        login_popover = dbc.Popover(
+            [
+                dbc.PopoverHeader('Enter your username and password:'),
+                dbc.PopoverBody([
+                    dbc.Label('Username:',width='auto'),
+                    dbc.Col(
+                        dbc.Input(type='text',placeholder='Username',id='username-input')
+                    ),
+                    dbc.Label('Password',width='auto'),
+                    dbc.Col(
+                        dbc.Input(type='password',placeholder='Password',id='pword-input')
+                    ),
+                    dbc.Col(
+                        dbc.Button('Submit',color='primary',id='login-submit'),width='auto'
+                    )
+                ])
+            ],
+            target = {'type':'login-butt','index':0},
+            body=True,
+            trigger='click'
+        )
+
+        description = dbc.Card(
+            children = [
+                #dbc.CardHeader("Description and Instructions"),
+                dbc.CardBody([
+                    dbc.Button('Open Sidebar',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginRight':'5px'}),
+                    dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px'}),
+                    dbc.Button('Registered User Login',id={'type':'login-butt','index':0},className='mb-3',style = {'marginLeft':'5px'}),
+                    login_popover,
+                    html.Div(id='logged-in-user',children = [f'Welcome, {""}!']),
+                    dbc.Collapse(
+                        dbc.Row(
+                            dbc.Col(
+                                html.Div(
+                                    id = 'descrip',
+                                    children = initial_description,
+                                    style={'fontSize':10}
+                                )
+                            )
+                        ),id={'type':'collapse-content','index':0},is_open=False
+                    )
+                ])
+            ],style={'marginBottom':'20px'}
+        )
+
+        single_page_layout = html.Div([
+            dcc.Location(id='url'),
+            header,
+            html.B(),
+            dbc.Row(dbc.Col(html.Div(sider))),
+            html.B(),
+            dbc.Row(
+                id = 'descrip-and-instruct',
+                children = description,
+                align='center'
+            ),
+            dbc.Container(
+                children = container_children,
+                fluid=True,id='container-content')
+        ])
+
+        return single_page_layout
+
+
+
 
 class GirderHandler:
     def __init__(self,
