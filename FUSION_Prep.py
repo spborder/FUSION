@@ -49,6 +49,8 @@ class PrepHandler:
             'plugin_name':'dpraveen511_spot_spot_ec2/SpotAnnotation'
         }
 
+        self.cell_deconvolution_plugin = 'sayatmimar_atlasrds_test_6/AtlasRDSCSV'
+
         self.spot_aggregation_plugin = 'samborder2256_spot_agg_test_image_latest/spot_agg'
 
         self.feature_extraction_plugin = 'samborder2256_ftx_test_image_latest/Ftx_sc'

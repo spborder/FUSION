@@ -683,6 +683,7 @@ class FUSION:
 
             # Grabbing dataset-level metadata
             metadata_available['FTU Expression Statistics'] = []
+            metadata_available['FTU Morphometrics'] = []
 
             all_metadata.append(metadata_available)
             all_metadata_labels.extend(list(metadata_available.keys()))
@@ -777,7 +778,7 @@ class FUSION:
 
     def update_metadata_plot(self,new_meta,sub_meta,group_type,slide_rows):
         
-        if not new_meta == ['FTU Expression Statistics']:
+        if not new_meta == ['FTU Expression Statistics'] and not new_meta==['FTU Morphometrics']:
             cell_types_turn_off = (True,True,True)
         else:
             cell_types_turn_off = (False, False, False)
@@ -815,7 +816,7 @@ class FUSION:
                     if len(d_include)>0:
                         
                         # Adding new_meta value to dataset dictionary
-                        if not new_meta=='FTU Expression Statistics':
+                        if not new_meta=='FTU Expression Statistics' and not new_meta=='FTU Morphometrics':
                             d_dict = {'Dataset':[],'Slide Name':[],new_meta:[]}
 
                             for s in d_include:
@@ -853,8 +854,6 @@ class FUSION:
                                             if sub_meta[0]=='Cell States':
                                                 d_dict['State'].append(ct.split('_')[-1])
 
-
-
                         dataset_metadata.append(d_dict)
 
                 # Converting to dataframe
@@ -881,7 +880,7 @@ class FUSION:
                                 fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name','State'],color='FTU'))
                     else:
                         print('Generating bar plot')
-                        if not new_meta=='FTU Expression Statistics':
+                        if not new_meta=='FTU Expression Statistics' and not new_meta=='FTU Morphometrics':
                             fig = go.Figure(px.bar(plot_data,x=group_bar,y=new_meta,hover_data = ['Dataset']))
                         else:
                             if sub_meta[0]=='Main Cell Types':
@@ -2909,12 +2908,6 @@ class FUSION:
         
         return fusey_child, parent_style
 
-"""
-class MyDisk(diskcache.Disk):
-    def __init__(self, *args, **kwargs):
-        kwargs['pickle_protocol'] = 0
-        super(MyDisk, self).__init__(*args, **kwargs)
-"""
 
 def app(*args):
     
