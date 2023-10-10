@@ -92,6 +92,10 @@ class FUSION:
         for ct in self.cell_graphics_key:
             self.cell_names_key[self.cell_graphics_key[ct]['full']] = ct
 
+        # Getting morphometrics reference from dataset_handler
+        self.morphometrics_reference = self.dataset_handler.morphometrics_reference["Morphometrics"]
+        self.morphometrics_names = self.dataset_handler.morpho_names
+
         # Number of main cell types to include in pie-charts
         self.plot_cell_types_n = len(list(self.cell_names_key.keys()))
 
@@ -564,6 +568,7 @@ class FUSION:
              Input({'type':'slide-dataset-table','index':ALL},'selected_rows')],
              [Output('slide-select','options'),
              Output({'type':'meta-plot','index':ALL},'figure'),
+             Output({'type':'cell-meta-drop','index':ALL},'options'),
              Output({'type':'cell-meta-drop','index':ALL},'disabled'),
              Output({'type':'current-slide-count','index':ALL},'children')],
              prevent_initial_call = True
@@ -778,10 +783,40 @@ class FUSION:
 
     def update_metadata_plot(self,new_meta,sub_meta,group_type,slide_rows):
         
-        if not new_meta == ['FTU Expression Statistics'] and not new_meta==['FTU Morphometrics']:
-            cell_types_turn_off = (True,True,True)
+        if not new_meta == ['FTU Expression Statistics']:
+            if not new_meta == ['FTU Morphometrics']:
+                # This is for expression statistics
+                cell_types_turn_off = (True,True,True)
+            else:
+                # This is for morphometrics statistics
+                cell_types_turn_off = (True,False,False)
         else:
+            # This is for everything else
             cell_types_turn_off = (False, False, False)
+
+        try:
+            if not ctx.triggered_id['type']=='meta-drop':
+                cell_types_options = (no_update,no_update,no_update)
+            else:
+                print(new_meta)
+                if new_meta==['FTU Expression Statistics']:
+                    # These are the options for expression statistics
+                    cell_types_options = (
+                        ['Main Cell Types','Cell States'],
+                        ['Mean','Median','Sum','Standard Deviation','Nonzero'],
+                        list(self.cell_names_key.keys())
+                    )
+                elif new_meta==['FTU Morphometrics']:
+                    # These are the options for morphometrics
+                    cell_types_options = (
+                        [],
+                        ['Maximum','Mean','Median','Minimum','Standard Deviation','Sum'],
+                        self.morphometrics_names
+                    )
+                else:
+                    cell_types_options = (no_update,no_update,no_update)
+        except:
+            cell_types_options = (no_update,no_update,no_update)
 
         current_slide_count, slide_select_options = self.update_current_slides(slide_rows)
 
@@ -794,9 +829,12 @@ class FUSION:
             if len(group_type)>0:
                 group_type = group_type[0]
 
-        if type(ctx.triggered_id)==dict:
+        # ctx.triggered_id here is type <dash._utils.AttributeDict> not dict
+        try:
             if ctx.triggered_id['type']=='slide-dataset-table':
                 self.metadata = self.update_plotting_metadata()
+        except:
+            pass
 
         print(f'length of updated metadata: {len(self.metadata)}')
         # For DSA-backend deployment
@@ -826,87 +864,117 @@ class FUSION:
                                     d_dict[new_meta].append(s['meta'][new_meta])
                         
                         else:
-                            # Whether it's Mean, Median, Sum, Standard Deviation, or Nonzero
-                            #print(f'sub_meta: {sub_meta}')
-                            ftu_expression_feature = sub_meta[1]+' '
-                            # Whether it's Main Cell Types or Cell States
-                            ftu_expression_feature+=sub_meta[0]
-                            # Getting cell type abbreviation from full name
-                            cell_type = self.cell_names_key[sub_meta[2]]
+                            if new_meta=='FTU Expression Statistics':
+                                if not ctx.triggered_id['type']=='meta-drop':
+                                    # Whether it's Mean, Median, Sum, Standard Deviation, or Nonzero
+                                    ftu_expression_feature = sub_meta[1]+' '
+                                    # Whether it's Main Cell Types or Cell States
+                                    ftu_expression_feature+=sub_meta[0]
+                                    # Getting cell type abbreviation from full name
+                                    cell_type = self.cell_names_key[sub_meta[2]]
 
-                            # Getting FTU specific expression values
-                            d_dict = {'Dataset':[],'Slide Name':[],'FTU':[],new_meta:[]}
-                            if sub_meta[0]=='Cell States':
-                                d_dict['State'] = []
+                                    # Getting FTU specific expression values
+                                    d_dict = {'Dataset':[],'Slide Name':[],'FTU':[],new_meta:[]}
+                                    if sub_meta[0]=='Cell States':
+                                        d_dict['State'] = []
 
-                            for d_i in d_include:
-                                slide_meta = d_i['meta']
-                                slide_name = d_i['name']
-                                ftu_expressions = [i for i in list(slide_meta.keys()) if 'Expression' in i]
-                                for f in ftu_expressions:
-                                    expression_stats = slide_meta[f][ftu_expression_feature]
-                                    for ct in list(expression_stats.keys()):
-                                        if cell_type in ct:
-                                            d_dict[new_meta].append(expression_stats[ct])
-                                            d_dict['FTU'].append(f.replace(' Expression Statistics',''))
+                                    for d_i in d_include:
+                                        slide_meta = d_i['meta']
+                                        slide_name = d_i['name']
+                                        ftu_expressions = [i for i in list(slide_meta.keys()) if 'Expression' in i]
+                                        for f in ftu_expressions:
+                                            expression_stats = slide_meta[f][ftu_expression_feature]
+                                            for ct in list(expression_stats.keys()):
+                                                if cell_type in ct:
+                                                    d_dict[new_meta].append(expression_stats[ct])
+                                                    d_dict['FTU'].append(f.replace(' Expression Statistics',''))
+                                                    d_dict['Dataset'].append(dataset_name)
+                                                    d_dict['Slide Name'].append(slide_name)
+                                                    if sub_meta[0]=='Cell States':
+                                                        d_dict['State'].append(ct.split('_')[-1])
+                                else:
+                                    d_dict = {}
+                            
+                            elif new_meta=='FTU Morphometrics':
+                                
+                                if not ctx.triggered_id['type']=='meta-drop':
+                                    ftu_morphometric_feature = sub_meta[2]
+                                    stat_agg = sub_meta[1]
+
+                                    # Getting FTU Specific expression values
+                                    d_dict = {'Dataset':[],'Slide Name':[],'FTU':[],new_meta:[]}
+                                    
+                                    for d_i in d_include:
+                                        slide_meta = d_i['meta']
+                                        slide_name = d_i['name']
+                                        ftu_morphometrics = [i for i in list(slide_meta.keys()) if 'Morphometrics' in i]
+                                        for f in ftu_morphometrics:
+                                            morpho_stat = slide_meta[f][ftu_morphometric_feature+'_'+stat_agg]
+                                            d_dict[new_meta].append(morpho_stat)
+                                            d_dict['FTU'].append(f.replace('_Morphometrics',''))
                                             d_dict['Dataset'].append(dataset_name)
                                             d_dict['Slide Name'].append(slide_name)
-                                            if sub_meta[0]=='Cell States':
-                                                d_dict['State'].append(ct.split('_')[-1])
+                                else:
+                                    d_dict = {}
 
                         dataset_metadata.append(d_dict)
 
                 # Converting to dataframe
                 plot_data = pd.concat([pd.DataFrame.from_dict(i) for i in dataset_metadata],ignore_index=True)
-                plot_data = plot_data.dropna(subset=[new_meta]).convert_dtypes()
                 
-                # Assigning grouping variable
-                if group_type=='By Dataset':
-                    group_bar = 'Dataset'
-                elif group_type=='By Slide':
-                    group_bar = 'Slide Name'
-
-                # Checking if new_meta is a number or a string
-                # This is dumb, c'mon pandas
-                if plot_data[new_meta].dtype.kind in 'biufc':
-                    if group_bar == 'Dataset':
-                        print('Generating violin plot')
-                        if not new_meta == 'FTU Expression Statistics':
-                            fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name']))
-                        else:
-                            if sub_meta[0]=='Main Cell Types':
-                                fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name'],color='FTU'))
-                            else:
-                                fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name','State'],color='FTU'))
-                    else:
-                        print('Generating bar plot')
-                        if not new_meta=='FTU Expression Statistics' and not new_meta=='FTU Morphometrics':
-                            fig = go.Figure(px.bar(plot_data,x=group_bar,y=new_meta,hover_data = ['Dataset']))
-                        else:
-                            if sub_meta[0]=='Main Cell Types':
-                                fig = go.Figure(px.bar(plot_data,x=group_bar,y=new_meta,hover_data=['Dataset'],color='FTU'))
-                            else:
-                                fig = go.Figure(px.bar(plot_data,x=group_bar,y=new_meta,hover_data=['Dataset','State'],color='FTU'))
-                else:
-                    print(f'Generating bar plot')
-                    groups_present = plot_data[group_bar].unique()
-                    count_df = pd.DataFrame()
-                    for g in groups_present:
-                        g_df = plot_data[plot_data[group_bar]==g]
-                        g_counts = g_df[new_meta].value_counts().to_frame()
-                        g_counts[group_bar] = [g]*g_counts.shape[0]
-
-                        if count_df.empty:
-                            count_df = g_counts
-                        else:
-                            count_df = pd.concat([count_df,g_counts],axis=0,ignore_index=False)
+                if not plot_data.empty:
+                    plot_data = plot_data.dropna(subset=[new_meta]).convert_dtypes()
                     
-                    count_df = count_df.reset_index()
-                    count_df.columns = [new_meta, 'counts', group_bar]
+                    # Assigning grouping variable
+                    if group_type=='By Dataset':
+                        group_bar = 'Dataset'
+                    elif group_type=='By Slide':
+                        group_bar = 'Slide Name'
 
-                    fig = go.Figure(px.bar(count_df, x = group_bar, y = 'counts', color = new_meta))
+                    # Checking if new_meta is a number or a string
+                    # This is dumb, c'mon pandas
+                    if plot_data[new_meta].dtype.kind in 'biufc':
+                        if group_bar == 'Dataset':
+                            print('Generating violin plot')
+                            if not new_meta == 'FTU Expression Statistics':
+                                fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name']))
+                            else:
+                                if sub_meta[0]=='Main Cell Types':
+                                    fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name'],color='FTU'))
+                                else:
+                                    fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name','State'],color='FTU'))
+                        else:
+                            print('Generating bar plot')
+                            if not new_meta=='FTU Expression Statistics' and not new_meta=='FTU Morphometrics':
+                                fig = go.Figure(px.bar(plot_data,x=group_bar,y=new_meta,hover_data = ['Dataset']))
+                            else:
+                                if sub_meta[0]=='Main Cell Types':
+                                    fig = go.Figure(px.bar(plot_data,x=group_bar,y=new_meta,hover_data=['Dataset'],color='FTU'))
+                                else:
+                                    fig = go.Figure(px.bar(plot_data,x=group_bar,y=new_meta,hover_data=['Dataset','State'],color='FTU'))
+                    else:
+                        print(f'Generating bar plot')
+                        groups_present = plot_data[group_bar].unique()
+                        count_df = pd.DataFrame()
+                        for g in groups_present:
+                            g_df = plot_data[plot_data[group_bar]==g]
+                            g_counts = g_df[new_meta].value_counts().to_frame()
+                            g_counts[group_bar] = [g]*g_counts.shape[0]
 
-                return [slide_select_options, [fig], cell_types_turn_off,[current_slide_count]]
+                            if count_df.empty:
+                                count_df = g_counts
+                            else:
+                                count_df = pd.concat([count_df,g_counts],axis=0,ignore_index=False)
+                        
+                        count_df = count_df.reset_index()
+                        count_df.columns = [new_meta, 'counts', group_bar]
+
+                        fig = go.Figure(px.bar(count_df, x = group_bar, y = 'counts', color = new_meta))
+                else:
+
+                    fig = go.Figure()
+
+                return [slide_select_options, [fig], cell_types_options, cell_types_turn_off,[current_slide_count]]
             else:
                 raise exceptions.PreventUpdate
         else:

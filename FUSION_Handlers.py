@@ -1527,37 +1527,38 @@ class GirderHandler:
             # Getting contents of base collection
             collection_contents = self.gc.get(f'resource/{self.current_collection["id"][-1]}/items',parameters={'type':p_type,'limit':100000}) 
             # Reducing list to only images
-            collection_slides = [i for i in collection_contents if 'largeImage' in i]
+            collection_slides = [i for i in collection_contents if 'largeImage' in i and not 'png' in i['name']]
             # folderIds for each item (determining ordering of slides)
             slide_folderIds = [i['folderId'] for i in collection_slides]
             # Assigning each slide to a dictionary by shared folderId
             for f in np.unique(slide_folderIds):
                 self.slide_datasets[f] = {}
                 folder_name = self.gc.get(f'/folder/{f}')['name']
-                self.slide_datasets[f]['name'] = folder_name
-            
-                folder_slides = [i for i in collection_slides if i['folderId']==f]
+                if not folder_name=='histoqc_outputs':
+                    self.slide_datasets[f]['name'] = folder_name
+                
+                    folder_slides = [i for i in collection_slides if i['folderId']==f]
 
-                # The item dictionaries for each of the slides will also include metadata, id, etc.
-                self.slide_datasets[f]['Slides'] = folder_slides
+                    # The item dictionaries for each of the slides will also include metadata, id, etc.
+                    self.slide_datasets[f]['Slides'] = folder_slides
 
-                # Aggregating non-dictionary metadata
-                folder_slide_meta = [i['meta'] for i in folder_slides]
-                # Get all the unique keys present in this folder's metadata
-                meta_keys = []
-                for i in folder_slide_meta:
-                    meta_keys.extend(list(i.keys()))
-
-                # Not adding dictionaries to the folder metadata
-                # Assuming the same type is shared for each item sharing a key 
-                #TODO: Include check for types of each member of an item metadata just for safety
-                self.slide_datasets[f]['Metadata'] = {}
-                for m in meta_keys:
-                    item_metadata = [item[m] for item in folder_slide_meta if m in item]
-                    if type(item_metadata[0])==str:
-                        self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
-                    elif type(item_metadata[0])==int or type(item_metadata[0])==float:
-                        self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+                    # Aggregating non-dictionary metadata
+                    folder_slide_meta = [i['meta'] for i in folder_slides]
+                    # Get all the unique keys present in this folder's metadata
+                    meta_keys = []
+                    for i in folder_slide_meta:
+                        meta_keys.extend(list(i.keys()))
+                    
+                    # Not adding dictionaries to the folder metadata
+                    # Assuming the same type is shared for each item sharing a key 
+                    #TODO: Include check for types of each member of an item metadata just for safety
+                    self.slide_datasets[f]['Metadata'] = {}
+                    for m in meta_keys:
+                        item_metadata = [item[m] for item in folder_slide_meta if m in item]
+                        if type(item_metadata[0])==str:
+                            self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
+                        elif type(item_metadata[0])==int or type(item_metadata[0])==float:
+                            self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
     
     def get_collection_annotation_meta(self,select_ids:list):
 
@@ -1728,6 +1729,7 @@ class GirderHandler:
 
         # Key items to grab from assets:
         # cell_graphics_key
+        # morphometrics_reference
         # asct+b table
 
         # Downloading JSON resource
@@ -1737,6 +1739,22 @@ class GirderHandler:
         self.cell_names = []
         for ct in self.cell_graphics_key:
             self.cell_names.append(self.cell_graphics_key[ct]['full'])
+
+        morpho_item = self.gc.get('resource/lookup',parameters={'path':assets_path+'morphometrics/morphometrics_reference.json'})
+        self.morphometrics_reference = self.gc.get(f'/item/{morpho_item["_id"]}/download')
+        
+        self.morpho_names = []
+        for mo in self.morphometrics_reference["Morphometrics"]:
+            mo_name = mo['name']
+            if not '{}' in mo_name:
+                self.morpho_names.append(mo_name)
+            else:
+                if not mo['subcompartments']=='All':
+                    for sc in mo['subcompartments']:
+                        self.morpho_names.append(mo_name.replace('{}',sc))
+                else:
+                    for sc in ['Nuclei','Luminal Space','PAS']:
+                        self.morpho_names.append(mo_name.replace('{}',sc))
 
         # Getting asct+b table
         asct_b_table_id = self.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
