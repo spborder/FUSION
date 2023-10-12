@@ -908,12 +908,14 @@ class FUSION:
                                         slide_meta = d_i['meta']
                                         slide_name = d_i['name']
                                         ftu_morphometrics = [i for i in list(slide_meta.keys()) if 'Morphometrics' in i]
-                                        for f in ftu_morphometrics:
-                                            morpho_stat = slide_meta[f][ftu_morphometric_feature+'_'+stat_agg]
-                                            d_dict[new_meta].append(morpho_stat)
-                                            d_dict['FTU'].append(f.replace('_Morphometrics',''))
-                                            d_dict['Dataset'].append(dataset_name)
-                                            d_dict['Slide Name'].append(slide_name)
+                                        if len(ftu_morphometrics)>0:
+                                            for f in ftu_morphometrics:
+                                                if ftu_morphometric_feature+'_'+stat_agg in slide_meta[f]:
+                                                    morpho_stat = slide_meta[f][ftu_morphometric_feature+'_'+stat_agg]
+                                                    d_dict[new_meta].append(morpho_stat)
+                                                    d_dict['FTU'].append(f.replace('_Morphometrics',''))
+                                                    d_dict['Dataset'].append(dataset_name)
+                                                    d_dict['Slide Name'].append(slide_name)
                                 else:
                                     d_dict = {}
 
@@ -2954,7 +2956,7 @@ class FUSION:
                 fusey_child = [
                     html.Div([
                         dbc.Row([
-                            dbc.Col(html.Img(src='./assets/fusey_trans.png',height='75px',width='75px')),
+                            dbc.Col(html.Img(src='./assets/fusey_clean.svg',height='75px',width='75px')),
                         ]),
                         dbc.Row([
                             dbc.Col(html.H4('Hi, my name is Fusey!',style={'fontSize':11}))

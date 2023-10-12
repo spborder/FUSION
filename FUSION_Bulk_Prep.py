@@ -142,22 +142,26 @@ class BulkProcessApp:
                             'disabled':True
                         })
         
-        self.layer_ann = {
-            'current_layer':[i['value'] for i in ftu_options if not i['disabled']][0],
-            'current_annotation':0,
-            'previous_annotation':0,
-            'max_layers':[len(i['annotation']['elements']) for i in slide_annotations]
-        }
+        print(ftu_options)
+        if len([i for i in ftu_options if not i['disabled']])>0:
+            self.layer_ann = {
+                'current_layer':[i['value'] for i in ftu_options if not i['disabled']][0],
+                'current_annotation':0,
+                'previous_annotation':0,
+                'max_layers':[len(i['annotation']['elements']) for i in slide_annotations]
+            }
 
-        image, mask = self.prep_handler.get_annotation_image_mask(slide,slide_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+            image, mask = self.prep_handler.get_annotation_image_mask(slide,slide_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
-        self.layer_ann['current_image'] = image
-        self.layer_ann['current_mask'] = mask
+            self.layer_ann['current_image'] = image
+            self.layer_ann['current_mask'] = mask
 
-        ex_ftu_img = go.Figure(
-            data = px.imshow(image)['data'],
-            layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-        )
+            ex_ftu_img = go.Figure(
+                data = px.imshow(image)['data'],
+                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+            )
+        else:
+            ex_ftu_img = go.Figure()
 
         self.upload_wsi_id = slide
         self.upload_annotations = slide_annotations
@@ -243,8 +247,6 @@ class BulkProcessApp:
 
     def run_feature_extraction(self,feat_butt):
         
-        print(ctx.triggered_id)
-        print(feat_butt)
         if not ctx.triggered_id is None:
             if type(feat_butt) == list:
                 if len(feat_butt)>0:
@@ -468,8 +470,8 @@ def main():
 
     dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
 
-    dataset_path = '/collection/10X_Visium'
-    path_type = 'collection'
+    dataset_path = '/collection/10X_Visium/Frozen Cohort'
+    path_type = 'folder'
 
     dataset_handler.initialize_folder_structure(dataset_path,path_type)
 

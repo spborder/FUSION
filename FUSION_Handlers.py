@@ -74,7 +74,7 @@ class LayoutHandler:
             ),
             dbc.Popover(
                 children = [
-                    html.Img(src='./assets/fusey_trans.png',height=20,width=20),
+                    html.Img(src='./assets/fusey_clean.svg',height=20,width=20),
                     text],
                 target = {'type':'info-button','index':self.info_button_idx},
                 body=True,

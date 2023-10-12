@@ -1,7 +1,7 @@
 {
       "Morphometrics": [
             {
-                  "name": "{} By Object Area",
+                  "name": "{} Area By Object Area",
                   "compartments": "All",
                   "subcompartments": "All",
                   "group": "Morphology",
