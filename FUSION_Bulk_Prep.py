@@ -470,7 +470,7 @@ def main():
 
     dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
 
-    dataset_path = '/collection/10X_Visium/Frozen Cohort'
+    dataset_path = '/collection/10X_Visium/FFPE Cohort/Histology/Diabetic'
     path_type = 'folder'
 
     dataset_handler.initialize_folder_structure(dataset_path,path_type)

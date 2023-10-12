@@ -1038,17 +1038,12 @@ class LayoutHandler:
             html.P('Happy fusing!')
         ]
 
-        total_videos = ['General Introduction','Main Window Navigation','Dataset Builder','Cell Type Overlays','Morphological Clustering',
-                        'Cell Type and State Proportions','Exporting Data']
-        video_names = ['general_introduction','main_window','dataset_builder','cell_overlays','morphological_clustering','cell_types_and_states',[]]
-        videos_available = ['General Introduction','Main Window Navigation','Dataset Builder','Cell Type Overlays','Morphological Clustering','Cell Type and State Proportions']
+        total_videos = ['FUSION Introduction','Preprocessing Steps','Visualization Page','Dataset Builder','Dataset Uploader']
+        video_names = ['FUSION_Introduction','Preprocessing_Overview','Visualization_Page','Dataset_Builder_Fusey','Dataset_Uploader_Fusey']
         video_dropdown = []
         for t,n in zip(total_videos,video_names):
-            if t in videos_available:
-                video_dropdown.append({'label':t,'value':n,'disabled':False})
-            else:
-                video_dropdown.append({'label':t,'value':n,'disabled':True})
-        
+            video_dropdown.append({'label':t,'value':n,'disabled':False})
+
         welcome_layout = [
                 html.H1('Welcome to FUSION!'),
                 html.Hr(),
@@ -1060,12 +1055,14 @@ class LayoutHandler:
                     dcc.Dropdown(video_dropdown,video_dropdown[0],id={'type':'video-drop','index':0}),
                     html.B(),
                     html.Hr(),
-                    html.Video(src='./assets/videos/general_introduction.mp4',
+                    html.Video(src='./assets/videos/FUSION_Introduction.mp4',
                             controls = True,
                             autoPlay = True,
                             preload=True,
                             id = {'type':'video','index':0})
-                ])
+                ]),
+                html.Hr(),
+
             ]
         
         self.current_welcome_layout = welcome_layout
@@ -1258,7 +1255,9 @@ class LayoutHandler:
             ),
             dbc.Container([
                 html.H1('Welcome to FUSION!'),
-                ],fluid=True,id='container-content')
+                ],fluid=True,id='container-content'),
+            html.Hr(),
+            html.P('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
         ])
 
         self.current_initial_layout = welcome_layout
