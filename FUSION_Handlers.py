@@ -837,7 +837,8 @@ class LayoutHandler:
                     dbc.Col(
                         html.Div([
                             dbc.Label('Select Organ:',html_for='organ-type'),
-                            dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True)
+                            dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True),
+                            dcc.Markdown('**Please note**, this process may take some time as the segmentation models and cell deconvolution pipelines run in the backend')
                         ]),md=12
                     )
                 ]),
@@ -1062,7 +1063,7 @@ class LayoutHandler:
                             id = {'type':'video','index':0})
                 ]),
                 html.Hr(),
-
+                html.Div(id='tutorial-content',children = [])
             ]
         
         self.current_welcome_layout = welcome_layout

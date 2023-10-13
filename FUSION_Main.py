@@ -579,7 +579,8 @@ class FUSION:
         # Selecting a specific tutorial video
         self.app.callback(
             Input({'type':'video-drop','index':ALL},'value'),
-            Output({'type':'video','index':ALL},'src'),
+            [Output({'type':'video','index':ALL},'src'),
+             Output('tutorial-content','children')],
             prevent_initial_call = True
         )(self.get_video)
 
@@ -619,6 +620,20 @@ class FUSION:
             prevent_initial_call=True
         )(self.apres_segmentation)
 
+        # Checking logs for a given job
+        """
+        self.app.callback(
+            output = [
+                Output({'type':'check-logs','index':ALL},'children'),
+                Output({'type':'log-interval','index':ALL},'disabled')
+            ],
+            inputs = [
+                Input({'type':'log-interval','index':ALL},'n_intervals')
+            ]
+        )(self.update_logs)
+        
+        """
+
         # Updating sub-compartment segmentation
         self.app.callback(
             [Input('ftu-select','value'),
@@ -653,7 +668,12 @@ class FUSION:
         # Pull tutorial videos from DSA 
         video_src = [f'./assets/videos/{tutorial_category}.mp4']
 
-        return video_src
+        #TODO: Add some markdown tutorial/Readme-like thing for each of the videos below
+        tutorial_children = [
+            tutorial_category
+        ]
+
+        return video_src, tutorial_children
 
     def update_plotting_metadata(self):
 
@@ -2700,10 +2720,19 @@ class FUSION:
         histo_qc_run = self.dataset_handler.run_histo_qc(self.latest_upload_folder['id'])
 
         #TODO: Activate the HistoQC plugin from here and return some metrics
-        histo_qc_output = pd.DataFrame(collection_contents)
+        histo_qc_output = pd.DataFrame(collection_contents[0])
 
         return thumbnail, histo_qc_output
 
+    def update_logs(self,new_interval):
+
+        print(f'ctx.triggered_id for logs check = {ctx.triggered_id}')
+        print(f'new_interval inputs: {new_interval}')
+        interval_disabled = (False,False,False)
+        new_logs = ([],[],[])
+
+        return interval_disabled, new_logs
+    
     def apres_segmentation(self,organ_selection):
 
         print(f'organ_selection: {organ_selection}')
