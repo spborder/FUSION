@@ -26,7 +26,7 @@ WORKDIR /
 #    ssh-add /root/.ssh/id_rsa && \
 #    git clone git@github.com:spborder/FUSION.git
 
-RUN git clone git@github.com:spborder/FUSION.git
+RUN git clone https://github.com/spborder/FUSION.git
 RUN echo "Listing contents:" && ls -al /
 
 WORKDIR /FUSION
