@@ -1136,6 +1136,12 @@ class LayoutHandler:
             style={'marginBottom':'20px'}
         )
 
+        # Turning off upload capability if user is "fusionguest"
+        if initial_user=='fusionguest':
+            upload_disable = True
+        else:
+            upload_disable = False
+
         # Sidebar
         sider = html.Div([
             dbc.Offcanvas([
@@ -1144,7 +1150,7 @@ class LayoutHandler:
                     dbc.NavLink('Welcome',href='/welcome',active='exact',id='welcome-sidebar'),
                     dbc.NavLink('FUSION Visualizer',href='/vis',active='exact',id='vis-sidebar'),
                     dbc.NavLink('Dataset Builder',href='/dataset-builder',active='exact',id='builder-sidebar'),
-                    dbc.NavLink('Dataset Uploader',href='/dataset-uploader',active='exact',id='upload-sidebar')
+                    dbc.NavLink('Dataset Uploader',href='/dataset-uploader',active='exact',id='upload-sidebar',disabled=upload_disable)
                 ],vertical=True,pills=True)], id={'type':'sidebar-offcanvas','index':0},style={'background-color':"#f8f9fa"}
             )
         ])
@@ -1171,8 +1177,12 @@ class LayoutHandler:
                     dbc.Col(
                         dbc.Input(type='password',placeholder='Password',id='pword-input')
                     ),
-                    dbc.Col(
-                        dbc.Button('Submit',color='primary',id='login-submit'),width='auto'
+                    html.Div(id = 'create-user-extras',children = []),
+                    dbc.Row(
+                        children = html.Div([
+                            dbc.Button('Submit',color='primary',id='login-submit'),
+                            dbc.Button('Create Account',color='secondary',id='create-user-submit')
+                        ],className='d-grid gap-2 d-md-flex')
                     )
                 ])
             ],
@@ -1441,6 +1451,22 @@ class GirderHandler:
         self.password = password
         
         self.gc.authenticate(username,password)
+
+    def create_user(self,username,password,email,firstName,lastName):
+
+        # Creating new user from username/password combo
+        self.username = username
+        self.password = password
+
+        self.gc.post('/user',
+                     parameters = {
+                         'login':username,
+                         'password':password,
+                         'email':email,
+                         'firstName':firstName,
+                         'lastName':lastName
+                     })
+
 
     def get_token(self):
         # Getting session token for accessing private collections

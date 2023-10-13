@@ -396,10 +396,15 @@ class FUSION:
             [Output('login-submit','color'),
              Output('login-submit','children'),
              Output('logged-in-user','children'),
-             Output('upload-sidebar','disabled')],
+             Output('upload-sidebar','disabled'),
+             Output('create-user-extras','children')],
             [Input('username-input','value'),
              Input('pword-input','value'),
-             Input('login-submit','n_clicks')],
+             Input({'type':'email-input','index':ALL},'value'),
+             Input({'type':'first-name-input','index':ALL},'value'),
+             Input({'type':'last-name-input','index':ALL},'value'),
+             Input('login-submit','n_clicks'),
+             Input('create-user-submit','n_clicks')],
              prevent_initial_call=True
         )(self.girder_login)
 
@@ -1261,6 +1266,17 @@ class FUSION:
         m_prop = None
         cell_sub_select_children = no_update
 
+        color_bar_style = {
+            'visibility':'visible',
+            'background':'white',
+            'background':'rgba(255,255,255,0.8)',
+            'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
+            'border-radius':'10px',
+            'width':'',
+            'padding':'0px 0px 0px 25px',
+
+        }
+
         if not type(cell_sub_val) is list:
             cell_sub_val = [cell_sub_val]
         if len(cell_sub_val)==0:
@@ -1315,8 +1331,13 @@ class FUSION:
 
                         self.current_cell = self.cell_names_key[cell_val]
                         self.update_hex_color_key('cell_value')
+                        color_bar_style['width'] = '350px'
 
-                        color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                        color_bar = dl.Colorbar(
+                            colorscale = list(self.hex_color_key.values()),
+                            width=300,height=10,position='bottomleft',
+                            id=f'colorbar{random.randint(0,100)}',
+                            style = color_bar_style)
                         
                         filter_max_val = np.max(list(self.hex_color_key.keys()))
                         filter_disable = False
@@ -1324,8 +1345,13 @@ class FUSION:
                     elif cell_sub_val[0]=='All':
                         self.current_cell = self.cell_names_key[cell_val]
                         self.update_hex_color_key('cell_value')
+                        color_bar_style['width'] = '350px'
 
-                        color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                        color_bar = dl.Colorbar(
+                            colorscale = list(self.hex_color_key.values()),
+                            width=300,height=10,position='bottomleft',
+                            id=f'colorbar{random.randint(0,100)}',
+                            style = color_bar_style)
                         
                         filter_max_val = np.max(list(self.hex_color_key.keys()))
                         filter_disable = False
@@ -1334,8 +1360,13 @@ class FUSION:
                         # Visualizing a sub-property of a main cell type
                         self.current_cell = self.cell_names_key[cell_val]+'_'+cell_sub_val[0]
                         self.update_hex_color_key('cell_sub_value')
+                        color_bar_style['width'] = '350px'
 
-                        color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                        color_bar = dl.Colorbar(
+                            colorscale = list(self.hex_color_key.values()),
+                            width=300,height=10,position='bottomleft',
+                            id=f'colorbar{random.randint(0,100)}',
+                            style = color_bar_style)
 
                         filter_max_val = np.max(list(self.hex_color_key.keys()))
                         filter_disable = False
@@ -1343,8 +1374,13 @@ class FUSION:
                 elif m_prop == 'Cell_States':
                     self.current_cell = self.cell_names_key[cell_val]
                     self.update_hex_color_key('cell_state')
+                    color_bar_style['width'] = '350px'
 
-                    color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                    color_bar = dl.Colorbar(
+                        colorscale = list(self.hex_color_key.values()),
+                        width=300,height=10,position='bottomleft',
+                        id=f'colorbar{random.randint(0,100)}',
+                        style = color_bar_style)
 
                     filter_max_val = np.max(list(self.hex_color_key.keys()))
                     filter_disable = False
@@ -1352,11 +1388,17 @@ class FUSION:
             elif cell_val == 'Max Cell Type':
                 self.current_cell = 'max'
                 self.update_hex_color_key('max_cell')
+                color_bar_style['width'] = '650px'
 
                 cell_sub_select_children = []
 
                 cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
-                color_bar = dlx.categorical_colorbar(categories = cell_types, colorscale = list(self.hex_color_key.values()),width=600,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                color_bar = dlx.categorical_colorbar(
+                    categories = cell_types,
+                    colorscale = list(self.hex_color_key.values()),
+                    width=600,height=10,position='bottomleft',
+                    id=f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style)
 
                 filter_max_val = 1.0
                 filter_disable = True
@@ -1368,7 +1410,11 @@ class FUSION:
                 cell_sub_select_children = []
 
                 #TODO: This should probably be a categorical colorbar
-                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                color_bar = dl.Colorbar(
+                    colorscale = list(self.hex_color_key.values()),
+                    width=300,height=10,position='bottomleft',
+                    id=f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style)
 
                 filter_max_val = 1.0
                 filter_disable = True
@@ -1381,7 +1427,11 @@ class FUSION:
 
                 cell_sub_select_children = []
 
-                color_bar = dl.Colorbar(colorscale = list(self.hex_color_key.values()),width=300,height=10,position='bottomleft',id=f'colorbar{random.randint(0,100)}')
+                color_bar = dl.Colorbar(
+                    colorscale = list(self.hex_color_key.values()),
+                    width=300,height=10,position='bottomleft',
+                    id=f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style)
 
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
                 filter_disable = False
@@ -2558,8 +2608,10 @@ class FUSION:
 
         return upload_reqs, input_disabled
 
-    def girder_login(self,username,pword,p_butt):
+    def girder_login(self,username,pword,email,firstname,lastname,p_butt,create_butt):
 
+        create_user_children = []
+        print(f'login ctx.triggered_id: {ctx.triggered_id}')
         if ctx.triggered_id=='login-submit':
 
             try:
@@ -2577,7 +2629,42 @@ class FUSION:
                 logged_in_user = ''
                 upload_disabled = True
 
-            return button_color, button_text, logged_in_user, upload_disabled
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children
+        
+        elif ctx.triggered_id=='create-user-submit':
+            print(f'email:{email}')
+            print(f'firstname: {firstname}')
+            print(f'lastname:{lastname}')
+            create_user_children = [
+                dbc.Label('Email:',width='auto'),
+                dbc.Col(
+                    dcc.Input(type='email',id={'type':'email-input','index':0})
+                ),
+                dbc.Label('First Name:',width='auto'),
+                dbc.Col(
+                    dcc.Input(type='text',id={'type':'first-name-input','index':0})
+                ),
+                dbc.Label('Last Name',width='auto'),
+                dbc.Col(
+                    dcc.Input(type='text',id={'type':'last-name-input','index':0})
+                )
+            ]
+            try:
+                self.dataset_handler.create_user(username,pword,email,firstname,lastname)
+
+                button_color = 'success',
+                button_text = 'Success!',
+                logged_in_user = f'Welcome: {username}'
+                upload_disabled = False
+            except girder_client.AuthenticationError:
+
+                button_color = 'warning'
+                button_text = 'Login Failed'
+                logged_in_user = ''
+                upload_disabled = True
+            
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children
+
         else:
             raise exceptions.PreventUpdate
 
@@ -2720,12 +2807,13 @@ class FUSION:
         histo_qc_run = self.dataset_handler.run_histo_qc(self.latest_upload_folder['id'])
 
         #TODO: Activate the HistoQC plugin from here and return some metrics
-        histo_qc_output = pd.DataFrame(collection_contents[0])
+        histo_qc_output = pd.DataFrame(collection_contents)
 
         return thumbnail, histo_qc_output
 
     def update_logs(self,new_interval):
 
+        #TODO: Modify this function to report segmentation/deconvolution/annotation logs
         print(f'ctx.triggered_id for logs check = {ctx.triggered_id}')
         print(f'new_interval inputs: {new_interval}')
         interval_disabled = (False,False,False)
