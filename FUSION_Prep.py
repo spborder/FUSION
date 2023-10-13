@@ -296,7 +296,15 @@ class PrepHandler:
         def_item = self.girder_handler.gc.get(f'/item/{self.spot_annotation_info["definitions_file"]}/files')
         def_file_id = def_item[0]['_id']
 
-        job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.spot_annotation_info["plugin_name"]}/run',
+        # Running cell deconvolution
+        cell_deconv_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.cell_deconvolution_plugin}/run',
+                                                   parameters = {
+                                                       'inputRDSFile':rds_file_id,
+                                                       'inputRDSFile_folder':folderId
+                                                   })
+
+        # Generating spot annotations
+        spot_ann_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.spot_annotation_info["plugin_name"]}/run',
                                         parameters = {
                                             'rds_file':rds_file_id,
                                             'definitions_file':def_file_id,
@@ -307,7 +315,7 @@ class PrepHandler:
                                         })
         
 
-        return job_response
+        return cell_deconv_job, spot_ann_job
 
     def run_feature_extraction(self,image_id,sub_seg_params):
         

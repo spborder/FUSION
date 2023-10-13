@@ -1707,7 +1707,9 @@ class GirderHandler:
     def get_job_status(self,job_id:str):
 
         job_info = self.gc.get(f'/job/{job_id}')
-        print(f'job_info: {job_info}')
+        #print(f'job_info: {job_info}')
+        if 'log' in job_info:
+            print(f"most recent log: {job_info['log'][-1]}")
 
         return job_info['status']
 

@@ -2716,15 +2716,17 @@ class FUSION:
             print(f'Running segmentation!')
             segmentation_info = self.prep_handler.segment_image(self.upload_wsi_id,organ_selection)
             print(f'Running spot annotation!')
-            spot_annotation_info = self.prep_handler.gen_spot_annotations(self.upload_wsi_id,self.upload_omics_id)
+            cell_deconv_info, spot_annotation_info = self.prep_handler.gen_spot_annotations(self.upload_wsi_id,self.upload_omics_id)
 
             # Monitoring the running jobs down here
             seg_status = 0
+            cell_status = 0
             spot_status = 0
-            while spot_status+seg_status<6:
+            while spot_status+seg_status+cell_status<9:
 
                 seg_status = self.dataset_handler.get_job_status(segmentation_info['_id'])
                 spot_status = self.dataset_handler.get_job_status(spot_annotation_info['_id'])
+                cell_status = self.dataset_handler.get_job_status(cell_deconv_info['_id'])
 
                 print(f'seg_status: {seg_status}')
                 print(f'spot_status: {spot_status}')
