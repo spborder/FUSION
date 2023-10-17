@@ -1467,7 +1467,6 @@ class GirderHandler:
                          'lastName':lastName
                      })
 
-
     def get_token(self):
         # Getting session token for accessing private collections
         user_token = self.gc.get('token/session')['token']

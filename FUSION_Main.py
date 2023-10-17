@@ -2635,33 +2635,42 @@ class FUSION:
             print(f'email:{email}')
             print(f'firstname: {firstname}')
             print(f'lastname:{lastname}')
-            create_user_children = [
-                dbc.Label('Email:',width='auto'),
-                dbc.Col(
-                    dcc.Input(type='email',id={'type':'email-input','index':0})
-                ),
-                dbc.Label('First Name:',width='auto'),
-                dbc.Col(
-                    dcc.Input(type='text',id={'type':'first-name-input','index':0})
-                ),
-                dbc.Label('Last Name',width='auto'),
-                dbc.Col(
-                    dcc.Input(type='text',id={'type':'last-name-input','index':0})
-                )
-            ]
-            try:
-                self.dataset_handler.create_user(username,pword,email,firstname,lastname)
-
-                button_color = 'success',
-                button_text = 'Success!',
-                logged_in_user = f'Welcome: {username}'
-                upload_disabled = False
-            except girder_client.AuthenticationError:
+            if len(email)==0 or len(firstname)==0 or len(lastname)==0:
+                create_user_children = [
+                    dbc.Label('Email:',width='auto'),
+                    dbc.Col(
+                        dcc.Input(type='email',id={'type':'email-input','index':0})
+                    ),
+                    dbc.Label('First Name:',width='auto'),
+                    dbc.Col(
+                        dcc.Input(type='text',id={'type':'first-name-input','index':0})
+                    ),
+                    dbc.Label('Last Name',width='auto'),
+                    dbc.Col(
+                        dcc.Input(type='text',id={'type':'last-name-input','index':0})
+                    )
+                ]
 
                 button_color = 'warning'
                 button_text = 'Login Failed'
                 logged_in_user = ''
                 upload_disabled = True
+
+            else:
+                create_user_children = no_update
+                try:
+                    self.dataset_handler.create_user(username,pword,email,firstname,lastname)
+
+                    button_color = 'success',
+                    button_text = 'Success!',
+                    logged_in_user = f'Welcome: {username}'
+                    upload_disabled = False
+                except girder_client.AuthenticationError:
+
+                    button_color = 'warning'
+                    button_text = 'Login Failed'
+                    logged_in_user = ''
+                    upload_disabled = True
             
             return button_color, button_text, logged_in_user, upload_disabled, create_user_children
 

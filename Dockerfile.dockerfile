@@ -12,19 +12,7 @@ ENV DSA_URL='http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1/'
 ENV DSA_USER='fusionguest'
 ENV DSA_PWORD='Fus3yWasHere'
 
-#RUN mkdir -p /root/.ssh && \
-#    echo "Host github.com\n\tStrictHostKeyChecking no\n" >> /root/.ssh/config
-
 WORKDIR /
-
-# Copy the SSH private key into the image
-#COPY id_rsa /root/.ssh/id_rsa
-
-# Set the permissions and clone the repo using the SSH agent
-#RUN chmod 600 /root/.ssh/id_rsa && \
-#    eval $(ssh-agent -s) && \
-#    ssh-add /root/.ssh/id_rsa && \
-#    git clone git@github.com:spborder/FUSION.git
 
 RUN git clone https://github.com/spborder/FUSION.git
 RUN echo "Listing contents:" && ls -al /

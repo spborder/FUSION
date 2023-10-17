@@ -46,7 +46,7 @@ class PrepHandler:
         # Info for spot annotation plugin
         self.spot_annotation_info = {
             'definitions_file':'64fa0f782d82d04be3e5daa3',
-            'plugin_name':'dpraveen511_spot_spot_ec2/SpotAnnotation'
+            'plugin_name':'samborder2256_spot_ann_test_latest/SpotAnnotation'
         }
 
         self.cell_deconvolution_plugin = 'sayatmimar_atlasrds_test_6/AtlasRDSCSV'
