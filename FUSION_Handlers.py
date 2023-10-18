@@ -1439,6 +1439,10 @@ class GirderHandler:
         self.authenticate(username, password)
         self.get_token()
 
+        # Name of plugin used for fetching clustering/plotting metadata
+        self.get_cluster_data_plugin = 'samborder2256_get_cluster_data_latest/clustering_data'
+        self.cached_annotation_ids = []
+
         self.padding_pixels = 50
 
         # Initializing blank annotation metadata cache to prevent multiple dsa requests
@@ -1587,45 +1591,36 @@ class GirderHandler:
     
     def get_collection_annotation_meta(self,select_ids:list):
 
-        # Iterate through select_ids and extract annotation metadata
-        #TODO: This needs to be more efficient somehow
-        print(f'select_ids: {select_ids}')
-        metadata = []
-        for i in select_ids:
-            start_time = timer()
-            if i not in list(self.cached_annotation_metadata.keys()):
-                item_meta = []
-                #TODO: Chunking error is sometimes triggered here, might just be a local connectivity problem
-                try:
-                    item_annotations = self.gc.get(f'/annotation/item/{i}')
-                    for g_idx,g in enumerate(item_annotations):
-                        if 'annotation' in g:
-                            if 'elements' in g['annotation']:
-                                if not g['annotation']['name']=='Spots':
-                                    for e_idx,e in tqdm(enumerate(g['annotation']['elements'])):
-                                        if 'user' not in e:
-                                            e['user'] = {}
-                                        
-                                        # Adding slide and annotation ids
-                                        e['user']['slide_id'] = i
-                                        e['user']['annotation_id'] = e['id']
-                                        e['user']['compartment_idx'] = e_idx
-                                        e['user']['layer_id'] = g['_id']
-                                        e['user']['layer_idx'] = g_idx
-                                        item_meta.append(e['user'])
-                    self.cached_annotation_metadata[i] = item_meta
-                    print(f'Added: {i} to cached annotation metadata')
-                    metadata.extend(item_meta)
-                except girder_client.HttpError:
-                    print(f'{i} not found! Uh oh!')
-            else:
-                metadata.extend(self.cached_annotation_metadata[i])
-                print(f'Added {i} FROM cached annotation metadata')
-            end_time = timer()
-            print(f'Getting: {i} took: {end_time-start_time}')
-            
+        # Passing image ids as a string
+        if len(self.cached_annotation_ids)==0:
+            self.cached_annotation_ids = select_ids
+            add_ids = ','.join(select_ids)
+            remove_ids = ''
+            run_plugin = True
+        else:
+            remove_ids = [i for i in self.cached_annotation_ids if i not in select_ids]
+            add_ids = [i for i in select_ids if i not in self.cached_annotation_ids]
 
-        return metadata
+            add_ids = ','.join(add_ids)
+            remove_ids = ','.join(remove_ids)
+            self.cached_annotation_ids = select_ids
+            if len(add_ids)>0 or len(remove_ids)>0:
+                run_plugin = True
+            else:
+                run_plugin = False
+
+        if run_plugin:
+            print(f'Getting annotation metadata for: {select_ids}')
+            # Running get_cluster_data plugin 
+            job_response = self.gc.post(f'/slicer_cli_web/{self.get_cluster_data_plugin}/run',
+                                        parameters = {
+                                            'girderApiUrl':self.apiUrl,
+                                            'girderToken':self.user_token,
+                                            'add_ids':add_ids,
+                                            'remove_ids':remove_ids
+                                        })
+
+
 
     def get_image_region(self,item_id,coords_list):
 

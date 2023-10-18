@@ -727,10 +727,11 @@ class FUSION:
             self.current_slides.append(i)
 
         # Updating annotation metadata
-        print(f'Getting plot metadata')
-        self.metadata = self.update_plotting_metadata()
-        print(f'length of new metadata: {len(self.metadata)}')
-        print(f'Done')
+        #print(f'Getting plot metadata')
+        #self.metadata = self.update_plotting_metadata()
+        #print(f'length of new metadata: {len(self.metadata)}')
+        #print(f'Done')
+        self.update_plotting_metadata()
 
         # Defining cell_type_dropdowns
         cell_type_dropdowns = [
@@ -857,11 +858,12 @@ class FUSION:
         # ctx.triggered_id here is type <dash._utils.AttributeDict> not dict
         try:
             if ctx.triggered_id['type']=='slide-dataset-table':
-                self.metadata = self.update_plotting_metadata()
+                #self.metadata = self.update_plotting_metadata()
+                self.update_plotting_metadata()
         except:
             pass
 
-        print(f'length of updated metadata: {len(self.metadata)}')
+        #print(f'length of updated metadata: {len(self.metadata)}')
         # For DSA-backend deployment
         if not new_meta is None:
             if not len(new_meta)==0:
