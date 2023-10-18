@@ -1620,8 +1620,6 @@ class GirderHandler:
                                             'remove_ids':remove_ids
                                         })
 
-
-
     def get_image_region(self,item_id,coords_list):
 
         # Checking to make sure coords are within the slide boundaries

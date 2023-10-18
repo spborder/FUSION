@@ -2710,8 +2710,13 @@ class FUSION:
 
             else:
                 wsi_upload_children = no_update
-            omics_upload_children = no_update
-
+            
+            if not self.upload_check['Omics']:
+                omics_upload_children = no_update
+            else:
+                omics_upload_children = [
+                    dbc.Alert('Omics Upload Success!')
+                ]
         elif ctx.triggered_id['type']=='omics-upload':
             
             self.upload_omics_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
@@ -2744,7 +2749,12 @@ class FUSION:
             else:
                 omics_upload_children = no_update
 
-            wsi_upload_children = no_update
+            if not self.upload_check['WSI']:
+                wsi_upload_children = no_update
+            else:
+                wsi_upload_children = [
+                    dbc.Alert('WSI Upload Success!',color='success')
+                ]
 
         else:
             print(f'ctx.triggered_id["type"]: {ctx.triggered_id["type"]}')
@@ -2858,6 +2868,7 @@ class FUSION:
 
                 print(f'seg_status: {seg_status}')
                 print(f'spot_status: {spot_status}')
+                print(f'cell_status: {cell_status}')
                 #seg_progress(spot_status+seg_status+1,7,seg_status)
 
                 time.sleep(1)
