@@ -38,6 +38,7 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 import dash_leaflet as dl
 import dash_mantine_components as dmc
+import dash_treeview_antd as dta
 
 from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function
@@ -84,7 +85,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self, wsi, cli_list = None):
+    def gen_vis_layout(self, wsi, feature_select_dict, label_dict, cli_list = None):
 
         #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
@@ -302,9 +303,6 @@ class LayoutHandler:
             )
         ])
 
-        ftu_list = ['glomerulus','Tubules']
-        plot_types = ['TSNE','UMAP']
-        labels = ['Cluster','image_id']+wsi.properties_list
         # Cluster viewer tab
         cluster_card = dbc.Card([
             dbc.Row([
@@ -319,65 +317,40 @@ class LayoutHandler:
                             dbc.CardHeader(
                                 children = [
                                     dbc.Row([
-                                        dbc.Col('Plot Options',md=7),
-                                        dbc.Col(dbc.Button('Update Data!',id={'type':'update-graph-data','index':0},color='danger'),md=4),
+                                        dbc.Col('Plot Options',md=11),
                                         dbc.Col(self.gen_info_button('Select different plot options to update the graph!'),md=1)
                                     ])
-
                                     ]
                                 ),
                             dbc.CardBody([
                                 dbc.Row([
-                                    dbc.Col([
-                                        dbc.Row([
-                                            dbc.Col(dbc.Label('Functional Tissue Unit Type',html_for='ftu-select'),md=11),
-                                            dbc.Col(self.gen_info_button("Select a FTU to see that FTU;s morphometrics clustering"),md=1)
-                                        ])
-                                    ],md=4),
-                                    dbc.Col([
-                                        html.Div(
-                                            dcc.Dropdown(
-                                                ftu_list,
-                                                ftu_list[0],
-                                                id='ftu-select'
-                                            )
-                                        )],md=8
+                                    dbc.Col('Select Feature(s)',md=11),
+                                    dbc.Col(self.gen_info_button('Select one or more features below to plot. Selecting more than 2 features will generate a UMAP'),md=1)
+                                ]),
+                                html.Hr(),
+                                dbc.Row([
+                                    html.Div(
+                                        dta.TreeView(
+                                            id='feature-select-tree',
+                                            multiple=True,
+                                            checkable=True,
+                                            checked = [],
+                                            selected = [],
+                                            expanded=[],
+                                            data = feature_select_dict
+                                        )
                                     )
                                 ]),
-                                html.B(),
+                                html.Hr(),
                                 dbc.Row([
-                                    dbc.Col([
-                                        dbc.Row([
-                                            dbc.Col(dbc.Label('Type of plot',html_for='plot-select'),md=11),
-                                            dbc.Col(self.gen_info_button('Select a method of dimensional reduction to change layout of clustering graph'),md=1)
-                                            ])                              
-                                        ],md=4),
-                                    dbc.Col([
-                                        html.Div(
-                                            dcc.Dropdown(
-                                                plot_types,
-                                                plot_types[0],
-                                                id='plot-select'
-                                            )
-                                        )],md=8
-                                    )
+                                    dbc.Col('Select Label',md=11),
+                                    dbc.Col(self.gen_info_button('Select a label for the plot of selected features'),md=1)
                                 ]),
-                                html.B(),
+                                html.Hr(),
                                 dbc.Row([
-                                    dbc.Col([
-                                        dbc.Row([
-                                            dbc.Col(dbc.Label('Sample Labels',html_for='label-select'),md=11),
-                                            dbc.Col(self.gen_info_button('Select a label to overlay onto points in the graph'),md=1)
-                                            ])
-                                        ],md=4),
-                                    dbc.Col([
-                                        html.Div(
-                                            dcc.Dropdown(
-                                                labels,
-                                                labels[0],
-                                                id='label-select'
-                                            )
-                                        )],md=8
+                                    dcc.Dropdown(
+                                        options = label_dict,
+                                        id = 'label-select'
                                     )
                                 ])
                             ])
@@ -1779,6 +1752,59 @@ class GirderHandler:
         # Getting asct+b table
         asct_b_table_id = self.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
         self.asct_b_table = pd.read_csv(self.apiUrl+f'item/{asct_b_table_id}/download?token={self.user_token}',skiprows=list(range(10)))
+
+        # Generating plot feature selection dictionary
+        self.generate_feature_dict()
+
+    def generate_feature_dict(self):
+        
+        self.label_dict = [
+            {'label':'blah','value':'blah','disabled':False}
+        ]
+        # Dictionary defining plotting items in hierarchy
+        self.plotting_feature_dict = {
+            'title':'All Features',
+            'key': '0',
+            'children': [
+                {
+                    'title':'Morphometrics',
+                    'key':'0-0',
+                    'children':[
+                        {
+                            'title':g,
+                            'key':f'0-0-{g_i}',
+                            'children': [
+                                {
+                                    'title':f,
+                                    'key':f'0-0-{g_i}-{f_i}'
+                                }
+                                for f_i,f in enumerate([i['name'] for i in self.morphometrics_reference['Morphometrics'] if i['group']==g])
+                            ]
+                        }
+                        for g_i,g in enumerate(np.unique([i['group'] for i in self.morphometrics_reference['Morphometrics']]).tolist())
+                    ]
+                },
+                {
+                    'title':'Cellular Composition',
+                    'key':'0-1',
+                    'children':[
+                        {
+                            'title':c,
+                            'key':f'0-1-{c_i}',
+                            'children': [
+                                {
+                                    'title':sc,
+                                    'key':f'0-1-{c_i}-{sc_i}'
+                                }
+                                for sc_i,sc in enumerate([self.cell_graphics_key[i]['full'] for i in self.cell_graphics_key if self.cell_graphics_key[i]['structure'][0]==c])
+                            ]
+                        }
+                        for c_i,c in enumerate(np.unique([self.cell_graphics_key[i]['structure'][0] for i in self.cell_graphics_key]).tolist())
+                    ]
+                }
+            ]
+        }
+
 
     """
     def get_cli_input_list(self,cli_id):

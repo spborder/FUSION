@@ -49,7 +49,10 @@ class PrepHandler:
             'plugin_name':'samborder2256_spot_ann_test_latest/SpotAnnotation'
         }
 
-        self.cell_deconvolution_plugin = 'sayatmimar_atlasrds_test_6/AtlasRDSCSV'
+        self.cell_deconvolution_plugin = {
+            'plugin_name':'sayatmimar_atlasrds_t_7/AtlasRDSCSV',
+            'atlas':'65159ea82d82d04be3e73f0a'
+        }
 
         self.spot_aggregation_plugin = 'samborder2256_spot_agg_test_image_latest/spot_agg'
 
@@ -285,8 +288,10 @@ class PrepHandler:
 
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
+        print(f'image_item: {image_item}')
         fileId = image_item['largeImage']['fileId']
         folderId = image_item['folderId']
+        print(f'folderId: {folderId}')
 
         # Getting fileId for rds item
         rds_item = self.girder_handler.gc.get(f'/item/{rds_id}/files')
@@ -297,16 +302,26 @@ class PrepHandler:
         def_file_id = def_item[0]['_id']
 
         # Running cell deconvolution
-        cell_deconv_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.cell_deconvolution_plugin}/run',
+        
+        cell_deconv_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.cell_deconvolution_plugin["plugin_name"]}/run',
                                                    parameters = {
-                                                       'inputRDSFile':rds_file_id,
-                                                       'inputRDSFile_folder':folderId
+                                                       'inputRDSFile':rds_id,
+                                                       'inputRDSFile_folder':folderId,
+                                                       'atlas':self.cell_deconvolution_plugin['atlas'],
+                                                       'cellFractions':'cellFractions.csv',
+                                                       'cellFractions_folder':folderId,
+                                                       'outputRDSFile':'.'.join(image_item['name'].split('.')[0:-1])+'.RDS',
+                                                       'outputRDSFile_folder':folderId,
+                                                       'spotCoords':'spotCoords.csv',
+                                                       'spotCoords_folder':folderId
                                                    })
-
+        
+        #cell_deconv_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.cell_deconvolution_plugin["plugin_name"]}/run?inputRDSFile={rds_file_id}&inputRDSFile_folder={folderId}&atlas={self.cell_deconvolution_plugin["atlas"]}&cellFractions=cellFractions.csv&cellFractions_folder={folderId}&outputRDSFile={".".join(image_item["name"].split(".")[0:-1])+".RDS"}&outputRDSFile_folder={folderId}&spotCoords=spotCoords.csv&spotCoords_folder={folderId}')
+        print(cell_deconv_job)
         # Generating spot annotations
         spot_ann_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.spot_annotation_info["plugin_name"]}/run',
                                         parameters = {
-                                            'rds_file':rds_file_id,
+                                            'rds_file':rds_id,
                                             'definitions_file':def_file_id,
                                             'input_files':fileId,
                                             'basedir':folderId,

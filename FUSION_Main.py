@@ -55,7 +55,6 @@ class FUSION:
                 download_handler,
                 prep_handler,
                 wsi,
-                cluster_metadata,
                 ga_tag = None
                 ):
                 
@@ -83,7 +82,6 @@ class FUSION:
             self.app.index_string = ga_tag
 
         # clustering related properties (and also cell types, cell states, image_ids, etc.)
-        self.metadata = cluster_metadata
         self.wsi = wsi
         self.cell_graphics_key = self.dataset_handler.cell_graphics_key
 
@@ -330,7 +328,7 @@ class FUSION:
                 container_content = self.layout_handler.layout_dict[self.current_page]
                 description = self.layout_handler.description_dict[self.current_page]
             else:
-                self.layout_handler.gen_vis_layout(self.wsi)
+                self.layout_handler.gen_vis_layout(self.wsi,self.dataset_handler.plotting_feature_dict,self.dataset_handler.label_dict)
                 container_content = self.layout_handler.layout_dict[self.current_page]
                 description = self.layout_handler.description_dict[self.current_page]
         elif 'vis/' in pathname:
@@ -342,7 +340,7 @@ class FUSION:
             try:
                 slide_name = self.dataset_handler.get_item_name(pathname.split('/')[-1])
                 self.wsi = DSASlide(slide_name,pathname.split('/')[-1],self.dataset_handler,self.ftu_colors)
-                self.layout_handler.gen_vis_layout(self.wsi)
+                self.layout_handler.gen_vis_layout(self.wsi,self.dataset_handler.plotting_feature_dict,self.dataset_handler.label_dict)
 
                 self.update_hex_color_key(self.current_cell)
                 self.current_ftus = self.wsi.ftu_names+['Spots']
@@ -2825,7 +2823,7 @@ class FUSION:
         thumbnail = self.dataset_handler.get_slide_thumbnail(upload_id)
         collection_contents = self.dataset_handler.gc.get(f'/item/{upload_id}')
 
-        histo_qc_run = self.dataset_handler.run_histo_qc(self.latest_upload_folder['id'])
+        #histo_qc_run = self.dataset_handler.run_histo_qc(self.latest_upload_folder['id'])
 
         #TODO: Activate the HistoQC plugin from here and return some metrics
         histo_qc_output = pd.DataFrame(collection_contents)
@@ -3153,7 +3151,7 @@ def app(*args):
     # Saving & organizing relevant id's in GirderHandler
     print('Getting initial items metadata')
     dataset_handler.initialize_folder_structure(initial_collection,path_type)
-    metadata = dataset_handler.get_collection_annotation_meta([i['_id'] for i in initial_collection_contents])
+    dataset_handler.get_collection_annotation_meta([i['_id'] for i in initial_collection_contents])
 
     # Getting graphics_reference.json from the FUSION Assets folder
     print(f'Getting asset items')
@@ -3191,6 +3189,7 @@ def app(*args):
         
         cli_list.append(cli_dict)
 
+
     # Adding functionality that is specifically implemented in FUSION
     fusion_cli = ['Segment Anything Model (SAM)','Contrastive Language-Image Pre-training (CLIP)']
 
@@ -3203,7 +3202,7 @@ def app(*args):
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names,username)
-    layout_handler.gen_vis_layout(wsi,cli_list)
+    layout_handler.gen_vis_layout(wsi,dataset_handler.plotting_feature_dict,dataset_handler.label_dict,cli_list)
     layout_handler.gen_builder_layout(dataset_handler)
     layout_handler.gen_uploader_layout(dataset_handler)
 
@@ -3225,8 +3224,7 @@ def app(*args):
         dataset_handler,
         download_handler,
         prep_handler,
-        wsi,
-        metadata
+        wsi
     )
 
 # Comment this portion out for web running
