@@ -163,7 +163,7 @@ class LayoutHandler:
                     map_layer
                 )
             ])
-        ], style = {'marginBottom':'20px'})
+        ], style = {'marginBottom':'20px','height':'100vh'})
 
         # Cell type proportions and cell state distributions
         roi_pie = dbc.Card([
@@ -310,7 +310,7 @@ class LayoutHandler:
             ]),
             html.Hr(),
             dbc.Row([
-                dbc.Col([
+                html.Div(dbc.Col([
                     dbc.Card(
                         id= 'plot-options',
                         children = [
@@ -338,7 +338,8 @@ class LayoutHandler:
                                             selected = [],
                                             expanded=[],
                                             data = feature_select_dict
-                                        )
+                                        ),
+                                        style={'maxHeight':'200px','overflow':'scroll'}
                                     )
                                 ]),
                                 html.Hr(),
@@ -356,7 +357,7 @@ class LayoutHandler:
                             ])
                         ]
                     )
-                ],md=12)
+                ],md=12),style={'maxHeight':'1000px','overflow':'scroll'})
             ]),
             dbc.Row([
                 dbc.Col([
@@ -1047,7 +1048,6 @@ class LayoutHandler:
     def gen_initial_layout(self,slide_names,initial_user:str):
 
         # welcome layout after initialization and information and buttons to go to other areas
-
         # Header
         header = dbc.Navbar(
             dbc.Container([
@@ -1188,7 +1188,6 @@ class LayoutHandler:
             ],style={'marginBottom':'20px'}
         )
 
-
         # Slide select row (seeing if keeping it in every layout will let it be updated by actions in other pages)
         # Slide selection
         slide_select = dbc.Card(
@@ -1239,7 +1238,7 @@ class LayoutHandler:
             ),
             dbc.Container([
                 html.H1('Welcome to FUSION!'),
-                ],fluid=True,id='container-content'),
+                ],fluid=True,id='container-content',style = {'height':'100vh'}),
             html.Hr(),
             html.P('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
         ])
@@ -1805,7 +1804,17 @@ class GirderHandler:
             ]
         }
 
+    def load_clustering_data(self):
+        # Grabbing feature clustering info from user's private folder
+        private_folder_id = self.gc.get('/resource/lookup',parameters={'path':f'/user/{self.username}/Private'})['_id']
+        private_folder_contents = self.gc.get(f'/resource/{private_folder_id}/items?token={self.user_token}',parameters={'type':'folder','limit':10000})
 
+        private_folder_names = [i['name'] for i in private_folder_contents]
+        cluster_data_id = private_folder_contents[private_folder_names.index('FUSION_Clustering_data.json')]['_id']
+
+        cluster_data = pd.DataFrame.from_dict(self.gc.get(f'/item/{cluster_data_id}/download?token={self.user_token}'))
+
+        return cluster_data
     """
     def get_cli_input_list(self,cli_id):
         #TODO: figure out how to extract list of expected inputs & types for a given CLI from XML

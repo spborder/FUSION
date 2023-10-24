@@ -94,6 +94,9 @@ class FUSION:
         self.morphometrics_reference = self.dataset_handler.morphometrics_reference["Morphometrics"]
         self.morphometrics_names = self.dataset_handler.morpho_names
 
+        # Load clustering data
+        self.clustering_data = self.dataset_handler.load_clustering_data()
+
         # Number of main cell types to include in pie-charts
         self.plot_cell_types_n = len(list(self.cell_names_key.keys()))
 
@@ -329,6 +332,8 @@ class FUSION:
                 description = self.layout_handler.description_dict[self.current_page]
             else:
                 self.layout_handler.gen_vis_layout(self.wsi,self.dataset_handler.plotting_feature_dict,self.dataset_handler.label_dict)
+                self.clustering_data = self.dataset_handler.load_clustering_data()
+
                 container_content = self.layout_handler.layout_dict[self.current_page]
                 description = self.layout_handler.description_dict[self.current_page]
         elif 'vis/' in pathname:
@@ -341,6 +346,7 @@ class FUSION:
                 slide_name = self.dataset_handler.get_item_name(pathname.split('/')[-1])
                 self.wsi = DSASlide(slide_name,pathname.split('/')[-1],self.dataset_handler,self.ftu_colors)
                 self.layout_handler.gen_vis_layout(self.wsi,self.dataset_handler.plotting_feature_dict,self.dataset_handler.label_dict)
+                self.clustering_data = self.dataset_handler.load_clustering_data()
 
                 self.update_hex_color_key(self.current_cell)
                 self.current_ftus = self.wsi.ftu_names+['Spots']
@@ -484,12 +490,10 @@ class FUSION:
 
         # Updating morphometric cluster plot parameters
         self.app.callback(
-            [Input('ftu-select','value'),
-            Input('plot-select','value'),
-            Input('label-select','value'),
-            Input({'type':'update-graph-data','index':ALL},'n_clicks')],
-            [Output('cluster-graph','figure'),
-            Output('label-select','options')],
+            [Input('feature-select-tree','checked'),
+             Input('feature-select-tree','selected'),
+             Input('label-select','value')],
+            Output('cluster-graph','figure'),
         )(self.update_graph)
 
         # Grabbing image(s) from morphometric cluster plot
@@ -1950,64 +1954,16 @@ class FUSION:
 
         return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children
 
-    def update_graph(self,ftu,plot,label,update_butt):
+    def update_graph(self,checked_feature,selected_feature,label):
         
-        self.current_ftu = ftu
-        # Filtering by selected FTU
-        #current_data = self.metadata[self.metadata['ftu_type'].str.match(ftu)]
+        # Grabbing current metadata from user private folder        
+        print(f'feature(s) checked: {checked_feature}')
+        print(f'selected feature(s): {selected_feature}')
+        print(f'label: {label}')
 
-        # Getting the labels that can be applied to the cluster plot
-        if len(self.wsi.geojson_ftus['features'])>0:
-            cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
-            if self.current_ftu=='glomerulus':
-                available_labels = ['Cluster','image_id','Area','Mesangial Area','Mesangial Fraction']+cell_types
-            elif self.current_ftu == 'Tubules':
-                available_labels = ['Cluster','image_id','Average TBM Thickness','Average Cell Thickness','Luminal Fraction']+cell_types
+        # Finding the features checked
 
-            current_data = []
-            for f in self.metadata:
-                if 'ftu_type' in f:
-                    if f['ftu_type'] == ftu:
-                        current_data.append(f)
-
-            if plot=='TSNE':
-                plot_data_x = [i['x_tsne'] for i in current_data if 'x_tsne' in i]
-                plot_data_y = [i['y_tsne'] for i in current_data if 'y_tsne' in i]
-
-            elif plot=='UMAP':
-                plot_data_x = [i['x_umap'] for i in current_data if 'x_umap' in i]
-                plot_data_y = [i['y_umap'] for i in current_data if 'y_umap' in i]
-
-            custom_data = [i['ftu_name'] for i in current_data if 'ftu_name' in i]
-            # If the label is image_id or cluster
-            try:
-                label_data = [i[label] for i in current_data]
-            except:
-                # If the label is a main cell type or cell states of a main cell type
-                try:
-                    label_data = [i['Main_Cell_Types'][label] for i in current_data]
-                except:
-                    # If a certain label isn't in every sample in the current_data
-                    label_data = []
-                    for i in current_data:
-                        if label in i:
-                            label_data.append(i[label])
-                        else:
-                            label_data.append(np.nan)
-
-            graph_df = pd.DataFrame({'x':plot_data_x,'y':plot_data_y,'ID':custom_data,'Label':label_data})
-
-            graph_df = graph_df.dropna()
-
-            cluster_graph = go.Figure(px.scatter(graph_df,x='x',y='y',custom_data=['ID'],color='Label',title=f'{plot} Plot of:<br><sup>{ftu} Morphometrics</sup><br><sup>Labeled by {label}</sup>'))
-            cluster_graph.update_layout(
-                margin=dict(l=0,r=0,t=80,b=0)
-            )
-
-            return cluster_graph, available_labels
-        else:
-
-            return go.Figure(), []
+        return go.Figure()
 
     def grab_image(self,sample_info):
 
