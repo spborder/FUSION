@@ -1961,7 +1961,13 @@ class FUSION:
         print(f'selected feature(s): {selected_feature}')
         print(f'label: {label}')
 
-        # Finding the features checked
+        # Finding features checked:
+        feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
+        print(f'feature_names checked: {feature_names}')
+        # Finding the features selected
+        features_selected = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in selected_feature]
+        print(f'feature_names selected: {features_selected}')
+        
 
         return go.Figure()
 
@@ -2808,24 +2814,28 @@ class FUSION:
             print(f'Running segmentation!')
             segmentation_info = self.prep_handler.segment_image(self.upload_wsi_id,organ_selection)
             print(f'Running spot annotation!')
-            cell_deconv_info, spot_annotation_info = self.prep_handler.gen_spot_annotations(self.upload_wsi_id,self.upload_omics_id)
+            cell_deconv_info = self.prep_handler.run_cell_deconvolution(self.upload_wsi_id,self.upload_omics_id)
 
             # Monitoring the running jobs down here
             seg_status = 0
             cell_status = 0
-            spot_status = 0
-            while spot_status+seg_status+cell_status<9:
+            while seg_status+cell_status<6:
 
                 seg_status = self.dataset_handler.get_job_status(segmentation_info['_id'])
-                spot_status = self.dataset_handler.get_job_status(spot_annotation_info['_id'])
                 cell_status = self.dataset_handler.get_job_status(cell_deconv_info['_id'])
 
                 print(f'seg_status: {seg_status}')
-                print(f'spot_status: {spot_status}')
                 print(f'cell_status: {cell_status}')
-                #seg_progress(spot_status+seg_status+1,7,seg_status)
 
                 time.sleep(1)
+
+            # Generating spot annotations based on cell types
+            spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
+            print(self.dataset_handler.get_job_status(spot_annotation_info['_id']))
+
+            # Aggregating spot-level cell composition information to intersecting FTUs
+            spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
+            print(self.dataset_handler.get_job_status(spot_aggregation_info['_id']))
 
             # Extract annotation and initial sub-compartment mask
             self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)

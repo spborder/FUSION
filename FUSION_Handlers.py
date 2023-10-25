@@ -147,7 +147,7 @@ class LayoutHandler:
 
         map_layer = dl.Map(
             center = center_point, zoom = 3, minZoom = 0, maxZoom = wsi.zoom_levels-1, crs='Simple',bounds = wsi.map_bounds,
-            style = {'width':'100%','height':'80vh','margin':'auto','display':'inline-block'},
+            style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             children = map_children
         )
@@ -163,7 +163,7 @@ class LayoutHandler:
                     map_layer
                 )
             ])
-        ], style = {'marginBottom':'20px','height':'100vh'})
+        ])
 
         # Cell type proportions and cell state distributions
         roi_pie = dbc.Card([
@@ -357,7 +357,7 @@ class LayoutHandler:
                             ])
                         ]
                     )
-                ],md=12),style={'maxHeight':'1000px','overflow':'scroll'})
+                ],md=12))
             ]),
             dbc.Row([
                 dbc.Col([
@@ -610,7 +610,7 @@ class LayoutHandler:
                             dbc.Row([
                                 dbc.Tabs(tool_tabs,active_tab = 'overlays-tab')
                             ])
-                        ])
+                        ],style={'maxHeight':'90vh','overflow':'scroll'})
                     ])
                 ]
             )
@@ -623,7 +623,7 @@ class LayoutHandler:
                 children=[
                     dbc.Col(wsi_view,md=6),
                     dbc.Col(tools,md=6)
-                ],style={"height":"100vh"}
+                ],style={"height":"90vh",'marginBottom':'10px'}
             )
         ]
 
@@ -1523,7 +1523,7 @@ class GirderHandler:
 
         for p,p_type in zip(path,path_type):
             self.current_collection['path'].append(p)
-            self.current_collection['id'].append(self.gc.get('resource/lookup',parameters={'path':p,})['_id'])
+            self.current_collection['id'].append(self.gc.get('resource/lookup',parameters={'path':p})['_id'])
 
             # Getting contents of base collection
             collection_contents = self.gc.get(f'resource/{self.current_collection["id"][-1]}/items',parameters={'type':p_type,'limit':100000}) 
@@ -1584,13 +1584,16 @@ class GirderHandler:
         if run_plugin:
             print(f'Getting annotation metadata for: {select_ids}')
             # Running get_cluster_data plugin 
-            job_response = self.gc.post(f'/slicer_cli_web/{self.get_cluster_data_plugin}/run',
-                                        parameters = {
-                                            'girderApiUrl':self.apiUrl,
-                                            'girderToken':self.user_token,
-                                            'add_ids':add_ids,
-                                            'remove_ids':remove_ids
-                                        })
+            try:
+                job_response = self.gc.post(f'/slicer_cli_web/{self.get_cluster_data_plugin}/run',
+                                            parameters = {
+                                                'girderApiUrl':self.apiUrl,
+                                                'girderToken':self.user_token,
+                                                'add_ids':add_ids,
+                                                'remove_ids':remove_ids
+                                            })
+            except girder_client.HttpError:
+                print(f'Plugin is not added to this DSA instance')
 
     def get_image_region(self,item_id,coords_list):
 
@@ -1761,6 +1764,54 @@ class GirderHandler:
             {'label':'blah','value':'blah','disabled':False}
         ]
         # Dictionary defining plotting items in hierarchy
+        morphometrics_children = []
+        self.feature_keys = []
+        for g_i,g in enumerate(np.unique([i['group'] for i in self.morphometrics_reference['Morphometrics']]).tolist()):
+            group_dict = {
+                'title':g,
+                'key':f'0-0-{g_i}',
+                'children':[]
+            }
+            sub_comp_offset = 0
+
+            for f_i,f in enumerate([i['name'] for i in self.morphometrics_reference['Morphometrics'] if i['group']==g]):
+
+                if '{}' in f:
+                    for sc_i,sub_comp in ['PAS','Luminal Space','Nuclei']:
+                        group_dict['children'].append({
+                            'title':f.replace('{}',sub_comp),
+                            'key':f'0-0-{g_i}-{sub_comp_offset}'
+                        })
+                        sub_comp_offset+=1
+                        self.feature_keys.append({'title':f.replace('{}',sub_comp),'key':f'0-0-{g_i}-{sub_comp_offset}'})
+                else:
+                    group_dict['children'].append({
+                        'title':f,
+                        'key':f'0-0-{g_i}-{sub_comp_offset}'
+                    })
+                    sub_comp_offset+=1
+                    self.feature_keys.append({'title':f,'key':f'0-0-{g_i}-{sub_comp_offset}'})
+
+            morphometrics_children.append(group_dict)
+
+        cell_comp_children = []
+        for c_i,c in enumerate(np.unique([self.cell_graphics_key[i]['structure'][0] for i in self.cell_graphics_key]).tolist()):
+
+            structure_children = {
+                'title':c,
+                'key':f'0-1-{c_i}',
+                'children':[]
+            }
+            for sc_i,sc in enumerate([self.cell_graphics_key[i]['full'] for i in self.cell_graphics_key if self.cell_graphics_key[i]['structure'][0]==c]):
+                
+                structure_children['children'].append({
+                    'title':sc,
+                    'key':f'0-1-{c_i}-{sc_i}'
+                })
+                self.feature_keys.append({'title':sc,'key':f'0-1-{c_i}-{sc_i}'})
+
+            cell_comp_children.append(structure_children)
+
         self.plotting_feature_dict = {
             'title':'All Features',
             'key': '0',
@@ -1768,38 +1819,12 @@ class GirderHandler:
                 {
                     'title':'Morphometrics',
                     'key':'0-0',
-                    'children':[
-                        {
-                            'title':g,
-                            'key':f'0-0-{g_i}',
-                            'children': [
-                                {
-                                    'title':f,
-                                    'key':f'0-0-{g_i}-{f_i}'
-                                }
-                                for f_i,f in enumerate([i['name'] for i in self.morphometrics_reference['Morphometrics'] if i['group']==g])
-                            ]
-                        }
-                        for g_i,g in enumerate(np.unique([i['group'] for i in self.morphometrics_reference['Morphometrics']]).tolist())
-                    ]
+                    'children': morphometrics_children
                 },
                 {
                     'title':'Cellular Composition',
                     'key':'0-1',
-                    'children':[
-                        {
-                            'title':c,
-                            'key':f'0-1-{c_i}',
-                            'children': [
-                                {
-                                    'title':sc,
-                                    'key':f'0-1-{c_i}-{sc_i}'
-                                }
-                                for sc_i,sc in enumerate([self.cell_graphics_key[i]['full'] for i in self.cell_graphics_key if self.cell_graphics_key[i]['structure'][0]==c])
-                            ]
-                        }
-                        for c_i,c in enumerate(np.unique([self.cell_graphics_key[i]['structure'][0] for i in self.cell_graphics_key]).tolist())
-                    ]
+                    'children': cell_comp_children
                 }
             ]
         }
@@ -1810,11 +1835,15 @@ class GirderHandler:
         private_folder_contents = self.gc.get(f'/resource/{private_folder_id}/items?token={self.user_token}',parameters={'type':'folder','limit':10000})
 
         private_folder_names = [i['name'] for i in private_folder_contents]
-        cluster_data_id = private_folder_contents[private_folder_names.index('FUSION_Clustering_data.json')]['_id']
+        if 'FUSION_Clustering_data.json' in private_folder_names:
+            cluster_data_id = private_folder_contents[private_folder_names.index('FUSION_Clustering_data.json')]['_id']
 
-        cluster_data = pd.DataFrame.from_dict(self.gc.get(f'/item/{cluster_data_id}/download?token={self.user_token}'))
+            cluster_data = pd.DataFrame.from_dict(self.gc.get(f'/item/{cluster_data_id}/download?token={self.user_token}'))
 
-        return cluster_data
+            return cluster_data
+        else:
+            return pd.DataFrame()
+
     """
     def get_cli_input_list(self,cli_id):
         #TODO: figure out how to extract list of expected inputs & types for a given CLI from XML
