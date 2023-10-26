@@ -22,6 +22,9 @@ from skimage.transform import resize
 import random
 import time
 
+from sklearn.preprocessing import StandardScaler
+from umap import UMAP
+
 import girder_client
 
 import plotly.express as px
@@ -494,6 +497,7 @@ class FUSION:
              Input('feature-select-tree','selected'),
              Input('label-select','value')],
             Output('cluster-graph','figure'),
+            prevent_initial_call=True
         )(self.update_graph)
 
         # Grabbing image(s) from morphometric cluster plot
@@ -503,6 +507,7 @@ class FUSION:
             [Output('selected-image','figure'),
             Output('selected-cell-types','figure'),
             Output('selected-cell-states','figure')],
+            prevent_initial_call=True
         )(self.update_selected)
 
         # Updating cell states bar chart from within the selected point(s) in morphometrics cluster plot
@@ -729,10 +734,6 @@ class FUSION:
             self.current_slides.append(i)
 
         # Updating annotation metadata
-        #print(f'Getting plot metadata')
-        #self.metadata = self.update_plotting_metadata()
-        #print(f'length of new metadata: {len(self.metadata)}')
-        #print(f'Done')
         self.update_plotting_metadata()
 
         # Defining cell_type_dropdowns
@@ -1957,26 +1958,146 @@ class FUSION:
     def update_graph(self,checked_feature,selected_feature,label):
         
         # Grabbing current metadata from user private folder        
-        print(f'feature(s) checked: {checked_feature}')
-        print(f'selected feature(s): {selected_feature}')
-        print(f'label: {label}')
-
         # Finding features checked:
+        if self.clustering_data.empty:
+            print(f'Getting new clustering data')
+            self.clustering_data = self.dataset_handler.load_clustering_data()
+
         feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
-        print(f'feature_names checked: {feature_names}')
         # Finding the features selected
         features_selected = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in selected_feature]
-        print(f'feature_names selected: {features_selected}')
-        
 
-        return go.Figure()
+        cell_features = [i for i in feature_names if i in self.cell_names_key]
+        print(f'{len(cell_features)} cell features found')
+        if len(cell_features)>0:
+            if len(feature_names)>0:
+                feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+            else:
+                feature_data = pd.DataFrame()
+
+            print(f'shape of feature_data before adding cell_values: {feature_data.shape}')
+            cell_values = self.clustering_data['Main_Cell_Types'].tolist()
+            print(f'len of cell_values: {len(cell_values)}')
+            for c in cell_features:
+                cell_abbrev = self.cell_names_key[c]
+
+                specific_cell_values = []
+                for i in cell_values:
+                    if not i is None:
+                        if cell_abbrev in i:
+                            specific_cell_values.append(i[cell_abbrev])
+                        else:
+                            specific_cell_values.append(0)
+                    else:
+                        specific_cell_values.append(0)
+                
+                feature_data[c] = specific_cell_values
+
+            print(f'shape of feature_data after adding cell values: {feature_data.shape}')
+        else:
+            feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+
+        # Coercing dtypes of columns in feature_data
+        for f in feature_data.columns.tolist():
+            feature_data[f] = pd.to_numeric(feature_data[f],errors='coerce')
+
+        feature_data = feature_data.fillna(0)
+
+        # Generating appropriate plot
+        if len(feature_names)==1:
+            print(f'Generating violin plot for {feature_names}')
+            print(f'len of feature_names: {len(feature_names)}')
+
+            # Adding "Hidden" column with image grabbing info
+            feature_data['Hidden'] = self.clustering_data['Hidden']       
+            feature_data['label'] = self.clustering_data[label] 
+
+            figure = px.violin(
+                data_frame=feature_data,
+                x = 'label',
+                y = feature_names[0],
+                custom_data='Hidden',
+                title = f'Violin plot of {feature_names[0]} labeled by {label}'
+            )
+
+        elif len(feature_names)==2:
+            print(f'Generating a scatter plot')
+            print(f'len of feature_names: {len(feature_names)}')
+            feature_columns = feature_names + cell_features
+
+            # Adding "Hidden" column with image grabbing info
+            feature_data['Hidden'] = self.clustering_data['Hidden']       
+            feature_data['label'] = self.clustering_data[label] 
+            figure = px.scatter(
+                data_frame=feature_data,
+                x = feature_columns[0],
+                y = feature_columns[1],
+                color = 'label',
+                custom_data = 'Hidden',
+                title = f'Scatter plot of {feature_names[0]} and {feature_names[1]} labeled by {label}'
+            )
+
+        elif len(feature_names)>2:
+            print(f'Running UMAP and returning a scatter plot')
+            print(f'len of feature_names: {len(feature_names)}')
+
+            # Scaling and reducing feature data using UMAP
+            feature_data = feature_data.fillna(0).values
+
+            # Scaling feature_data
+            try:
+                feature_data_means = np.nanmean(feature_data,axis=0)
+                feature_data_stds = np.nanstd(feature_data,axis=0)
+
+                scaled_data = (feature_data-feature_data_means)/feature_data_stds
+                scaled_data[np.isnan(scaled_data)] = 0.0
+                scaled_data[~np.isfinite(scaled_data)] = 0.0
+            except TypeError:
+                print('What is going on?')
+                sum = np.zeros((1,np.shape(feature_data)[1])).astype(np.float64)
+                for i in range(0,np.shape(feature_data)[0]):
+                    print(feature_data[i,:])
+                    print(feature_data[i,:].dtype)
+                    sum += feature_data[i,:]
+                    print(type(feature_data[i,:]))
+
+                print(f'Troublemaker row is: {i}')
+                feature_data[i,:] = 0.0
+                scaled_data = (feature_data-np.nanmean(feature_data,axis=0))/np.nanstd(feature_data,axis=0)
+                scaled_data[np.isnan[scaled_data]] = 0.0
+                scaled_data[~np.isfinite[scaled_data]] = 0.0
+
+            umap_reducer = UMAP()
+            embeddings = umap_reducer.fit_transform(scaled_data)
+
+            umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'])
+            umap_df['Hidden'] = self.clustering_data['Hidden'].tolist()
+            umap_df['label'] = self.clustering_data[label].tolist()
+
+            figure = px.scatter(
+                data_frame = umap_df,
+                x = 'UMAP1',
+                y = 'UMAP2',
+                color = 'label',
+                custom_data = 'Hidden',
+                title = f'UMAP of selected features labeled with {label}'
+            )
+
+        else:
+            # No features selected
+            figure = None
+
+        return go.Figure(figure)
 
     def grab_image(self,sample_info):
+
+        if len(sample_info)>100:
+            sample_info = sample_info[0:100]
 
         img_list = []
         for idx,s in enumerate(sample_info):
             #print(f's: {s}')
-            image_region = self.dataset_handler.get_annotation_image(s['slide_id'],s['layer_idx'],s['compartment_idx'])
+            image_region = self.dataset_handler.get_annotation_image(s['Slide_Id'],s['Bounding_Box'])
             
             img_list.append(resize(np.array(image_region),output_shape=(512,512,3)))
 
@@ -1988,22 +2109,15 @@ class FUSION:
         if click is not None:
             print(f'triggered_prop_ids: {ctx.triggered_prop_ids.keys()}')
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
-                sample_ids = [i['customdata'][0] for i in selected['points']]
-                sample_info = []
-                for f in self.metadata:
-                    if 'ftu_name' in f:
-                        if f['ftu_name'] in sample_ids:
-                            sample_info.append(f)
+                sample_info = [i['customdata'][0] for i in selected['points']]
+                sample_index = [i['pointNumber'] for i in selected['points']]
+
             else:
                 if click is not None:
-                    sample_id = click['points'][0]['customdata'][0]
-                    sample_info = []
-                    for f in self.metadata:
-                        if 'ftu_name' in f:
-                            if f['ftu_name']==sample_id:
-                                sample_info.append(f)
+                    sample_info = [click['points'][0]['customdata'][0]]
+                    sample_index = [click['points'][0]['pointNumber']]
                 else:
-                    sample_info = [self.metadata[0]]
+                    sample_info = []
 
             self.current_selected_samples = sample_info
 
@@ -2016,7 +2130,7 @@ class FUSION:
                     )
             elif len(current_image)>1:
                 selected_image = go.Figure(
-                    data = px.imshow(np.stack(current_image,axis=0),animation_frame=0,binary_string=True,labels=dict(animation_frame=self.current_ftu)),
+                    data = px.imshow(np.stack(current_image,axis=0),animation_frame=0,binary_string=True),
                     layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
                     )
             else:
@@ -2026,7 +2140,8 @@ class FUSION:
                 print(f'self.current_selected_samples: {self.current_selected_samples}')
 
             # Preparing figure containing cell types + cell states info
-            counts_data = pd.DataFrame([i['Main_Cell_Types'] for i in sample_info]).sum(axis=0).to_frame()
+            main_cell_types_list = self.clustering_data['Main_Cell_Types'].tolist()
+            counts_data = pd.DataFrame([main_cell_types_list[i] for i in sample_index]).sum(axis=0).to_frame()
             counts_data.columns = ['Selected Data Points']
             counts_data = counts_data.reset_index()
             # Normalizing to sum to 1
@@ -2034,28 +2149,35 @@ class FUSION:
             # Only getting the top-5
             counts_data = counts_data.sort_values(by='Selected Data Points',ascending=False)
             counts_data = counts_data[counts_data['Selected Data Points']>0]
-            f_pie = px.pie(counts_data,values='Selected Data Points',names='index')
+            if counts_data.shape[0]>0:
+                f_pie = px.pie(counts_data,values='Selected Data Points',names='index')
 
-            # Getting initial cell state info
-            first_cell = counts_data['index'].tolist()[0]
-            state_data = pd.DataFrame([i['Cell_States'][first_cell] for i in sample_info]).sum(axis=0).to_frame()
-            state_data = state_data.reset_index()
-            state_data.columns = ['Cell States',f'Cell States for {first_cell}']
+                # Getting initial cell state info
+                first_cell = counts_data['index'].tolist()[0]
+                cell_states_list = self.clustering_data['Cell_States'].tolist()
+                state_data = pd.DataFrame([cell_states_list[i][first_cell] for i in sample_index]).sum(axis=0).to_frame()
+                state_data = state_data.reset_index()
+                state_data.columns = ['Cell States',f'Cell States for {first_cell}']
 
-            state_data[f'Cell States for {first_cell}'] = state_data[f'Cell States for {first_cell}']/state_data[f'Cell States for {first_cell}'].sum()
+                state_data[f'Cell States for {first_cell}'] = state_data[f'Cell States for {first_cell}']/state_data[f'Cell States for {first_cell}'].sum()
 
-            s_bar = px.bar(state_data, x='Cell States', y = f'Cell States for {first_cell}', title = f'Cell States for:<br><sup>{self.cell_graphics_key[first_cell]["full"]} in:</sup><br><sup>selected points</sup>')
-            
-            selected_cell_types = go.Figure(f_pie)
-            selected_cell_states = go.Figure(s_bar)
+                s_bar = px.bar(state_data, x='Cell States', y = f'Cell States for {first_cell}', title = f'Cell States for:<br><sup>{self.cell_graphics_key[first_cell]["full"]} in:</sup><br><sup>selected points</sup>')
+                
+                selected_cell_types = go.Figure(f_pie)
+                selected_cell_states = go.Figure(s_bar)
 
-            selected_cell_states.update_layout(
-                margin=dict(l=0,r=0,t=85,b=0)
-            )
-            selected_cell_types.update_layout(
-                margin=dict(l=0,r=0,t=0,b=0),
-                showlegend=False
-            )
+                selected_cell_states.update_layout(
+                    margin=dict(l=0,r=0,t=85,b=0)
+                )
+                selected_cell_types.update_layout(
+                    margin=dict(l=0,r=0,t=0,b=0),
+                    showlegend=False
+                )
+
+            else:
+                selected_cell_types = go.Figure()
+                selected_cell_states = go.Figure()
+                selected_image = go.Figure()
 
             return selected_image, selected_cell_types, selected_cell_states
         else:

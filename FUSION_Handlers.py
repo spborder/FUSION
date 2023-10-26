@@ -1561,6 +1561,35 @@ class GirderHandler:
                         elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
     
+        # Adding Public folders if any "FUSION_Upload" are in there
+        user_folder_path = f'/user/{self.username}/Public'
+        folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder_path})['_id']
+        folder_contents = self.gc.get(f'/resource/{folder_id}/items',parameters={'type':'folder','limit':10000})
+        folder_ids = [i['folderId'] for i in folder_contents]
+        for f in np.unique(folder_ids):
+            folder_name = self.gc.get(f'/folder/{f}')['name']
+            if 'FUSION_Upload' in folder_name:
+
+                self.slide_datasets[f] = {
+                    'name':folder_name
+                }
+
+                folder_slides = [i for i in folder_contents if 'largeImage' in i and i['folderId']==f]
+
+                self.slide_datasets[f]['Slides'] = folder_slides
+                folder_slide_meta = [i['meta'] for i in folder_slides]
+                meta_keys = []
+                for i in folder_slide_meta:
+                    meta_keys.extend(list(i.keys()))
+
+                self.slide_datasets[f]['Metadata'] = {}
+                for m in meta_keys:
+                    item_metadata = [item[m] for item in folder_slide_meta if m in item]
+                    if type(item_metadata[0])==str:
+                        self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
+                    elif type(item_metadata[0])==int or type(item_metadata[0])==float:
+                        self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+
     def get_collection_annotation_meta(self,select_ids:list):
 
         # Passing image ids as a string
@@ -1627,42 +1656,16 @@ class GirderHandler:
 
         return image_region
 
-    def get_annotation_image(self,slide_id,layer_idx,compartment_idx):
+    def get_annotation_image(self,slide_id,bounding_box):
 
-        # Girder does the "annotation_id" a little differently. They have an endpoint that pulls annotation LAYERS by their id gc.get('annotation/{item}')
-        # But not a SPECIFIC annotation. Makes sense because I guess you'd have to read the whole set of annotations anyways
-        start_time = timer()
-        slide_annotations = self.get_annotations(slide_id)
-        end_time = timer()
-        print(f'Getting slides annotations took: {end_time-start_time}')
+        min_x = bounding_box[0]
+        min_y = bounding_box[1]
+        max_x = bounding_box[2]
+        max_y = bounding_box[3]
 
-        matching_annotation = slide_annotations[layer_idx]['annotation']['elements'][compartment_idx]
+        image_region = np.array(self.get_image_region(slide_id,[min_x,min_y,max_x,max_y]))
 
-        start_time = timer()
-        if not matching_annotation is None:
-            ann_coords = np.squeeze(np.array(matching_annotation['points']))
-            min_x = np.min(ann_coords[:,0])-self.padding_pixels
-            min_y = np.min(ann_coords[:,1])-self.padding_pixels
-            max_x = np.max(ann_coords[:,0])+self.padding_pixels
-            max_y = np.max(ann_coords[:,1])+self.padding_pixels
-
-            image_region = np.array(self.get_image_region(slide_id,[min_x,min_y,max_x,max_y]))
-
-            # Creating boundary based on coordinates from annotation
-            #scaled_coordinates = ann_coords.tolist()
-            #x_coords = [i[0]-min_x for i in scaled_coordinates]
-            #y_coords = [i[1]-min_y for i in scaled_coordinates]
-            #height = np.shape(image_region)[0]
-            #width = np.shape(image_region)[1]
-            #cc,rr = polygon_perimeter(y_coords,x_coords,(height,width))
-            #image_region[cc,rr,:] = 0
-
-            #end_time = timer()
-            #print(f'Formatting image annotations took: {end_time-start_time}')
-
-            return image_region
-        else:
-            raise ValueError
+        return image_region
 
     def get_user_folder_id(self,folder_name:str):
 
@@ -1761,8 +1764,19 @@ class GirderHandler:
     def generate_feature_dict(self):
         
         self.label_dict = [
-            {'label':'blah','value':'blah','disabled':False}
+            {'label':'FTU','value':'FTU','disabled':False}
         ]
+
+        # Adding labels according to current slide-dataset metadata
+        for f in self.slide_datasets:
+            for m in list(self.slide_datasets[f]['Metadata'].keys()):
+                self.label_dict.append({
+                    'label': m,
+                    'value': m,
+                    'disabled':True
+                })
+
+
         # Dictionary defining plotting items in hierarchy
         morphometrics_children = []
         self.feature_keys = []
@@ -1777,20 +1791,21 @@ class GirderHandler:
             for f_i,f in enumerate([i['name'] for i in self.morphometrics_reference['Morphometrics'] if i['group']==g]):
 
                 if '{}' in f:
-                    for sc_i,sub_comp in ['PAS','Luminal Space','Nuclei']:
+                    for sc_i,sub_comp in enumerate(['PAS','Luminal Space','Nuclei']):
                         group_dict['children'].append({
                             'title':f.replace('{}',sub_comp),
                             'key':f'0-0-{g_i}-{sub_comp_offset}'
                         })
-                        sub_comp_offset+=1
                         self.feature_keys.append({'title':f.replace('{}',sub_comp),'key':f'0-0-{g_i}-{sub_comp_offset}'})
+                        sub_comp_offset+=1
+
                 else:
                     group_dict['children'].append({
                         'title':f,
                         'key':f'0-0-{g_i}-{sub_comp_offset}'
                     })
-                    sub_comp_offset+=1
                     self.feature_keys.append({'title':f,'key':f'0-0-{g_i}-{sub_comp_offset}'})
+                    sub_comp_offset+=1
 
             morphometrics_children.append(group_dict)
 
@@ -1836,12 +1851,14 @@ class GirderHandler:
 
         private_folder_names = [i['name'] for i in private_folder_contents]
         if 'FUSION_Clustering_data.json' in private_folder_names:
+            print('Found clustering data')
             cluster_data_id = private_folder_contents[private_folder_names.index('FUSION_Clustering_data.json')]['_id']
 
-            cluster_data = pd.DataFrame.from_dict(self.gc.get(f'/item/{cluster_data_id}/download?token={self.user_token}'))
-
+            cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={self.user_token}').content)
+            cluster_data = pd.DataFrame.from_dict(cluster_json)
             return cluster_data
         else:
+            print('No clustering data found')
             return pd.DataFrame()
 
     """
