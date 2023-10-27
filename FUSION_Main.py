@@ -374,6 +374,11 @@ class FUSION:
 
         return container_content, description, slide_style
 
+    def open_nav_collapse(self,n,is_open):
+        if n:
+            return not is_open
+        return is_open
+
     def all_layout_callbacks(self):
 
         # Adding callbacks for items in every page
@@ -391,6 +396,12 @@ class FUSION:
             [State({'type':'collapse-content','index':MATCH},'is_open')],
             prevent_initial_call=True
         )(self.view_instructions)
+
+        self.app.callback(
+            Output('navbar-collapse','is_open'),
+            Input('navbar-toggler','n_clicks'),
+            State('navbar-collapse','is_open')
+        )(self.open_nav_collapse)
 
         self.app.callback(
             Output({'type':'sidebar-offcanvas','index':MATCH},'is_open'),
@@ -3321,6 +3332,7 @@ def app(*args):
 
     external_stylesheets = [
         dbc.themes.LUX,
+        dbc.themes.BOOTSTRAP,
         dbc.icons.BOOTSTRAP,
         dbc.icons.FONT_AWESOME
         ]

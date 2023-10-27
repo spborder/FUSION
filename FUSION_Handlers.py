@@ -1772,13 +1772,17 @@ class GirderHandler:
         ]
 
         # Adding labels according to current slide-dataset metadata
+        meta_labels = []
         for f in self.slide_datasets:
-            for m in list(self.slide_datasets[f]['Metadata'].keys()):
-                self.label_dict.append({
-                    'label': m,
-                    'value': m,
-                    'disabled':False
-                })
+            meta_labels.extend(list(self.slide_datasets[f]['Metadata'].keys()))
+        # Adding only unique labels
+        meta_labels = np.unique(meta_labels).tolist()
+        for m in meta_labels:
+            self.label_dict.append({
+                'label': m,
+                'value': m,
+                'disabled':False
+            })
 
 
         # Dictionary defining plotting items in hierarchy
