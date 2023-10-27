@@ -38,6 +38,7 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 import dash_leaflet as dl
 import dash_mantine_components as dmc
+import dash_treeview_antd as dta
 
 from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function
@@ -84,7 +85,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self, wsi, cli_list = None):
+    def gen_vis_layout(self, wsi, feature_select_dict, label_dict, cli_list = None):
 
         #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
@@ -146,7 +147,7 @@ class LayoutHandler:
 
         map_layer = dl.Map(
             center = center_point, zoom = 3, minZoom = 0, maxZoom = wsi.zoom_levels-1, crs='Simple',bounds = wsi.map_bounds,
-            style = {'width':'100%','height':'80vh','margin':'auto','display':'inline-block'},
+            style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             children = map_children
         )
@@ -162,7 +163,7 @@ class LayoutHandler:
                     map_layer
                 )
             ])
-        ], style = {'marginBottom':'20px'})
+        ])
 
         # Cell type proportions and cell state distributions
         roi_pie = dbc.Card([
@@ -302,9 +303,6 @@ class LayoutHandler:
             )
         ])
 
-        ftu_list = ['glomerulus','Tubules']
-        plot_types = ['TSNE','UMAP']
-        labels = ['Cluster','image_id']+wsi.properties_list
         # Cluster viewer tab
         cluster_card = dbc.Card([
             dbc.Row([
@@ -312,78 +310,54 @@ class LayoutHandler:
             ]),
             html.Hr(),
             dbc.Row([
-                dbc.Col([
+                html.Div(dbc.Col([
                     dbc.Card(
                         id= 'plot-options',
                         children = [
                             dbc.CardHeader(
                                 children = [
                                     dbc.Row([
-                                        dbc.Col('Plot Options',md=7),
-                                        dbc.Col(dbc.Button('Update Data!',id={'type':'update-graph-data','index':0},color='danger'),md=4),
+                                        dbc.Col('Plot Options',md=11),
                                         dbc.Col(self.gen_info_button('Select different plot options to update the graph!'),md=1)
                                     ])
-
                                     ]
                                 ),
                             dbc.CardBody([
                                 dbc.Row([
-                                    dbc.Col([
-                                        dbc.Row([
-                                            dbc.Col(dbc.Label('Functional Tissue Unit Type',html_for='ftu-select'),md=11),
-                                            dbc.Col(self.gen_info_button("Select a FTU to see that FTU;s morphometrics clustering"),md=1)
-                                        ])
-                                    ],md=4),
-                                    dbc.Col([
-                                        html.Div(
-                                            dcc.Dropdown(
-                                                ftu_list,
-                                                ftu_list[0],
-                                                id='ftu-select'
-                                            )
-                                        )],md=8
+                                    dbc.Col('Select Feature(s)',md=11),
+                                    dbc.Col(self.gen_info_button('Select one or more features below to plot. Selecting more than 2 features will generate a UMAP'),md=1)
+                                ]),
+                                html.Hr(),
+                                dbc.Row([
+                                    html.Div(
+                                        dta.TreeView(
+                                            id='feature-select-tree',
+                                            multiple=True,
+                                            checkable=True,
+                                            checked = [],
+                                            selected = [],
+                                            expanded=[],
+                                            data = feature_select_dict
+                                        ),
+                                        style={'maxHeight':'200px','overflow':'scroll'}
                                     )
                                 ]),
-                                html.B(),
+                                html.Hr(),
                                 dbc.Row([
-                                    dbc.Col([
-                                        dbc.Row([
-                                            dbc.Col(dbc.Label('Type of plot',html_for='plot-select'),md=11),
-                                            dbc.Col(self.gen_info_button('Select a method of dimensional reduction to change layout of clustering graph'),md=1)
-                                            ])                              
-                                        ],md=4),
-                                    dbc.Col([
-                                        html.Div(
-                                            dcc.Dropdown(
-                                                plot_types,
-                                                plot_types[0],
-                                                id='plot-select'
-                                            )
-                                        )],md=8
-                                    )
+                                    dbc.Col('Select Label',md=11),
+                                    dbc.Col(self.gen_info_button('Select a label for the plot of selected features'),md=1)
                                 ]),
-                                html.B(),
+                                html.Hr(),
                                 dbc.Row([
-                                    dbc.Col([
-                                        dbc.Row([
-                                            dbc.Col(dbc.Label('Sample Labels',html_for='label-select'),md=11),
-                                            dbc.Col(self.gen_info_button('Select a label to overlay onto points in the graph'),md=1)
-                                            ])
-                                        ],md=4),
-                                    dbc.Col([
-                                        html.Div(
-                                            dcc.Dropdown(
-                                                labels,
-                                                labels[0],
-                                                id='label-select'
-                                            )
-                                        )],md=8
+                                    dcc.Dropdown(
+                                        options = label_dict,
+                                        id = 'label-select'
                                     )
                                 ])
                             ])
                         ]
                     )
-                ],md=12)
+                ],md=12))
             ]),
             dbc.Row([
                 dbc.Col([
@@ -636,7 +610,7 @@ class LayoutHandler:
                             dbc.Row([
                                 dbc.Tabs(tool_tabs,active_tab = 'overlays-tab')
                             ])
-                        ])
+                        ],style={'maxHeight':'90vh','overflow':'scroll'})
                     ])
                 ]
             )
@@ -649,7 +623,7 @@ class LayoutHandler:
                 children=[
                     dbc.Col(wsi_view,md=6),
                     dbc.Col(tools,md=6)
-                ],style={"height":"100vh"}
+                ],style={"height":"90vh",'marginBottom':'10px'}
             )
         ]
 
@@ -1074,7 +1048,6 @@ class LayoutHandler:
     def gen_initial_layout(self,slide_names,initial_user:str):
 
         # welcome layout after initialization and information and buttons to go to other areas
-
         # Header
         header = dbc.Navbar(
             dbc.Container([
@@ -1215,7 +1188,6 @@ class LayoutHandler:
             ],style={'marginBottom':'20px'}
         )
 
-
         # Slide select row (seeing if keeping it in every layout will let it be updated by actions in other pages)
         # Slide selection
         slide_select = dbc.Card(
@@ -1266,7 +1238,7 @@ class LayoutHandler:
             ),
             dbc.Container([
                 html.H1('Welcome to FUSION!'),
-                ],fluid=True,id='container-content'),
+                ],fluid=True,id='container-content',style = {'height':'100vh'}),
             html.Hr(),
             html.P('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
         ])
@@ -1439,6 +1411,10 @@ class GirderHandler:
         self.authenticate(username, password)
         self.get_token()
 
+        # Name of plugin used for fetching clustering/plotting metadata
+        self.get_cluster_data_plugin = 'samborder2256_get_cluster_data_latest/clustering_data'
+        self.cached_annotation_ids = []
+
         self.padding_pixels = 50
 
         # Initializing blank annotation metadata cache to prevent multiple dsa requests
@@ -1547,7 +1523,7 @@ class GirderHandler:
 
         for p,p_type in zip(path,path_type):
             self.current_collection['path'].append(p)
-            self.current_collection['id'].append(self.gc.get('resource/lookup',parameters={'path':p,})['_id'])
+            self.current_collection['id'].append(self.gc.get('resource/lookup',parameters={'path':p})['_id'])
 
             # Getting contents of base collection
             collection_contents = self.gc.get(f'resource/{self.current_collection["id"][-1]}/items',parameters={'type':p_type,'limit':100000}) 
@@ -1585,47 +1561,68 @@ class GirderHandler:
                         elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
     
+        # Adding Public folders if any "FUSION_Upload" are in there
+        user_folder_path = f'/user/{self.username}/Public'
+        folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder_path})['_id']
+        folder_contents = self.gc.get(f'/resource/{folder_id}/items',parameters={'type':'folder','limit':10000})
+        folder_ids = [i['folderId'] for i in folder_contents]
+        for f in np.unique(folder_ids):
+            folder_name = self.gc.get(f'/folder/{f}')['name']
+            if 'FUSION_Upload' in folder_name:
+
+                self.slide_datasets[f] = {
+                    'name':folder_name
+                }
+
+                folder_slides = [i for i in folder_contents if 'largeImage' in i and i['folderId']==f]
+
+                self.slide_datasets[f]['Slides'] = folder_slides
+                folder_slide_meta = [i['meta'] for i in folder_slides]
+                meta_keys = []
+                for i in folder_slide_meta:
+                    meta_keys.extend(list(i.keys()))
+
+                self.slide_datasets[f]['Metadata'] = {}
+                for m in meta_keys:
+                    item_metadata = [item[m] for item in folder_slide_meta if m in item]
+                    if type(item_metadata[0])==str:
+                        self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
+                    elif type(item_metadata[0])==int or type(item_metadata[0])==float:
+                        self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+
     def get_collection_annotation_meta(self,select_ids:list):
 
-        # Iterate through select_ids and extract annotation metadata
-        #TODO: This needs to be more efficient somehow
-        print(f'select_ids: {select_ids}')
-        metadata = []
-        for i in select_ids:
-            start_time = timer()
-            if i not in list(self.cached_annotation_metadata.keys()):
-                item_meta = []
-                #TODO: Chunking error is sometimes triggered here, might just be a local connectivity problem
-                try:
-                    item_annotations = self.gc.get(f'/annotation/item/{i}')
-                    for g_idx,g in enumerate(item_annotations):
-                        if 'annotation' in g:
-                            if 'elements' in g['annotation']:
-                                if not g['annotation']['name']=='Spots':
-                                    for e_idx,e in tqdm(enumerate(g['annotation']['elements'])):
-                                        if 'user' not in e:
-                                            e['user'] = {}
-                                        
-                                        # Adding slide and annotation ids
-                                        e['user']['slide_id'] = i
-                                        e['user']['annotation_id'] = e['id']
-                                        e['user']['compartment_idx'] = e_idx
-                                        e['user']['layer_id'] = g['_id']
-                                        e['user']['layer_idx'] = g_idx
-                                        item_meta.append(e['user'])
-                    self.cached_annotation_metadata[i] = item_meta
-                    print(f'Added: {i} to cached annotation metadata')
-                    metadata.extend(item_meta)
-                except girder_client.HttpError:
-                    print(f'{i} not found! Uh oh!')
-            else:
-                metadata.extend(self.cached_annotation_metadata[i])
-                print(f'Added {i} FROM cached annotation metadata')
-            end_time = timer()
-            print(f'Getting: {i} took: {end_time-start_time}')
-            
+        # Passing image ids as a string
+        if len(self.cached_annotation_ids)==0:
+            self.cached_annotation_ids = select_ids
+            add_ids = ','.join(select_ids)
+            remove_ids = ''
+            run_plugin = True
+        else:
+            remove_ids = [i for i in self.cached_annotation_ids if i not in select_ids]
+            add_ids = [i for i in select_ids if i not in self.cached_annotation_ids]
 
-        return metadata
+            add_ids = ','.join(add_ids)
+            remove_ids = ','.join(remove_ids)
+            self.cached_annotation_ids = select_ids
+            if len(add_ids)>0 or len(remove_ids)>0:
+                run_plugin = True
+            else:
+                run_plugin = False
+
+        if run_plugin:
+            print(f'Getting annotation metadata for: {select_ids}')
+            # Running get_cluster_data plugin 
+            try:
+                job_response = self.gc.post(f'/slicer_cli_web/{self.get_cluster_data_plugin}/run',
+                                            parameters = {
+                                                'girderApiUrl':self.apiUrl,
+                                                'girderToken':self.user_token,
+                                                'add_ids':add_ids,
+                                                'remove_ids':remove_ids
+                                            })
+            except girder_client.HttpError:
+                print(f'Plugin is not added to this DSA instance')
 
     def get_image_region(self,item_id,coords_list):
 
@@ -1659,42 +1656,16 @@ class GirderHandler:
 
         return image_region
 
-    def get_annotation_image(self,slide_id,layer_idx,compartment_idx):
+    def get_annotation_image(self,slide_id,bounding_box):
 
-        # Girder does the "annotation_id" a little differently. They have an endpoint that pulls annotation LAYERS by their id gc.get('annotation/{item}')
-        # But not a SPECIFIC annotation. Makes sense because I guess you'd have to read the whole set of annotations anyways
-        start_time = timer()
-        slide_annotations = self.get_annotations(slide_id)
-        end_time = timer()
-        print(f'Getting slides annotations took: {end_time-start_time}')
+        min_x = bounding_box[0]
+        min_y = bounding_box[1]
+        max_x = bounding_box[2]
+        max_y = bounding_box[3]
 
-        matching_annotation = slide_annotations[layer_idx]['annotation']['elements'][compartment_idx]
+        image_region = np.array(self.get_image_region(slide_id,[min_x,min_y,max_x,max_y]))
 
-        start_time = timer()
-        if not matching_annotation is None:
-            ann_coords = np.squeeze(np.array(matching_annotation['points']))
-            min_x = np.min(ann_coords[:,0])-self.padding_pixels
-            min_y = np.min(ann_coords[:,1])-self.padding_pixels
-            max_x = np.max(ann_coords[:,0])+self.padding_pixels
-            max_y = np.max(ann_coords[:,1])+self.padding_pixels
-
-            image_region = np.array(self.get_image_region(slide_id,[min_x,min_y,max_x,max_y]))
-
-            # Creating boundary based on coordinates from annotation
-            #scaled_coordinates = ann_coords.tolist()
-            #x_coords = [i[0]-min_x for i in scaled_coordinates]
-            #y_coords = [i[1]-min_y for i in scaled_coordinates]
-            #height = np.shape(image_region)[0]
-            #width = np.shape(image_region)[1]
-            #cc,rr = polygon_perimeter(y_coords,x_coords,(height,width))
-            #image_region[cc,rr,:] = 0
-
-            #end_time = timer()
-            #print(f'Formatting image annotations took: {end_time-start_time}')
-
-            return image_region
-        else:
-            raise ValueError
+        return image_region
 
     def get_user_folder_id(self,folder_name:str):
 
@@ -1786,6 +1757,109 @@ class GirderHandler:
         # Getting asct+b table
         asct_b_table_id = self.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
         self.asct_b_table = pd.read_csv(self.apiUrl+f'item/{asct_b_table_id}/download?token={self.user_token}',skiprows=list(range(10)))
+
+        # Generating plot feature selection dictionary
+        self.generate_feature_dict()
+
+    def generate_feature_dict(self):
+        
+        self.label_dict = [
+            {'label':'FTU','value':'FTU','disabled':False}
+        ]
+
+        # Adding labels according to current slide-dataset metadata
+        for f in self.slide_datasets:
+            for m in list(self.slide_datasets[f]['Metadata'].keys()):
+                self.label_dict.append({
+                    'label': m,
+                    'value': m,
+                    'disabled':True
+                })
+
+
+        # Dictionary defining plotting items in hierarchy
+        morphometrics_children = []
+        self.feature_keys = []
+        for g_i,g in enumerate(np.unique([i['group'] for i in self.morphometrics_reference['Morphometrics']]).tolist()):
+            group_dict = {
+                'title':g,
+                'key':f'0-0-{g_i}',
+                'children':[]
+            }
+            sub_comp_offset = 0
+
+            for f_i,f in enumerate([i['name'] for i in self.morphometrics_reference['Morphometrics'] if i['group']==g]):
+
+                if '{}' in f:
+                    for sc_i,sub_comp in enumerate(['PAS','Luminal Space','Nuclei']):
+                        group_dict['children'].append({
+                            'title':f.replace('{}',sub_comp),
+                            'key':f'0-0-{g_i}-{sub_comp_offset}'
+                        })
+                        self.feature_keys.append({'title':f.replace('{}',sub_comp),'key':f'0-0-{g_i}-{sub_comp_offset}'})
+                        sub_comp_offset+=1
+
+                else:
+                    group_dict['children'].append({
+                        'title':f,
+                        'key':f'0-0-{g_i}-{sub_comp_offset}'
+                    })
+                    self.feature_keys.append({'title':f,'key':f'0-0-{g_i}-{sub_comp_offset}'})
+                    sub_comp_offset+=1
+
+            morphometrics_children.append(group_dict)
+
+        cell_comp_children = []
+        for c_i,c in enumerate(np.unique([self.cell_graphics_key[i]['structure'][0] for i in self.cell_graphics_key]).tolist()):
+
+            structure_children = {
+                'title':c,
+                'key':f'0-1-{c_i}',
+                'children':[]
+            }
+            for sc_i,sc in enumerate([self.cell_graphics_key[i]['full'] for i in self.cell_graphics_key if self.cell_graphics_key[i]['structure'][0]==c]):
+                
+                structure_children['children'].append({
+                    'title':sc,
+                    'key':f'0-1-{c_i}-{sc_i}'
+                })
+                self.feature_keys.append({'title':sc,'key':f'0-1-{c_i}-{sc_i}'})
+
+            cell_comp_children.append(structure_children)
+
+        self.plotting_feature_dict = {
+            'title':'All Features',
+            'key': '0',
+            'children': [
+                {
+                    'title':'Morphometrics',
+                    'key':'0-0',
+                    'children': morphometrics_children
+                },
+                {
+                    'title':'Cellular Composition',
+                    'key':'0-1',
+                    'children': cell_comp_children
+                }
+            ]
+        }
+
+    def load_clustering_data(self):
+        # Grabbing feature clustering info from user's private folder
+        private_folder_id = self.gc.get('/resource/lookup',parameters={'path':f'/user/{self.username}/Private'})['_id']
+        private_folder_contents = self.gc.get(f'/resource/{private_folder_id}/items?token={self.user_token}',parameters={'type':'folder','limit':10000})
+
+        private_folder_names = [i['name'] for i in private_folder_contents]
+        if 'FUSION_Clustering_data.json' in private_folder_names:
+            print('Found clustering data')
+            cluster_data_id = private_folder_contents[private_folder_names.index('FUSION_Clustering_data.json')]['_id']
+
+            cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={self.user_token}').content)
+            cluster_data = pd.DataFrame.from_dict(cluster_json)
+            return cluster_data
+        else:
+            print('No clustering data found')
+            return pd.DataFrame()
 
     """
     def get_cli_input_list(self,cli_id):

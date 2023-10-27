@@ -1,0 +1,28 @@
+{
+    "FUSION_Plugins":[
+        {
+            "image":"sayatmimar_histo-cloud_MultiCompartmentSegment:2",
+            "description":"Segmentation plugin for cortical interstitium, medullary interstitium, Glomeruli, Sclerotic Glomeruli, tubules, and Arteries/Arterioles"
+        },
+        {
+            "image":"sayatmimar_atlasrds_t:7",
+            "description":"Cell deconvolution using 20% downsampled Atlas"
+        },
+        {
+            "image":"samborder2256_spot_ann_test:latest",
+            "description":"Spot annotation generation plugin adding main cell types, subtypes, cell states, and UMI counts to spots"
+        },
+        {
+            "image":"samborder2256_spot_agg_test_image:latest",
+            "description":"Aggregation of spot properties to intersecting structures"
+        },
+        {
+            "image":"samborder2256_ftx_test_image:latest",
+            "description":"Feature extraction for sub-compartment specific features"
+        },
+        {
+            "image":"samborder2256_get_cluster_data:latest",
+            "description":"Grab morphometrics and cell composition data for structures in current visualization dataset"
+        }
+    ]
+}
