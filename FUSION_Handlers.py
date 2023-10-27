@@ -1763,8 +1763,12 @@ class GirderHandler:
 
     def generate_feature_dict(self):
         
+        # Default labels are FTU, Slide Name, Cell Type, and Morphometric
         self.label_dict = [
-            {'label':'FTU','value':'FTU','disabled':False}
+            {'label':'FTU','value':'FTU','disabled':False},
+            {'label':'Slide Name','value':'Slide Name','disabled':False},
+            {'label':'Cell Type','value':'Cell Type','disabled':True},
+            {'label':'Morphometric','value':'Morphometric','disabled':True}
         ]
 
         # Adding labels according to current slide-dataset metadata
@@ -1773,7 +1777,7 @@ class GirderHandler:
                 self.label_dict.append({
                     'label': m,
                     'value': m,
-                    'disabled':True
+                    'disabled':False
                 })
 
 
