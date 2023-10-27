@@ -1959,132 +1959,169 @@ class FUSION:
         
         # Grabbing current metadata from user private folder        
         # Finding features checked:
-        if self.clustering_data.empty:
-            print(f'Getting new clustering data')
-            self.clustering_data = self.dataset_handler.load_clustering_data()
+        if not label is None:
+            if self.clustering_data.empty:
+                print(f'Getting new clustering data')
+                self.clustering_data = self.dataset_handler.load_clustering_data()
 
-        feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
-        # Finding the features selected
-        features_selected = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in selected_feature]
+            feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
+            # Finding the features selected
+            features_selected = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in selected_feature]
 
-        cell_features = [i for i in feature_names if i in self.cell_names_key]
-        print(f'{len(cell_features)} cell features found')
-        if len(cell_features)>0:
-            if len(feature_names)>0:
-                feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
-            else:
-                feature_data = pd.DataFrame()
+            cell_features = [i for i in feature_names if i in self.cell_names_key]
+            print(f'{len(cell_features)} cell features found')
+            if len(cell_features)>0:
+                if len(feature_names)>0:
+                    feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+                else:
+                    feature_data = pd.DataFrame()
 
-            print(f'shape of feature_data before adding cell_values: {feature_data.shape}')
-            cell_values = self.clustering_data['Main_Cell_Types'].tolist()
-            print(f'len of cell_values: {len(cell_values)}')
-            for c in cell_features:
-                cell_abbrev = self.cell_names_key[c]
+                print(f'shape of feature_data before adding cell_values: {feature_data.shape}')
+                cell_values = self.clustering_data['Main_Cell_Types'].tolist()
+                print(f'len of cell_values: {len(cell_values)}')
+                for c in cell_features:
+                    cell_abbrev = self.cell_names_key[c]
 
-                specific_cell_values = []
-                for i in cell_values:
-                    if not i is None:
-                        if cell_abbrev in i:
-                            specific_cell_values.append(i[cell_abbrev])
+                    specific_cell_values = []
+                    for i in cell_values:
+                        if not i is None:
+                            if cell_abbrev in i:
+                                specific_cell_values.append(i[cell_abbrev])
+                            else:
+                                specific_cell_values.append(0)
                         else:
                             specific_cell_values.append(0)
-                    else:
-                        specific_cell_values.append(0)
+                    
+                    feature_data[c] = specific_cell_values
+
+                print(f'shape of feature_data after adding cell values: {feature_data.shape}')
+            else:
+                feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+
+            # Coercing dtypes of columns in feature_data
+            for f in feature_data.columns.tolist():
+                feature_data[f] = pd.to_numeric(feature_data[f],errors='coerce')
+
+
+            # Getting the label data
+            if label in self.clustering_data.columns:
+                label_data = self.clustering_data[label]
+            else:
+
+                sample_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
+                unique_ids = np.unique(sample_ids).tolist()
+
+                if label=='Slide Name':
+                    # Getting the name of each slide:
+                    slide_names = []
+                    for u in unique_ids:
+                        item_data = self.dataset_handler.gc.get(f'/item/{u}')
+                        slide_names.append(item_data['name'])
+                    
+                    label_data = [slide_names[unique_ids.index(i)] for i in sample_ids]
+
+                elif label=='Cell Type':
+                    
+                    label_data = ['tba' for i in range(len(sample_ids))]
                 
-                feature_data[c] = specific_cell_values
+                elif label == 'Morphometric':
 
-            print(f'shape of feature_data after adding cell values: {feature_data.shape}')
-        else:
-            feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+                    label_data = ['tba' for i in range(len(sample_ids))]
+                
+                else:
+                    # Used for slide-level metadata keys
+                    slide_meta = []
+                    for u in unique_ids:
+                        item_data = self.dataset_handler.gc.get(f'/item/{u}')
+                        if label in item_data['meta']:
+                            slide_meta.append(item_data['meta'][label])
+                        else:
+                            slide_meta.append('Not Recorded')
+                    
+                    label_data = [slide_meta[unique_ids.index(i)] for i in sample_ids]
 
-        # Coercing dtypes of columns in feature_data
-        for f in feature_data.columns.tolist():
-            feature_data[f] = pd.to_numeric(feature_data[f],errors='coerce')
+            # Generating appropriate plot
+            if len(feature_names)==1:
+                print(f'Generating violin plot for {feature_names}')
+                print(f'len of feature_names: {len(feature_names)}')
 
-        feature_data = feature_data.fillna(0)
+                # Adding "Hidden" column with image grabbing info
+                feature_data['Hidden'] = self.clustering_data['Hidden']       
+                feature_data['label'] = label_data
 
-        # Generating appropriate plot
-        if len(feature_names)==1:
-            print(f'Generating violin plot for {feature_names}')
-            print(f'len of feature_names: {len(feature_names)}')
+                feature_data = feature_data.dropna()
 
-            # Adding "Hidden" column with image grabbing info
-            feature_data['Hidden'] = self.clustering_data['Hidden']       
-            feature_data['label'] = self.clustering_data[label] 
+                figure = px.violin(
+                    data_frame=feature_data,
+                    x = 'label',
+                    y = feature_names[0],
+                    custom_data='Hidden',
+                    title = f'Violin plot of {feature_names[0]} labeled by {label}'
+                )
 
-            figure = px.violin(
-                data_frame=feature_data,
-                x = 'label',
-                y = feature_names[0],
-                custom_data='Hidden',
-                title = f'Violin plot of {feature_names[0]} labeled by {label}'
-            )
+            elif len(feature_names)==2:
+                print(f'Generating a scatter plot')
+                print(f'len of feature_names: {len(feature_names)}')
+                feature_columns = feature_names
 
-        elif len(feature_names)==2:
-            print(f'Generating a scatter plot')
-            print(f'len of feature_names: {len(feature_names)}')
-            feature_columns = feature_names + cell_features
+                # Adding "Hidden" column with image grabbing info
+                feature_data['Hidden'] = self.clustering_data['Hidden']       
+                feature_data['label'] = label_data
 
-            # Adding "Hidden" column with image grabbing info
-            feature_data['Hidden'] = self.clustering_data['Hidden']       
-            feature_data['label'] = self.clustering_data[label] 
-            figure = px.scatter(
-                data_frame=feature_data,
-                x = feature_columns[0],
-                y = feature_columns[1],
-                color = 'label',
-                custom_data = 'Hidden',
-                title = f'Scatter plot of {feature_names[0]} and {feature_names[1]} labeled by {label}'
-            )
+                feature_data = feature_data.dropna()
 
-        elif len(feature_names)>2:
-            print(f'Running UMAP and returning a scatter plot')
-            print(f'len of feature_names: {len(feature_names)}')
+                figure = px.scatter(
+                    data_frame=feature_data,
+                    x = feature_columns[0],
+                    y = feature_columns[1],
+                    color = 'label',
+                    custom_data = 'Hidden',
+                    title = f'Scatter plot of {feature_names[0]} and {feature_names[1]} labeled by {label}'
+                )
 
-            # Scaling and reducing feature data using UMAP
-            feature_data = feature_data.fillna(0).values
+            elif len(feature_names)>2:
+                print(f'Running UMAP and returning a scatter plot')
+                print(f'len of feature_names: {len(feature_names)}')
 
-            # Scaling feature_data
-            try:
+                # Scaling and reducing feature data using UMAP
+                feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()
+                feature_data['label'] = label_data
+
+                feature_data = feature_data.dropna()
+
+                hidden_col = feature_data['Hidden'].tolist()
+                label_col = feature_data['label'].tolist()
+                feature_data = feature_data.loc[:,[i for i in feature_names]].values
+
+                # Scaling feature_data
                 feature_data_means = np.nanmean(feature_data,axis=0)
                 feature_data_stds = np.nanstd(feature_data,axis=0)
 
                 scaled_data = (feature_data-feature_data_means)/feature_data_stds
                 scaled_data[np.isnan(scaled_data)] = 0.0
                 scaled_data[~np.isfinite(scaled_data)] = 0.0
-            except TypeError:
-                print('What is going on?')
-                sum = np.zeros((1,np.shape(feature_data)[1])).astype(np.float64)
-                for i in range(0,np.shape(feature_data)[0]):
-                    print(feature_data[i,:])
-                    print(feature_data[i,:].dtype)
-                    sum += feature_data[i,:]
-                    print(type(feature_data[i,:]))
 
-                print(f'Troublemaker row is: {i}')
-                feature_data[i,:] = 0.0
-                scaled_data = (feature_data-np.nanmean(feature_data,axis=0))/np.nanstd(feature_data,axis=0)
-                scaled_data[np.isnan[scaled_data]] = 0.0
-                scaled_data[~np.isfinite[scaled_data]] = 0.0
 
-            umap_reducer = UMAP()
-            embeddings = umap_reducer.fit_transform(scaled_data)
+                umap_reducer = UMAP()
+                embeddings = umap_reducer.fit_transform(scaled_data)
 
-            umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'])
-            umap_df['Hidden'] = self.clustering_data['Hidden'].tolist()
-            umap_df['label'] = self.clustering_data[label].tolist()
+                umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'])
+                umap_df['Hidden'] = hidden_col
+                umap_df['label'] = label_col
 
-            figure = px.scatter(
-                data_frame = umap_df,
-                x = 'UMAP1',
-                y = 'UMAP2',
-                color = 'label',
-                custom_data = 'Hidden',
-                title = f'UMAP of selected features labeled with {label}'
-            )
+                figure = px.scatter(
+                    data_frame = umap_df,
+                    x = 'UMAP1',
+                    y = 'UMAP2',
+                    color = 'label',
+                    custom_data = 'Hidden',
+                    title = f'UMAP of selected features labeled with {label}'
+                )
 
+            else:
+                # No features selected
+                figure = None
         else:
-            # No features selected
             figure = None
 
         return go.Figure(figure)
@@ -2119,7 +2156,7 @@ class FUSION:
                 else:
                     sample_info = []
 
-            self.current_selected_samples = sample_info
+            self.current_selected_samples = sample_index
 
             current_image = self.grab_image(sample_info)
             print(f'length: {len(current_image)}')
@@ -2184,11 +2221,12 @@ class FUSION:
             return go.Figure(), go.Figure(), go.Figure()
     
     def update_selected_state_bar(self, selected_cell_click):
-        #print(f'Selected cell click: {selected_cell_click}')
+        print(f'Selected cell click: {selected_cell_click}')
         if not selected_cell_click is None:
             cell_type = selected_cell_click['points'][0]['label']
 
-            state_data = pd.DataFrame([i['Cell_States'][cell_type] for i in self.current_selected_samples]).sum(axis=0).to_frame()
+            cell_states_data = self.clustering_data['Cell_States'].tolist()
+            state_data = pd.DataFrame([cell_states_data[i][cell_type] for i in self.current_selected_samples]).sum(axis=0).to_frame()
             state_data = state_data.reset_index()
             state_data.columns = ['Cell States',f'Cell States for {cell_type}']
             state_data[f'Cell States for {cell_type}'] = state_data[f'Cell States for {cell_type}']/state_data[f'Cell States for {cell_type}'].sum()
