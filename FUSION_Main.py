@@ -2784,8 +2784,8 @@ class FUSION:
                     )
                 ]
 
-                button_color = 'warning'
-                button_text = 'Login Failed'
+                button_color = 'success'
+                button_text = 'Create Account'
                 logged_in_user = ''
                 upload_disabled = True
 
