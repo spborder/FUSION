@@ -358,6 +358,7 @@ class FUSION:
 
                 self.layout_handler.gen_vis_layout(self.wsi,self.dataset_handler.plotting_feature_dict,self.dataset_handler.label_dict)
                 self.clustering_data = self.dataset_handler.load_clustering_data()
+                self.update_hex_color_key(self.current_cell)
 
                 container_content = self.layout_handler.layout_dict[self.current_page]
                 description = self.layout_handler.description_dict[self.current_page]
@@ -1429,7 +1430,8 @@ class FUSION:
 
                 cell_sub_select_children = []
 
-                cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
+                #cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
+                cell_types = list(self.cell_graphics_key.keys())
                 color_bar = dlx.categorical_colorbar(
                     categories = cell_types,
                     colorscale = list(self.hex_color_key.values()),
@@ -1496,6 +1498,8 @@ class FUSION:
             )
             for struct in self.wsi.map_dict['FTUs']
         ]
+
+        """
         new_children += [
             dl.Overlay(
                 dl.LayerGroup(
@@ -1507,7 +1511,7 @@ class FUSION:
                 ),name = 'Spots', checked = False, id = self.wsi.item_id+'_Spots'
             )
         ]
-
+        """
         for m_idx,man in enumerate(self.wsi.manual_rois):
             new_children.append(
                 dl.Overlay(
@@ -1913,6 +1917,7 @@ class FUSION:
             for struct in self.wsi.map_dict['FTUs']
         ]
 
+        """
         new_children += [
             dl.Overlay(
                 dl.LayerGroup(
@@ -1924,6 +1929,7 @@ class FUSION:
                 ), name = 'Spots', checked = False, id = new_slide.item_id+'_Spots'
             )
         ]
+        """
 
         # Now iterating through manual ROIs
         for m_idx, man in enumerate(self.wsi.manual_rois):
@@ -1962,7 +1968,7 @@ class FUSION:
         for f in self.wsi.map_dict['FTUs']:
             combined_colors_dict[f] = {'color':self.wsi.map_dict['FTUs'][f]['color']}
         
-        combined_colors_dict['Spots'] = {'color':self.wsi.spot_dict['color']}
+        #combined_colors_dict['Spots'] = {'color':self.wsi.spot_dict['color']}
 
         boundary_options_children = [
             dbc.Tab(

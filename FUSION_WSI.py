@@ -36,7 +36,7 @@ class DSASlide:
         ]
 
         self.get_slide_map_data(self.item_id)
-        self.process_annotations()
+        #self.process_annotations()
     
     def __str__(self):
         
@@ -76,15 +76,15 @@ class DSASlide:
         # Step 5: Getting annotations for a resource
         self.annotations = self.girder_handler.get_annotations(item_id)
         print(f'Found: {len(self.annotations)} Annotations')
-        # Step 6: Converting Histomics/large-image annotations to GeoJSON
+        # Step 6: Getting user token and tile url
+        self.user_token = self.girder_handler.get_token()
+        self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token
+
+        # Step 7: Converting Histomics/large-image annotations to GeoJSON
         self.x_scale, self.y_scale = self.convert_json()
 
         self.map_bounds[0][1]*=self.x_scale
         self.map_bounds[1][1]*=self.y_scale
-
-        # Step 7: Getting user token and tile url
-        self.user_token = self.girder_handler.get_token()
-        self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token
 
     def convert_json(self):
 
@@ -113,6 +113,14 @@ class DSASlide:
         self.spot_polys = []
         self.spot_props = []
         self.properties_list = []
+
+        self.map_dict = {
+            'url': self.tile_url,
+            'FTUs':{}
+        }
+
+        included_props = []
+
         for a in tqdm(self.annotations):
             if 'elements' in a['annotation']:
                 f_name = a['annotation']['name']
@@ -169,12 +177,38 @@ class DSASlide:
                         self.spot_props.append(f_dict['properties'])
 
                     for p in f_dict['properties']:
-                        if p not in self.properties_list:
-                            self.properties_list.append(p)
+                        if p not in included_props:
+                            if p in self.visualization_properties:
+                                
+                                if type(f_dict['properties'][p])==dict:
+                                    included_props.append(p)
+                                    f_k = list(f_dict['properties'][p].keys())
+                                    if p=='Main_Cell_Types':
+                                        f_prop_list = [f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}' for i in f_k]
+                                    else:
+                                        f_prop_list = [f'{p} --> {i}' for i in f_k]
+                                else:
+                                    included_props.append(p)
+                                    f_prop_list = [p]
+
+                                self.properties_list.extend(f_prop_list)
+
+                self.map_dict['FTUs'][f_name] = {
+                    'id':{'type':'ftu-bounds','index':len(self.ftu_names)-1},
+                    'popup_id':{'type':'ftu-popup','index':len(self.ftu_names)-1},
+                    'color':self.ftu_colors[f_name],
+                    'hover_color':'#9caf00'
+                }
 
                 # Writing annotations to local assets
                 with open(f'./assets/{f_name}.json','w') as f:
                     json.dump(individual_geojson,f)
+        
+        self.properties_list = np.unique(self.properties_list).tolist()
+        main_cell_types_test = [1 if 'Main_Cell_Types' in i else 0 for i in self.properties_list]
+        if any(main_cell_types_test):
+            self.properties_list.append('Max Cell Type')
+
 
         return base_x_scale*x_scale, base_y_scale*y_scale
 

@@ -105,23 +105,23 @@ class LayoutHandler:
             self.initial_overlays = [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = wsi.map_dict['FTUs'][struct]['geojson'], id = wsi.map_dict['FTUs'][struct]['id'], options = dict(style=dict(color = wsi.map_dict['FTUs'][struct]['color'])),
+                        dl.GeoJSON(url=f'./assets/{struct}.json', id = wsi.map_dict['FTUs'][struct]['id'], options = dict(style=dict(color = wsi.map_dict['FTUs'][struct]['color'])),
                             hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                             children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
                     name = struct, checked = True, id = struct)
             for struct in wsi.map_dict['FTUs']
             ] 
-
+            """
             self.initial_overlays+= [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = wsi.spot_dict['geojson'], id = wsi.spot_dict['id'], options = dict(style=dict(color = wsi.spot_dict['color'])),
+                        dl.GeoJSON(url=f'./assets/Spots.json', id = wsi.spot_dict['id'], options = dict(style=dict(color = wsi.spot_dict['color'])),
                             hoverStyle = arrow_function(dict(weight=5, color = wsi.spot_dict['hover_color'], dashArray = '')),
                             children = [dl.Popup(id=wsi.spot_dict['popup_id'])],
                             zoomToBounds=True)),
                     name = 'Spots', checked = False, id = 'Spots')
             ]
-        
+            """
             map_url = wsi.map_dict['url']
             tile_size = wsi.tile_dims[0]
             slide_properties = wsi.properties_list
@@ -132,7 +132,7 @@ class LayoutHandler:
             for f in wsi.map_dict['FTUs']:
                 combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
             
-            combined_colors_dict['Spots'] = {'color':wsi.spot_dict['color']}
+            #combined_colors_dict['Spots'] = {'color':wsi.spot_dict['color']}
 
         else:
             self.initial_overlays = []
@@ -175,6 +175,7 @@ class LayoutHandler:
             center = center_point, zoom = 3, minZoom = 0, maxZoom = zoom_levels, crs='Simple',bounds = map_bounds,
             style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
+            preferCanvas=True,
             children = map_children
         )
 
