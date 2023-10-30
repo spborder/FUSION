@@ -356,6 +356,7 @@ class FUSION:
 
                         self.current_ftu_layers = self.wsi.ftu_names+['Spots']
 
+                self.filter_vals = [0,1]
                 self.layout_handler.gen_vis_layout(self.wsi,self.dataset_handler.plotting_feature_dict,self.dataset_handler.label_dict)
                 self.clustering_data = self.dataset_handler.load_clustering_data()
                 self.update_hex_color_key(self.current_cell)
@@ -369,6 +370,8 @@ class FUSION:
             description = self.layout_handler.description_dict[self.current_page]
             
             try:
+                self.filter_vals = [0,1]
+
                 slide_name = self.dataset_handler.get_item_name(pathname.split('/')[-1])
                 self.wsi = DSASlide(slide_name,pathname.split('/')[-1],self.dataset_handler,self.ftu_colors)
                 self.layout_handler.gen_vis_layout(self.wsi,self.dataset_handler.plotting_feature_dict,self.dataset_handler.label_dict)
