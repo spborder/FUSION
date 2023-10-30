@@ -87,8 +87,6 @@ class DSASlide:
 
     def convert_json(self):
 
-        print(self.tile_dims)
-
         # Translation step
         base_x_scale = self.base_dims[0]/self.tile_dims[0]
         base_y_scale = self.base_dims[1]/self.tile_dims[1]
@@ -107,11 +105,11 @@ class DSASlide:
 
         ## Error occurs with tile sizes = 256, all work with tile size=240 ##
 
-        final_ann = {'type':'FeatureCollection','features':[]}
         print('Processing annotations')
         for a in tqdm(self.annotations):
             if 'elements' in a['annotation']:
                 f_name = a['annotation']['name']
+                individual_geojson = {'type':'FeatureCollection','features':[]}
                 for f in tqdm(a['annotation']['elements']):
                     f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]},'properties':{}}
                     
@@ -144,10 +142,13 @@ class DSASlide:
                         f_dict['properties'] = f['user']
 
                     f_dict['properties']['name'] = f_name
+                    individual_geojson['features'].append(f_dict)
 
-                    final_ann['features'].append(f_dict)
+                # Writing annotations to local assets
+                with open(f'./assets/{f_name}.json','w') as f:
+                    json.dump(individual_geojson,f)
 
-        return final_ann, base_x_scale*x_scale, base_y_scale*y_scale
+        return base_x_scale*x_scale, base_y_scale*y_scale
 
     def process_annotations(self):
 
