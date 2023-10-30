@@ -121,6 +121,9 @@ class DSASlide:
         }
 
         included_props = []
+        # Emptying current ./assets/slide_annotations/ folder
+        if os.path.exists('./assets/slide_annotations/'):
+            shutil.rmtree('./assets/slide_annotations/')
 
         for a in tqdm(self.annotations):
             if 'elements' in a['annotation']:
@@ -203,9 +206,9 @@ class DSASlide:
 
                 # Writing annotations to local assets
                 # Emptying current ./assets/slide_annotations/ folder
-                if os.path.exists('./assets/slide_annotations/'):
-                    shutil.rmtree('./assets/slide_annotations/')
+                if not os.path.exists('./assets/slide_annotations/'):
                     os.makedirs('./assets/slide_annotations/')
+                    
                 with open(f'./assets/slide_annotations/{f_name}.json','w') as f:
                     json.dump(individual_geojson,f)
         
