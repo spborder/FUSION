@@ -56,9 +56,7 @@ class FUSION:
                 layout_handler,
                 dataset_handler,
                 download_handler,
-                prep_handler,
-                wsi,
-                ga_tag = None
+                prep_handler
                 ):
                 
         # Saving all the layouts for this instance
@@ -78,14 +76,7 @@ class FUSION:
         self.app._favicon = './assets/favicon.ico'
         self.app.validation_layout = html.Div(self.layout_handler.validation_layout)
 
-        # If provided with a Google Analytics tag
-        if not ga_tag is None:
-            print(ga_tag)
-            print(ga_tag is None)
-            self.app.index_string = ga_tag
-
         # clustering related properties (and also cell types, cell states, image_ids, etc.)
-        self.wsi = wsi
         self.cell_graphics_key = self.dataset_handler.cell_graphics_key
 
         # Inverting the graphics key to get {'full_name':'abbreviation'}
@@ -107,12 +98,27 @@ class FUSION:
         self.table_df = self.dataset_handler.asct_b_table    
 
         # FTU settings
-        self.ftus = self.wsi.ftu_names
-        self.ftu_colors = self.wsi.ftu_colors
+        self.wsi = None
+        self.current_slides = []
+        if not self.wsi is None:
+            self.ftus = self.wsi.ftu_names
+            self.ftu_colors = self.wsi.ftu_colors
 
-        self.current_ftu_layers = self.wsi.ftu_names+['Spots']
-        self.current_ftus = self.wsi.ftu_names+['Spots']
-        self.pie_ftu = self.current_ftu_layers[-1]
+            self.current_ftu_layers = self.wsi.ftu_names+['Spots']
+            #self.current_ftus = self.wsi.ftu_names+['Spots']
+            #self.pie_ftu = self.current_ftu_layers[-1]
+        else:
+            # Initialization of these properties
+            self.ftu_colors = {
+                'Glomeruli':'#390191',
+                'Tubules':'#e71d1d',
+                'Arterioles':'#b6d7a8',
+                'Spots':'#dffa00'
+            }
+            self.ftus = None
+            self.current_ftu_layers = None
+            #self.current_ftus = None
+            #self.pie_ftu = None
 
         # Specifying available properties with visualizations implemented
         self.visualization_properties = [
@@ -334,8 +340,25 @@ class FUSION:
                 container_content = self.layout_handler.layout_dict[self.current_page]
                 description = self.layout_handler.description_dict[self.current_page]
             else:
+                # Loading the "vis" layout using the current whole slide image
+                if self.wsi is None:
+                    # If no wsi is currently loaded, load one from the current slide selection (from dataset-builder)
+                    if len(self.current_slides)==0:
+                        # Use default/original slides
+                        default_slide = self.dataset_handler.default_slides[0]
+                        self.wsi = DSASlide(default_slide['name'],default_slide['_id'],self.dataset_handler,self.ftu_colors)
+                        self.current_ftu_layers = self.wsi.ftu_names+['Spots']
+
+                    else:
+                        # Using first slide in self.current_slides
+                        current_slide = self.current_slides[0]
+                        self.wsi = DSASlide(current_slide['name'], current_slide['_id'],self.dataset_handler,self.ftu_colors)
+
+                        self.current_ftu_layers = self.wsi.ftu_names+['Spots']
+
                 self.layout_handler.gen_vis_layout(self.wsi,self.dataset_handler.plotting_feature_dict,self.dataset_handler.label_dict)
                 self.clustering_data = self.dataset_handler.load_clustering_data()
+                self.update_hex_color_key(self.current_cell)
 
                 container_content = self.layout_handler.layout_dict[self.current_page]
                 description = self.layout_handler.description_dict[self.current_page]
@@ -352,7 +375,7 @@ class FUSION:
                 self.clustering_data = self.dataset_handler.load_clustering_data()
 
                 self.update_hex_color_key(self.current_cell)
-                self.current_ftus = self.wsi.ftu_names+['Spots']
+                #self.current_ftus = self.wsi.ftu_names+['Spots']
                 self.current_ftu_layers = self.wsi.ftu_names+['Spots']
 
                 container_content = self.layout_handler[self.current_page]
@@ -365,7 +388,6 @@ class FUSION:
                 
             container_content = self.layout_handler.layout_dict[self.current_page]
             description = self.layout_handler.description_dict[self.current_page]
-
 
         if self.current_page == 'vis':
             slide_style = {'marginBottom':'20px','display':'inline-block'}
@@ -1408,7 +1430,8 @@ class FUSION:
 
                 cell_sub_select_children = []
 
-                cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
+                #cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
+                cell_types = list(self.cell_graphics_key.keys())
                 color_bar = dlx.categorical_colorbar(
                     categories = cell_types,
                     colorscale = list(self.hex_color_key.values()),
@@ -1467,7 +1490,7 @@ class FUSION:
         new_children = [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = self.wsi.map_dict['FTUs'][struct]['geojson'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
+                    dl.GeoJSON(url = f'./assets/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=self.cell_vis_val, ftu_color = self.ftu_colors[struct],filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'],dashArray='')),
                                 children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
@@ -1475,10 +1498,12 @@ class FUSION:
             )
             for struct in self.wsi.map_dict['FTUs']
         ]
+
+        """
         new_children += [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = self.wsi.spot_dict['geojson'], id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                    dl.GeoJSON(url = './assets/Spots.json', id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = self.ftu_colors['Spots'],filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5,color=self.wsi.spot_dict['hover_color'],dashArray='')),
                                 children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],
@@ -1486,7 +1511,7 @@ class FUSION:
                 ),name = 'Spots', checked = False, id = self.wsi.item_id+'_Spots'
             )
         ]
-
+        """
         for m_idx,man in enumerate(self.wsi.manual_rois):
             new_children.append(
                 dl.Overlay(
@@ -1883,7 +1908,7 @@ class FUSION:
         new_children = [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = self.wsi.map_dict['FTUs'][struct]['geojson'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                    dl.GeoJSON(url = f'./assets/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors[struct], filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                                 children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
@@ -1892,10 +1917,11 @@ class FUSION:
             for struct in self.wsi.map_dict['FTUs']
         ]
 
+        """
         new_children += [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(data = self.wsi.spot_dict['geojson'], id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                    dl.GeoJSON(url = f'./assets/Spots.json', id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors['Spots'], filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5, color = self.wsi.spot_dict['hover_color'], dashArray='')),
                                 children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],
@@ -1903,6 +1929,7 @@ class FUSION:
                 ), name = 'Spots', checked = False, id = new_slide.item_id+'_Spots'
             )
         ]
+        """
 
         # Now iterating through manual ROIs
         for m_idx, man in enumerate(self.wsi.manual_rois):
@@ -1941,7 +1968,7 @@ class FUSION:
         for f in self.wsi.map_dict['FTUs']:
             combined_colors_dict[f] = {'color':self.wsi.map_dict['FTUs'][f]['color']}
         
-        combined_colors_dict['Spots'] = {'color':self.wsi.spot_dict['color']}
+        #combined_colors_dict['Spots'] = {'color':self.wsi.spot_dict['color']}
 
         boundary_options_children = [
             dbc.Tab(
@@ -3287,6 +3314,7 @@ def app(*args):
     
     # Saving & organizing relevant id's in GirderHandler
     print('Getting initial items metadata')
+    dataset_handler.set_default_slides(initial_collection_contents)
     dataset_handler.initialize_folder_structure(initial_collection,path_type)
     dataset_handler.get_collection_annotation_meta([i['_id'] for i in initial_collection_contents])
 
@@ -3296,9 +3324,9 @@ def app(*args):
     dataset_handler.get_asset_items(assets_path)
 
     # Getting the slide data for DSASlide()
-    slide_name = initial_collection_contents[0]['name']
-    slide_item_id = initial_collection_contents[0]['_id']
-    slide_names = [i['name'] for i in initial_collection_contents if 'largeImage' in i]
+    #slide_name = initial_collection_contents[0]['name']
+    #slide_item_id = initial_collection_contents[0]['_id']
+    slide_names = [i['name'] for i in initial_collection_contents]
 
     # Initializing FTU Colors
     ftu_colors = {
@@ -3308,8 +3336,9 @@ def app(*args):
         'Spots':'#dffa00'
     }
 
-    print(f'Initializing DSA Slide: {slide_name}')
-    wsi = DSASlide(slide_name,slide_item_id,dataset_handler,ftu_colors)
+    #print(f'Initializing DSA Slide: {slide_name}')
+    #wsi = DSASlide(slide_name,slide_item_id,dataset_handler,ftu_colors)
+    wsi = None
 
     # Getting list of available CLIs in DSA instance
     # This dict will contain all the info for the CLI's, have to reduce it to names
@@ -3356,14 +3385,14 @@ def app(*args):
                          transforms = [MultiplexerTransform()],
                          #background_callback_manager = background_callback_manager
                          )
+    
     vis_app = FUSION(
         main_app,
         layout_handler,
         dataset_handler,
         download_handler,
-        prep_handler,
-        wsi
-    )
+        prep_handler
+        )
 
 # Comment this portion out for web running
 if __name__=='__main__':
