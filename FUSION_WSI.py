@@ -9,6 +9,7 @@ import numpy as np
 
 from shapely.geometry import shape
 import random
+import json
 
 from tqdm import tqdm
 
@@ -76,7 +77,7 @@ class DSASlide:
         self.annotations = self.girder_handler.get_annotations(item_id)
         print(f'Found: {len(self.annotations)} Annotations')
         # Step 6: Converting Histomics/large-image annotations to GeoJSON
-        self.geojson_annotations, self.x_scale, self.y_scale = self.convert_json()
+        self.x_scale, self.y_scale = self.convert_json()
 
         self.map_bounds[0][1]*=self.x_scale
         self.map_bounds[1][1]*=self.y_scale
@@ -106,9 +107,25 @@ class DSASlide:
         ## Error occurs with tile sizes = 256, all work with tile size=240 ##
 
         print('Processing annotations')
+        self.ftu_names = []
+        self.ftu_polys = {}
+        self.ftu_props = {}
+        self.spot_polys = []
+        self.spot_props = []
+        self.properties_list = []
         for a in tqdm(self.annotations):
             if 'elements' in a['annotation']:
                 f_name = a['annotation']['name']
+                self.ftu_names.append(f_name)
+
+                if not f_name=='Spots':
+                    self.ftu_polys[f_name] = []
+                    self.ftu_props[f_name] = []
+
+                # Checking if this ftu is in the ftu_colors list
+                if f_name not in self.ftu_colors:
+                    self.ftu_colors[f_name] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+
                 individual_geojson = {'type':'FeatureCollection','features':[]}
                 for f in tqdm(a['annotation']['elements']):
                     f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]},'properties':{}}
@@ -143,6 +160,17 @@ class DSASlide:
 
                     f_dict['properties']['name'] = f_name
                     individual_geojson['features'].append(f_dict)
+
+                    if not f_name=='Spots':
+                        self.ftu_polys[f_name].append(shape(f_dict['geometry']))
+                        self.ftu_props[f_name].append(f_dict['properties'])
+                    else:
+                        self.spot_polys.append(shape(f_dict['geometry']))
+                        self.spot_props.append(f_dict['properties'])
+
+                    for p in f_dict['properties']:
+                        if p not in self.properties_list:
+                            self.properties_list.append(p)
 
                 # Writing annotations to local assets
                 with open(f'./assets/{f_name}.json','w') as f:

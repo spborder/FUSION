@@ -1053,7 +1053,7 @@ class LayoutHandler:
                     html.Video(src='./assets/videos/FUSION_Introduction.mp4',
                             controls = True,
                             autoPlay = True,
-                            preload=True,
+                            preload=False,
                             id = {'type':'video','index':0})
                 ]),
                 html.Hr(),
