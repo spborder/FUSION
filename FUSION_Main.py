@@ -1493,7 +1493,7 @@ class FUSION:
         new_children = [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(url = f'./assets/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
+                    dl.GeoJSON(url = f'./assets/slide_annotations/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=self.cell_vis_val, ftu_color = self.ftu_colors[struct],filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'],dashArray='')),
                                 children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
@@ -1506,7 +1506,7 @@ class FUSION:
         new_children += [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(url = './assets/Spots.json', id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                    dl.GeoJSON(url = './assets/slide_annotations/Spots.json', id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = self.ftu_colors['Spots'],filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5,color=self.wsi.spot_dict['hover_color'],dashArray='')),
                                 children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],
@@ -1911,7 +1911,7 @@ class FUSION:
         new_children = [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(url = f'./assets/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                    dl.GeoJSON(url = f'./assets/slide_annotations/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors[struct], filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                                 children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
@@ -1924,7 +1924,7 @@ class FUSION:
         new_children += [
             dl.Overlay(
                 dl.LayerGroup(
-                    dl.GeoJSON(url = f'./assets/Spots.json', id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                    dl.GeoJSON(url = f'./assets/slide_annotations/Spots.json', id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
                                 hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors['Spots'], filter_vals = self.filter_vals),
                                 hoverStyle = arrow_function(dict(weight=5, color = self.wsi.spot_dict['hover_color'], dashArray='')),
                                 children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],

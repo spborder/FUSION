@@ -10,6 +10,7 @@ import numpy as np
 from shapely.geometry import shape
 import random
 import json
+import shutil
 
 from tqdm import tqdm
 
@@ -201,7 +202,11 @@ class DSASlide:
                 }
 
                 # Writing annotations to local assets
-                with open(f'./assets/{f_name}.json','w') as f:
+                # Emptying current ./assets/slide_annotations/ folder
+                if os.path.exists('./assets/slide_annotations/'):
+                    shutil.rmtree('./assets/slide_annotations/')
+                    os.makedirs('./assets/slide_annotations/')
+                with open(f'./assets/slide_annotations/{f_name}.json','w') as f:
                     json.dump(individual_geojson,f)
         
         self.properties_list = np.unique(self.properties_list).tolist()
