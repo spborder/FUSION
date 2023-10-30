@@ -89,7 +89,6 @@ class LayoutHandler:
 
         #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
-        center_point = [0.5*(wsi.map_bounds[0][0]+wsi.map_bounds[1][0]),0.5*(wsi.map_bounds[0][1]+wsi.map_bounds[1][1])]
         # Description and instructions card
         vis_description = [
             html.P('FUSION was designed by the members of the CMI Lab at the University of Florida in collaboration with HuBMAP'),
@@ -101,31 +100,58 @@ class LayoutHandler:
             html.P('Happy fusing!')         
         ]
 
-        # View of WSI
-        self.initial_overlays = [
-            dl.Overlay(
-                dl.LayerGroup(
-                    dl.GeoJSON(data = wsi.map_dict['FTUs'][struct]['geojson'], id = wsi.map_dict['FTUs'][struct]['id'], options = dict(style=dict(color = wsi.map_dict['FTUs'][struct]['color'])),
-                        hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
-                        children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
-                name = struct, checked = True, id = struct)
-        for struct in wsi.map_dict['FTUs']
-        ] 
+        if not wsi is None:
+            # View of WSI
+            self.initial_overlays = [
+                dl.Overlay(
+                    dl.LayerGroup(
+                        dl.GeoJSON(url=f'./assets/{struct}.json', id = wsi.map_dict['FTUs'][struct]['id'], options = dict(style=dict(color = wsi.map_dict['FTUs'][struct]['color'])),
+                            hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
+                            children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
+                    name = struct, checked = True, id = struct)
+            for struct in wsi.map_dict['FTUs']
+            ] 
+            """
+            self.initial_overlays+= [
+                dl.Overlay(
+                    dl.LayerGroup(
+                        dl.GeoJSON(url=f'./assets/Spots.json', id = wsi.spot_dict['id'], options = dict(style=dict(color = wsi.spot_dict['color'])),
+                            hoverStyle = arrow_function(dict(weight=5, color = wsi.spot_dict['hover_color'], dashArray = '')),
+                            children = [dl.Popup(id=wsi.spot_dict['popup_id'])],
+                            zoomToBounds=True)),
+                    name = 'Spots', checked = False, id = 'Spots')
+            ]
+            """
+            map_url = wsi.map_dict['url']
+            tile_size = wsi.tile_dims[0]
+            slide_properties = wsi.properties_list
+            zoom_levels = wsi.zoom_levels
+            map_bounds = wsi.map_bounds
 
-        self.initial_overlays+= [
-            dl.Overlay(
-                dl.LayerGroup(
-                    dl.GeoJSON(data = wsi.spot_dict['geojson'], id = wsi.spot_dict['id'], options = dict(style=dict(color = wsi.spot_dict['color'])),
-                        hoverStyle = arrow_function(dict(weight=5, color = wsi.spot_dict['hover_color'], dashArray = '')),
-                        children = [dl.Popup(id=wsi.spot_dict['popup_id'])],
-                        zoomToBounds=True)),
-                name = 'Spots', checked = False, id = 'Spots')
-        ]
+            combined_colors_dict = {}
+            for f in wsi.map_dict['FTUs']:
+                combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
+            
+            #combined_colors_dict['Spots'] = {'color':wsi.spot_dict['color']}
+
+        else:
+            self.initial_overlays = []
+
+            # This is just to populate these components. This part should never be visible
+            map_url = 'placekitten.com/256/256?image={z}'
+            tile_size = 256
+            slide_properties = []
+            combined_colors_dict = {}
+            zoom_levels = 8
+            map_bounds = [[0,240],[0,240]]
+        
+        
+        center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
 
         map_children = [
             dl.TileLayer(id = 'slide-tile',
-                         url = wsi.map_dict['url'],
-                         tileSize = wsi.tile_dims[0]
+                         url = map_url,
+                         tileSize = tile_size
                         ),
             dl.FullScreenControl(position='topleft'),
             dl.FeatureGroup(id='feature-group',
@@ -146,9 +172,10 @@ class LayoutHandler:
         ]
 
         map_layer = dl.Map(
-            center = center_point, zoom = 3, minZoom = 0, maxZoom = wsi.zoom_levels-1, crs='Simple',bounds = wsi.map_bounds,
+            center = center_point, zoom = 3, minZoom = 0, maxZoom = zoom_levels, crs='Simple',bounds = map_bounds,
             style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
+            preferCanvas=True,
             children = map_children
         )
 
@@ -412,7 +439,7 @@ class LayoutHandler:
         # Converting the cell_types list into a dictionary to disable some
         disable_list = []
         cell_types_list = []
-        for c in wsi.properties_list:
+        for c in slide_properties:
             if c not in disable_list:
                 cell_types_list.append({'label':c,'value':c,'disabled':False})
             else:
@@ -491,12 +518,6 @@ class LayoutHandler:
         ])
 
         # Overlays control tab
-        combined_colors_dict = {}
-        for f in wsi.map_dict['FTUs']:
-            combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
-        
-        combined_colors_dict['Spots'] = {'color':wsi.spot_dict['color']}
-
         overlays_tab = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
@@ -1033,7 +1054,7 @@ class LayoutHandler:
                     html.Video(src='./assets/videos/FUSION_Introduction.mp4',
                             controls = True,
                             autoPlay = True,
-                            preload=True,
+                            preload=False,
                             id = {'type':'video','index':0})
                 ]),
                 html.Hr(),
@@ -1590,6 +1611,12 @@ class GirderHandler:
                     elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                         self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
 
+    def set_default_slides(self,default_slide_list):
+        # Setting default slides with name and item information
+
+        if len(default_slide_list)>0:
+            self.default_slides = default_slide_list
+        
     def get_collection_annotation_meta(self,select_ids:list):
 
         # Passing image ids as a string
