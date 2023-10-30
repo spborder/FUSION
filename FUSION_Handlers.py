@@ -107,7 +107,7 @@ class LayoutHandler:
                     dl.LayerGroup(
                         dl.GeoJSON(url=f'./assets/slide_annotations/{struct}.json', id = wsi.map_dict['FTUs'][struct]['id'], options = dict(style=dict(color = wsi.map_dict['FTUs'][struct]['color'])),
                             hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
-                            children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
+                            zoomToBounds=True,children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
                     name = struct, checked = True, id = struct)
             for struct in wsi.map_dict['FTUs']
             ] 
@@ -1892,7 +1892,7 @@ class GirderHandler:
             cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={self.user_token}').content)
             cluster_data = pd.DataFrame.from_dict(cluster_json)
             print('Clustering data loaded')
-            
+
             return cluster_data
         else:
             print('No clustering data found')
