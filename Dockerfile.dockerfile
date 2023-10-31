@@ -5,7 +5,7 @@ FROM python:3.11
 LABEL maintainer="Sam Border CMI Lab <samuel.border@medicine.ufl.edu"
 
 RUN apt-get update && \
-    apt-get install -y git openssh-client && \
+    apt-get install -y git && \
     apt-get clean
 
 ENV DSA_URL='http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1/'
