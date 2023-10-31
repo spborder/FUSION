@@ -40,7 +40,21 @@ class PrepHandler:
 
         # Dictionary containing model and item id's
         self.model_zoo = {
-            'Kidney':'64f0b3f82d82d04be3e2b4ba'
+            'MultiCompartment_Model':{
+                'plugin_name':'sayatmimar_histo-cloud_MultiCompartmentSegment_2/MultiCompartmentSegment',
+                'model_id':'64f0b3f82d82d04be3e2b4ba',
+                'structures':['Cortical interstitium','Medullary interstitium','Glomeruli','Sclerotic Glomeruli','Tubules','Arteries and Arterioles']
+            },
+            'IFTA_Model':{
+                'plugin_name':'',
+                'model_id':'',
+                'structures':['IFTA']
+            },
+            'PTC_Model'{
+                'plugin_name':'',
+                'model_id':'',
+                'structures':['PTC']
+            }
         }
 
         # Info for spot annotation plugin
@@ -123,22 +137,30 @@ class PrepHandler:
 
             return image, mask
 
-    def segment_image(self,item_id,model_type):
+    def segment_image(self,item_id,structure_types):
 
         # Get folder id from item id
         item_info = self.girder_handler.gc.get(f'/item/{item_id}')
         folder_id = item_info['folderId']
         file_id = item_info['largeImage']['fileId']
 
-        if model_type=='Kidney':
-            job_response = self.girder_handler.gc.post('/slicer_cli_web/sayatmimar_histo-cloud_MultiCompartmentSegment_2/MultiCompartmentSegment/run',
-                                        parameters={
-                                            'girderApiUrl':self.girder_handler.apiUrl,
-                                            'girderToken':self.girder_handler.user_token,
-                                            'input_file':file_id,
-                                            'base_dir':folder_id,
-                                            'modelfile':self.model_zoo[model_type]
-                                        })
+        for model in self.model_zoo:
+
+            # Testing if a structure from structure_types is included in that model's structures
+            model_structures = self.model_zoo[model]['structures']
+            selected_in_model = [1 if i in model_structures else 0 for i in structure_types]
+
+            if any(selected_in_model):
+
+                job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.model_zoo[model]["plugin_name"]}/run',
+                                            parameters={
+                                                'girderApiUrl':self.girder_handler.apiUrl,
+                                                'girderToken':self.girder_handler.user_token,
+                                                'input_file':file_id,
+                                                'base_dir':folder_id,
+                                                'modelfile':self.model_zoo[model]['model_id']
+                                            })
+                
 
             print(f'job_response: {job_response}')
 

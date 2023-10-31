@@ -820,20 +820,27 @@ class LayoutHandler:
         ])
 
         # MC model selection card:
-        organ_types = [
-            {'label':'Kidney','value':'Kidney','disabled':False}
+        structures = [
+            {'label':'Glomeruli','value':'Glomeruli','disabled':False},
+            {'label':'Sclerotic Glomeruli','value':'Sclerotic Glomeruli','disabled':False},
+            {'label':'Tubules','value':'Tubules','disabled':False},
+            {'label':'Arteries and Arterioles','value':'Arteries and Arterioles','disabled':False},
+            {'label':'Cortical interstitium','value':'Cortical interstitium','disabled':False},
+            {'label':'Medullary interstitium','value':'Medullary interstitium','disabled':False},
+            {'label':'Interstitial Fibrosis and Tubular Atrophy','value':'IFTA','disabled':False},
+            {'label':'Peritubular Capillaries','value':'PTC','disabled':False}
         ]
         mc_model_card = dbc.Card([
             dbc.CardHeader([
-                'Multi-Compartment Model Selection',
-                self.gen_info_button('Selecting organ here determines which model to use to extract FTUs')
+                'Automated FTU Segmentation',
+                self.gen_info_button('Selecting structures here determines which model(s) to use to extract FTUs')
                 ]),
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col(
                         html.Div([
-                            dbc.Label('Select Organ:',html_for='organ-type'),
-                            dcc.Dropdown(organ_types,placeholder = 'It better be kidney',id='organ-type',disabled=True),
+                            dbc.Label('Select Structures:',html_for='structure-type'),
+                            dcc.Dropdown(structures,placeholder = 'It better be kidney',id='structure-type',disabled=True),
                             dcc.Markdown('**Please note**, this process may take some time as the segmentation models and cell deconvolution pipelines run in the backend')
                         ]),md=12
                     )

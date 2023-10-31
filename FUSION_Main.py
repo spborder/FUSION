@@ -654,12 +654,12 @@ class FUSION:
         # Executing segmentation according to model selection
         self.app.callback(
             output = [Output('post-segment-row','style'),
-             Output('organ-type','disabled'),
+             Output('structure-type','disabled'),
              Output('ftu-select','options'),
              Output('ftu-select','value'),
              Output('sub-comp-method','value'),
              Output('ex-ftu-img','figure')],
-            inputs = Input('organ-type','value'),
+            inputs = Input('structure-type','value'),
             prevent_initial_call=True
         )(self.apres_segmentation)
 
