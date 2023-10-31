@@ -25,6 +25,8 @@ import time
 from sklearn.preprocessing import StandardScaler
 from umap import UMAP
 
+from uuid import uuid4
+
 import girder_client
 
 import plotly.express as px
@@ -104,7 +106,7 @@ class FUSION:
             self.ftus = self.wsi.ftu_names
             self.ftu_colors = self.wsi.ftu_colors
 
-            self.current_ftu_layers = self.wsi.ftu_names+['Spots']
+            self.current_ftu_layers = self.wsi.ftu_names
         else:
             # Initialization of these properties
             self.ftu_colors = {
@@ -196,7 +198,9 @@ class FUSION:
                             cell_value = (cell_value).toFixed(1);
                         } else if (cell_value==0) {
                             cell_value = (cell_value).toFixed(1);
-                        }                        
+                        } 
+                    } else {
+                        var cell_value = Number.Nan;
                     }
                 } else {
                     var cell_value = Number.Nan;
@@ -646,36 +650,42 @@ class FUSION:
              Output('slide-thumbnail-holder','children'),
              Output({'type':'wsi-upload-div','index':ALL},'children'),
              Output({'type':'omics-upload-div','index':ALL},'children'),
-             Output('organ-type','disabled'),
+             Output('structure-type','disabled'),
              Output('post-upload-row','style')],
             prevent_initial_call=True
         )(self.upload_data)
 
-        # Executing segmentation according to model selection
-        self.app.callback(
-            output = [Output('post-segment-row','style'),
-             Output('organ-type','disabled'),
-             Output('ftu-select','options'),
-             Output('ftu-select','value'),
-             Output('sub-comp-method','value'),
-             Output('ex-ftu-img','figure')],
-            inputs = Input('organ-type','value'),
-            prevent_initial_call=True
-        )(self.apres_segmentation)
-
-        # Checking logs for a given job
-        """
+        # Starting segmentation for selected structures
         self.app.callback(
             output = [
-                Output({'type':'check-logs','index':ALL},'children'),
-                Output({'type':'log-interval','index':ALL},'disabled')
+                Output('seg-woodshed','children'),
+                Output('structure-type','disabled'),
+                Output('segment-butt','disabled')
             ],
             inputs = [
-                Input({'type':'log-interval','index':ALL},'n_intervals')
-            ]
+                Input('structure-type','value'),
+                Input('segment-butt','n_clicks')
+            ],
+            prevent_initial_call = True
+        )(self.start_segmentation)
+
+        # Updating log output for segmentation
+        self.app.callback(
+            output = [
+                Output({'type':'seg-logs','index':ALL},'children'),
+                Output({'type':'seg-log-interval','index':ALL},'disabled'),
+                Output('post-segment-row','style'),
+                Output('structure-type','disabled'),
+                Output('ftu-select','options'),
+                Output('ftu-select','value'),
+                Output('sub-comp-method','value'),
+                Output('ex-ftu-img','figure')
+            ],
+            inputs = [
+                Input({'type':'seg-log-interval','index':ALL},'n_intervals')
+            ],
+            prevent_initial_call = True
         )(self.update_logs)
-        
-        """
 
         # Updating sub-compartment segmentation
         self.app.callback(
@@ -703,6 +713,18 @@ class FUSION:
             Output({'type':'feat-logs','index':ALL},'children'),
             prevent_initial_call=True
         )(self.run_feature_extraction)
+
+        # Updating logs for feature extraction
+        self.app.callback(
+            output = [
+                Output({'type':'feat-interval','index':ALL},'disabled'),
+                Output({'type':'feat-log-output','index':ALL},'children')
+            ],
+            inputs = [
+                Input({'type':'feat-interval','index':ALL},'n_intervals')
+            ],
+            prevent_initial_call = True
+        )(self.update_feat_logs)
 
     def get_video(self,tutorial_category):
         tutorial_category = tutorial_category[0]
@@ -2894,12 +2916,16 @@ class FUSION:
             else:
                 wsi_upload_children = no_update
             
-            if not self.upload_check['Omics']:
-                omics_upload_children = no_update
+            if 'Omics' in self.upload_check:
+                if not self.upload_check['Omics']:
+                    omics_upload_children = no_update
+                else:
+                    omics_upload_children = [
+                        dbc.Alert('Omics Upload Success!')
+                    ]
             else:
-                omics_upload_children = [
-                    dbc.Alert('Omics Upload Success!')
-                ]
+                omics_upload_children = no_update
+
         elif ctx.triggered_id['type']=='omics-upload':
             
             self.upload_omics_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
@@ -2947,9 +2973,13 @@ class FUSION:
             slide_thumbnail, slide_qc_table = self.slide_qc(self.upload_wsi_id)
             print(slide_qc_table)
 
-            omics_upload_children = [
-                dbc.Alert('Omics Upload Success!')
-            ]
+            if 'Omics' in self.upload_check:
+                omics_upload_children = [
+                    dbc.Alert('Omics Upload Success!')
+                ]
+            else:
+                omics_upload_children = no_update
+
             wsi_upload_children = [
                 dbc.Alert('WSI Upload Success!',color='success')
             ]
@@ -2991,13 +3021,18 @@ class FUSION:
                 tooltip_duration = None
             )
 
-            organ_type_disabled = False
+            structure_type_disabled = False
             post_upload_style = {'display':'flex'}
-
-            return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], organ_type_disabled, post_upload_style
-        
+            
+            if 'Omics' in self.upload_check:
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style
+            else:
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style    
         else:
-            return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update
+            if 'Omics' in self.upload_check:
+                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update
+            else:
+                return no_update, no_update, [wsi_upload_children], [], True, no_update
 
     def slide_qc(self, upload_id):
 
@@ -3012,65 +3047,106 @@ class FUSION:
         histo_qc_output = pd.DataFrame(collection_contents)
 
         return thumbnail, histo_qc_output
+    
+    def start_segmentation(self,structure_selection,go_butt):
 
+        # Starting segmentation job and initializing dcc.Interval object to check logs
+        # output = div children, disable structure_type, disable segment_butt
+        if ctx.triggered_id=='segment-butt':
+            if structure_selection is not None:
+                if len(structure_selection)>0:
+                    disable_structure = True
+                    disable_seg_butt = True
+
+                    print(f'Running segmentation!')
+                    self.segmentation_job_info = self.prep_handler.segment_image(self.upload_wsi_id,structure_selection)
+                    print(f'Running spot annotation!')
+                    if not self.upload_omics_id is None:
+                        self.cell_deconv_job_info = self.prep_handler.run_cell_deconvolution(self.upload_wsi_id,self.upload_omics_id)
+
+                    seg_woodshed = [
+                        dcc.Interval(
+                            id = {'type':'seg-log-interval','index':0},
+                            interval = 1000,
+                            max_intervals = -1,
+                            n_intervals = 0
+                        ),
+                        html.Div(
+                            id = {'type':'seg-logs','index':0},
+                            children = []
+                        )
+                    ]
+
+                    return seg_woodshed, disable_structure, disable_seg_butt
+                else:
+                    raise exceptions.PreventUpdate
+            else:
+                raise exceptions.PreventUpdate
+        else:
+            raise exceptions.PreventUpdate
+    
     def update_logs(self,new_interval):
 
-        #TODO: Modify this function to report segmentation/deconvolution/annotation logs
-        print(f'ctx.triggered_id for logs check = {ctx.triggered_id}')
-        print(f'new_interval inputs: {new_interval}')
-        interval_disabled = (False,False,False)
-        new_logs = ([],[],[])
+        # Callback to update the segmentation logs div with more data
+        # Also populates the post-segment-row when the jobs are completed
+        # output = seg-logs div, seg-interval disabled, post-segment-row style, 
+        # structure-type disabled, ftu-select options, ftu-select value, sub-comp-method value,
+        # ex-ftu-img figure
+        # Getting most recent logs:
+        seg_status, seg_log = self.dataset_handler.get_job_status(self.segmentation_job_info['_id'])
+        if not self.upload_omics_id is None:
+            cell_status, cell_log = self.dataset_handler.get_job_status(self.cell_deconv_job_info['_id'])
+        else:
+            cell_status = 3
+            cell_log = ''
 
-        return interval_disabled, new_logs
-    
-    def apres_segmentation(self,organ_selection):
+        # This would be at the end of the two jobs
+        if seg_status+cell_status==6:
 
-        print(f'organ_selection: {organ_selection}')
-        if not organ_selection is None:
+            # Div containing the job logs:
+            if not self.upload_omics_id is None:
+                seg_logs_div = html.Div(
+                    dbc.Row([
+                        dbc.Col(html.Div(
+                            dbc.Alert(
+                                'Segmentation Complete!',
+                                color = 'success'
+                            )
+                        ),md=6),
+                        dbc.Col(html.Div(
+                            dbc.Alert(
+                                'Cell Deconvolution Complete!',
+                                color = 'success'
+                            )
+                        ),md=6)
+                    ],align='center'),style={'height':'200px','display':'inline-block'}
+                )
+            else:
+                seg_logs_div = html.Div(
+                    dbc.Row(
+                        dbc.Col(html.Div(
+                            dbc.Alert(
+                                'Segmentation Complete!',
+                                color = 'success'
+                            )
+                        ),md=12),align='center'
+                    ),style={'height':'200px','display':'inline-block'}
+                )
 
-            # Executing segmentation CLI for organ/model/FTU selections
+            # disabling interval object
+            seg_log_disable = True
+
+            # post-segment-row stuff
             sub_comp_style = {'display':'flex'}
             disable_organ = True
 
-            print(f'Running segmentation!')
-            segmentation_info = self.prep_handler.segment_image(self.upload_wsi_id,organ_selection)
-            print(f'Running spot annotation!')
-            if not self.upload_omics_id is None:
-                cell_deconv_info = self.prep_handler.run_cell_deconvolution(self.upload_wsi_id,self.upload_omics_id)
-
-            # Monitoring the running jobs down here
-            seg_status = 0
-            if not self.upload_omics_id is None:
-                cell_status = 0
-            else:
-                cell_status = 3
-            while seg_status+cell_status<6:
-
-                seg_status = self.dataset_handler.get_job_status(segmentation_info['_id'])
-                if not self.upload_omics_id is None:
-                    cell_status = self.dataset_handler.get_job_status(cell_deconv_info['_id'])
-
-                print(f'seg_status: {seg_status}')
-                print(f'cell_status: {cell_status}')
-
-                time.sleep(1)
-
-            if not self.upload_omics_id is None:
-                # Generating spot annotations based on cell types
-                spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
-                print(self.dataset_handler.get_job_status(spot_annotation_info['_id']))
-
-                # Aggregating spot-level cell composition information to intersecting FTUs
-                spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
-                print(self.dataset_handler.get_job_status(spot_aggregation_info['_id']))
-
-            # Extract annotation and initial sub-compartment mask
+            # Extracting annotations and initial sub-compartment mask
             self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
 
             # Populate with default sub-compartment parameters
             self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
 
-            # Adding options to FTU Options dropdown menu
+            # Adding options to FTU options dropdown menu
             ftu_names = []
             for idx,i in enumerate(self.upload_annotations):
                 if 'annotation' in i:
@@ -3095,6 +3171,7 @@ class FUSION:
                                 'disabled':True
                             })
 
+            sub_comp_method = 'Manual'
             # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
             self.layer_ann = {
                 'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
@@ -3102,9 +3179,10 @@ class FUSION:
                 'previous_annotation':0,
                 'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
             }
-            
+
             self.feature_extract_ftus = ftu_names
-            image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+            ftu_value = ftu_names[self.layer_ann['current_layer']]
+            image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
             self.layer_ann['current_image'] = image
             self.layer_ann['current_mask'] = mask
@@ -3112,10 +3190,160 @@ class FUSION:
             image_figure = go.Figure(
                 data = px.imshow(image)['data'],
                 layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+            )
+
+        else:
+            # For during segmentation/cell-deconvolution
+            seg_log_disable = False
+            sub_comp_style = {'display':'none'}
+            disable_organ = True
+            ftu_names = no_update
+            ftu_value = no_update
+            sub_comp_method = no_update
+            image_figure = no_update
+
+            if not self.upload_omics_id is None:
+                if seg_status==3:
+                    seg_part = dbc.Alert(
+                        'Segmentation Complete!',
+                        color = 'success'
+                    )
+                else:
+                    seg_part = seg_log
+                
+                if cell_status==3:
+                    cell_part = dbc.Alert(
+                        'Cell Deconvolution Complete!',
+                        color = 'success'
+                    )
+                else:
+                    cell_part = cell_log
+                
+                seg_logs_div = html.Div(
+                    dbc.Row([
+                        dbc.Col(html.Div(
+                            seg_part
+                        ),md=6),
+                        dbc.Col(html.Div(
+                            cell_part
+                        ),md=6)
+                    ],align='center'),style={'height':'200px','display':'inline-block'}
+                )
+            else:
+                if seg_status==3:
+                    seg_part = dbc.Alert(
+                        'Segmentation Complete!',
+                        color = 'success'
+                    )
+                else:
+                    seg_part = seg_log
+                
+                seg_logs_div = html.Div(
+                    dbc.Row(
+                        dbc.Col(html.Div(
+                            seg_part
+                        ),md=12),align='center'
+                    ),style={'height':'200px','display':'inline-block'}
                 )
 
-            return sub_comp_style, disable_organ, ftu_names, ftu_names[self.layer_ann['current_layer']],'Manual',image_figure
-        
+        return [seg_logs_div], [seg_log_disable], sub_comp_style, disable_organ, ftu_names, ftu_value, sub_comp_method, image_figure
+
+    def apres_segmentation(self,structure_selection,go_butt):
+
+        print(f'structures selected: {structure_selection}')
+        if ctx.triggered_id=='segment-butt':
+            if not structure_selection is None:
+
+                # Executing segmentation CLI for organ/model/FTU selections
+                sub_comp_style = {'display':'flex'}
+                disable_organ = True
+
+                print(f'Running segmentation!')
+                segmentation_info = self.prep_handler.segment_image(self.upload_wsi_id,structure_selection)
+                print(f'Running spot annotation!')
+                if not self.upload_omics_id is None:
+                    cell_deconv_info = self.prep_handler.run_cell_deconvolution(self.upload_wsi_id,self.upload_omics_id)
+
+                # Monitoring the running jobs down here
+                seg_status = 0
+                if not self.upload_omics_id is None:
+                    cell_status = 0
+                else:
+                    cell_status = 3
+                while seg_status+cell_status<6:
+
+                    seg_status, seg_log = self.dataset_handler.get_job_status(segmentation_info['_id'])
+                    if not self.upload_omics_id is None:
+                        cell_status, cell_log = self.dataset_handler.get_job_status(cell_deconv_info['_id'])
+                    else:
+                        cell_log = ''
+                        
+                    print(f'seg_status: {seg_status}')
+                    print(f'cell_status: {cell_status}')
+
+                    time.sleep(1)
+
+                if not self.upload_omics_id is None:
+                    # Generating spot annotations based on cell types
+                    spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
+
+                    # Aggregating spot-level cell composition information to intersecting FTUs
+                    spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
+
+                # Extract annotation and initial sub-compartment mask
+                self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
+
+                # Populate with default sub-compartment parameters
+                self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
+
+                # Adding options to FTU Options dropdown menu
+                ftu_names = []
+                for idx,i in enumerate(self.upload_annotations):
+                    if 'annotation' in i:
+                        if 'elements' in i['annotation']:
+                            if not 'interstitium' in i['annotation']['name']:
+                                if len(i['annotation']['elements'])>0:
+                                    ftu_names.append({
+                                        'label':i['annotation']['name'],
+                                        'value':idx,
+                                        'disabled':False
+                                    })
+                                else:
+                                    ftu_names.append({
+                                        'label':i['annotation']['name']+' (None detected in slide)',
+                                        'value':idx,
+                                        'disabled':True
+                                    })
+                            else:
+                                ftu_names.append({
+                                    'label':i['annotation']['name']+' (Not implemented for interstitium)',
+                                    'value':idx,
+                                    'disabled':True
+                                })
+
+                # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+                self.layer_ann = {
+                    'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
+                    'current_annotation':0,
+                    'previous_annotation':0,
+                    'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
+                }
+                
+                self.feature_extract_ftus = ftu_names
+                image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+
+                self.layer_ann['current_image'] = image
+                self.layer_ann['current_mask'] = mask
+
+                image_figure = go.Figure(
+                    data = px.imshow(image)['data'],
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                    )
+
+                return sub_comp_style, disable_organ, ftu_names, ftu_names[self.layer_ann['current_layer']],'Manual',image_figure
+            
+            else:
+                raise exceptions.PreventUpdate
         else:
             raise exceptions.PreventUpdate
         
@@ -3197,9 +3425,48 @@ class FUSION:
 
     def run_feature_extraction(self,feat_butt):
 
-        feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
+        self.feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
 
-        return [json.dumps(feat_ext_job)]
+        # Returning a dcc.Interval object to check logs for feature extraction
+        feat_log_interval = [
+            dcc.Interval(
+                id = {'type':'feat-interval','index':0},
+                interval = 1000,
+                max_intervals=-1,
+                n_intervals = 0
+            ),
+            html.Div(
+                id = {'type':'feat-log-output','index':0},
+                children = []
+            )
+        ]
+
+        return [feat_log_interval]
+    
+    def update_feat_logs(self,new_interval):
+
+        # Updating logs for feature extraction job, disabling when the job is done
+        feat_ext_status, feat_ext_log = self.dataset_handler.get_job_status(self.feat_ext_job['_id'])
+
+        if feat_ext_status==3:
+            feat_logs_disable = True
+            feat_logs_div = html.Div(
+                children = [
+                    dbc.Alert('Feature Extraction Complete!',color='success'),
+                    dbc.Button('Go to Dataset-Builder',href='/dataset-builder')
+                ],
+                style = {'display':'inline-block','height':'200px'}
+            )
+        else:
+            feat_logs_disable = False
+            feat_logs_div = html.Div(
+                children = [
+                    feat_ext_log
+                ],
+                style = {'height':'200px','display':'inline-block'}
+            )
+        
+        return [feat_logs_disable],[feat_logs_div]
 
     def ask_fusey(self,butt_click,current_style):
 
@@ -3406,8 +3673,10 @@ def app(*args):
 
     prep_handler = PrepHandler(dataset_handler)
     
-    #cache = diskcache.Cache('./cache',disk=MyDisk)
-    #background_callback_manager = DiskcacheManager(cache)
+    #cache = diskcache.Cache('./cache')
+    #launch_uid = uuid4()
+    #background_callback_manager = DiskcacheManager(
+    #    cache, cache_by=[lambda: launch_uid],expire=100)
 
     main_app = DashProxy(__name__,
                          external_stylesheets=external_stylesheets,
