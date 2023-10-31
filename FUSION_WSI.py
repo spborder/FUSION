@@ -37,7 +37,6 @@ class DSASlide:
         ]
 
         self.get_slide_map_data(self.item_id)
-        #self.process_annotations()
     
     def __str__(self):
         
@@ -219,108 +218,6 @@ class DSASlide:
 
 
         return base_x_scale*x_scale, base_y_scale*y_scale
-
-    def process_annotations(self):
-
-        # Processing geojson_annotations:
-        self.ftu_names = np.unique([f['properties']['name'] for f in self.geojson_annotations['features']])
-        self.ftu_names = [i for i in self.ftu_names if not i=='Spots']
-
-        # Checking if all ftu_names are in the ftu_colors list
-        for f in self.ftu_names:
-            if f not in self.ftu_colors:
-                self.ftu_colors[f] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
-
-        #self.geojson_ftus = {'type':'FeatureCollection', 'features': []}
-        self.ftu_polys = {}
-        for ftu in self.ftu_names:
-            self.ftu_polys[ftu] = []
-            for f in self.geojson_annotations['features']:
-                if f['properties']['name']==ftu:
-                    try:
-                        self.ftu_polys[ftu].append(shape(f['geometry']))
-                    except:
-                        print(f'Bad annotation detected')
-
-        self.geojson_ftus = {
-            'type':'FeatureCollection',
-            'features':[i for i in self.geojson_annotations['features'] if not i['properties']['name']=='Spots']
-            }
-
-        self.ftu_props = {
-            ftu: [f['properties'] for f in self.geojson_annotations['features'] if f['properties']['name']==ftu]
-            for ftu in self.ftu_names
-        }
-
-        self.spot_polys = [shape(f['geometry']) for f in self.geojson_annotations['features'] if f['properties']['name']=='Spots']
-        self.spot_props = [f['properties'] for f in self.geojson_annotations['features'] if f['properties']['name']=='Spots']
-
-        self.geojson_spots = {
-            'type':'FeatureCollection',
-            'features':[i for i in self.geojson_annotations['features'] if i['properties']['name']=='Spots']
-            }
-
-        # Getting a list of all the properties present in this slide:
-        self.properties_list = []
-        for ftu in self.ftu_names:
-            ftu_props = self.ftu_props[ftu]
-
-            # Iterating through each ftu's properties, checking for sub-dicts
-            f_prop_list = []
-            for f in ftu_props:
-                f_keys = list(f.keys())
-
-                for f_k in f_keys:
-                    if f_k in self.visualization_properties:
-                        # Limiting depth to 1 sub-property (c'mon)
-                        if type(f[f_k])==dict:
-                            f_prop_list.extend([f'{f_k} --> {self.girder_handler.cell_graphics_key[i]["full"]}' for i in list(f[f_k].keys())])
-                        else:
-                            f_prop_list.append(f_k)
-            
-            self.properties_list.extend(f_prop_list)
-
-        s_prop_list = []
-        for s in self.spot_props:
-            s_keys = list(s.keys())
-            for s_k in s_keys:
-                if s_k in self.visualization_properties:
-                    if type(s[s_k])==dict:
-                        s_prop_list.extend([f'{s_k} --> {self.girder_handler.cell_graphics_key[i]["full"]}' for i in list(s[s_k].keys())])
-                    else:
-                        s_prop_list.append(s_k)
-
-        self.properties_list.extend(s_prop_list)
-        
-        self.properties_list = np.unique(self.properties_list).tolist()
-
-        # Adding max cell type if main_cell_types are in the properties list
-        main_cell_types_test = [1 if 'Main_Cell_Types' in i else 0 for i in self.properties_list]
-        if any(main_cell_types_test):
-            self.properties_list.append('Max Cell Type')
-
-        # Making dictionaries for input into vis layout
-        self.map_dict = {
-            'url': self.tile_url,
-            'FTUs':{
-                struct: {
-                    'geojson': {'type':'FeatureCollection','features':[i for i in self.geojson_annotations['features'] if i['properties']['name']==struct]},
-                    'id':{'type':'ftu-bounds','index':idx},
-                    'popup_id':{'type':'ftu-popup','index':idx},
-                    'color':self.ftu_colors[struct],
-                    'hover_color':'#9caf00'
-                }
-                for idx,struct in enumerate(self.ftu_names)
-            }
-        }
-
-        self.spot_dict = {
-            'geojson':self.geojson_spots,
-            'id':{'type':'ftu-bounds','index':len(self.ftu_names)},
-            'popup_id':{'type':'ftu-popup','index':len(self.ftu_names)},
-            'color':self.ftu_colors['Spots'],
-            'hover_color':'#9caf00'
-        }
 
     def find_intersecting_spots(self,box_poly):
 

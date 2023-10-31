@@ -42,7 +42,7 @@ class PrepHandler:
         self.model_zoo = {
             'MultiCompartment_Model':{
                 'plugin_name':'sayatmimar_histo-cloud_MultiCompartmentSegment_2/MultiCompartmentSegment',
-                'model_id':'64f0b3f82d82d04be3e2b4ba',
+                'model_id':'648123751019450486d13dcd',
                 'structures':['Cortical interstitium','Medullary interstitium','Glomeruli','Sclerotic Glomeruli','Tubules','Arteries and Arterioles']
             },
             'IFTA_Model':{
@@ -151,16 +151,27 @@ class PrepHandler:
             selected_in_model = [1 if i in model_structures else 0 for i in structure_types]
 
             if any(selected_in_model):
-
-                job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.model_zoo[model]["plugin_name"]}/run',
-                                            parameters={
-                                                'girderApiUrl':self.girder_handler.apiUrl,
-                                                'girderToken':self.girder_handler.user_token,
-                                                'input_file':file_id,
-                                                'base_dir':folder_id,
-                                                'modelfile':self.model_zoo[model]['model_id']
-                                            })
                 
+                if model=='MultiCompartment_Model':
+                    job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.model_zoo[model]["plugin_name"]}/run',
+                                                parameters={
+                                                    'girderApiUrl':self.girder_handler.apiUrl,
+                                                    'girderToken':self.girder_handler.user_token,
+                                                    'input_file':file_id,
+                                                    'base_dir':folder_id,
+                                                    'modelfile':self.model_zoo[model]['model_id']
+                                                })
+                else:
+                    # The other models have slightly different input parameter names :/
+                    job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.model_zoo[model]["plugin_name"]}/run',
+                                                parameters = {
+                                                    'girderApiUrl':self.girder_handler.apiUrl,
+                                                    'girderToken':self.girder_handler.user_token,
+                                                    'input_files':file_id,
+                                                    'basedir':folder_id,
+                                                    'model':self.model_zoo[model]['model_id']
+                                                })
+                    
                 print(f'job_response: {job_response}')
             
 

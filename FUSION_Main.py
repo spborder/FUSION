@@ -653,21 +653,6 @@ class FUSION:
             prevent_initial_call=True
         )(self.upload_data)
 
-        # Executing segmentation according to model selection
-        """
-        self.app.callback(
-            output = [Output('post-segment-row','style'),
-             Output('structure-type','disabled'),
-             Output('ftu-select','options'),
-             Output('ftu-select','value'),
-             Output('sub-comp-method','value'),
-             Output('ex-ftu-img','figure')],
-            inputs = [Input('structure-type','value'),
-             Input('segment-butt','n_clicks')],
-            prevent_initial_call=True
-        )(self.apres_segmentation)
-        """
-
         # Starting segmentation for selected structures
         self.app.callback(
             output = [
@@ -3480,7 +3465,6 @@ class FUSION:
             )
         
         return [feat_logs_disable],[feat_logs_div]
-
 
     def ask_fusey(self,butt_click,current_style):
 
