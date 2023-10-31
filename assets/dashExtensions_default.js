@@ -63,6 +63,8 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                             } else if (cell_value == 0) {
                                 cell_value = (cell_value).toFixed(1);
                             }
+                        } else {
+                            var cell_value = Number.Nan;
                         }
                     } else {
                         var cell_value = Number.Nan;

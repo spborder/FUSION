@@ -102,37 +102,27 @@ class LayoutHandler:
 
         if not wsi is None:
             # View of WSI
+            combined_colors_dict = {}
+            for f in wsi.map_dict['FTUs']:
+                combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
+            
+
             self.initial_overlays = [
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(url=f'./assets/slide_annotations/{struct}.json', id = wsi.map_dict['FTUs'][struct]['id'], options = dict(style=dict(color = wsi.map_dict['FTUs'][struct]['color'])),
-                            hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
+                            hideout = dict(color_key = {},current_cell = '',fillOpacity=0.5,ftu_color = combined_colors_dict,filter_vals = [0,1]), hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                             zoomToBounds=True,children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
                     name = struct, checked = True, id = struct)
             for struct in wsi.map_dict['FTUs']
             ] 
-            """
-            self.initial_overlays+= [
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(url=f'./assets/Spots.json', id = wsi.spot_dict['id'], options = dict(style=dict(color = wsi.spot_dict['color'])),
-                            hoverStyle = arrow_function(dict(weight=5, color = wsi.spot_dict['hover_color'], dashArray = '')),
-                            children = [dl.Popup(id=wsi.spot_dict['popup_id'])],
-                            zoomToBounds=True)),
-                    name = 'Spots', checked = False, id = 'Spots')
-            ]
-            """
+
             map_url = wsi.map_dict['url']
             tile_size = wsi.tile_dims[0]
             slide_properties = wsi.properties_list
             zoom_levels = wsi.zoom_levels
             map_bounds = wsi.map_bounds
 
-            combined_colors_dict = {}
-            for f in wsi.map_dict['FTUs']:
-                combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
-            
-            #combined_colors_dict['Spots'] = {'color':wsi.spot_dict['color']}
 
         else:
             self.initial_overlays = []
@@ -684,14 +674,6 @@ class LayoutHandler:
 
         dataset_df = pd.DataFrame.from_records(combined_dataset_dict)
 
-        # Progress bar and cancel button
-        p_bar_layout = html.Div([
-            dbc.Row([
-                dbc.Col(html.Progress(id='build-progress-bar',value="0"),md=10),
-                dbc.Col(html.Button(id='build-cancel-button',n_clicks=0,children = ['Cancel Dataset Load']),md=2)
-            ])
-        ])
-
         # Table with a bunch of filtering and tooltip info
         table_layout = html.Div([
             dash_table.DataTable(
@@ -725,7 +707,8 @@ class LayoutHandler:
             )
         ])
         
-        builder_layout = [
+        builder_layout = dbc.Row(
+            children = [
                     html.H3('Select a Dataset to add slides to current session'),
                     html.Hr(),
                     self.gen_info_button('Click on one of the circles in the far left of the table to load metadata for that dataset. You can also filter/sort the rows using the arrow icons in the column names and the text input in the first row'),
@@ -739,7 +722,9 @@ class LayoutHandler:
                     html.H3('Current Metadata'),
                     self.gen_info_button('Select different metadata options to view the distribution of FTU values within each selected dataset or slide'),
                     dcc.Loading(html.Div(id='slide-metadata-plots'))
-                ]
+                ],
+            style = {'height':'90vh','marginBottom':'10px'}
+            )
 
         self.current_builder_layout = builder_layout
         self.validation_layout.append(builder_layout)
@@ -976,10 +961,8 @@ class LayoutHandler:
             )
         ])
 
-        # Progressbar
-        p_bar = dbc.Progress(id='p-bar')
-
-        uploader_layout =[
+        uploader_layout = dbc.Row(
+            children = [
                 html.H1('Dataset Uploader'),
                 html.Hr(),
                 dbc.Row(
@@ -1022,9 +1005,9 @@ class LayoutHandler:
                     style={'display':'none'}
                 ),
                 html.Hr(),
-                dbc.Row(p_bar)
-
-            ]
+            ],
+            style = {'height':'90vh','marginBottom':'10px'}
+        )
         self.current_uploader_layout = uploader_layout
         self.validation_layout.append(uploader_layout)
         self.layout_dict['dataset-uploader'] = uploader_layout

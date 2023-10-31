@@ -106,7 +106,7 @@ class FUSION:
             self.ftus = self.wsi.ftu_names
             self.ftu_colors = self.wsi.ftu_colors
 
-            self.current_ftu_layers = self.wsi.ftu_names+['Spots']
+            self.current_ftu_layers = self.wsi.ftu_names
         else:
             # Initialization of these properties
             self.ftu_colors = {
@@ -198,7 +198,9 @@ class FUSION:
                             cell_value = (cell_value).toFixed(1);
                         } else if (cell_value==0) {
                             cell_value = (cell_value).toFixed(1);
-                        }                        
+                        } 
+                    } else {
+                        var cell_value = Number.Nan;
                     }
                 } else {
                     var cell_value = Number.Nan;
