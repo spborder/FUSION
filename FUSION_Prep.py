@@ -161,11 +161,8 @@ class PrepHandler:
                                                 'modelfile':self.model_zoo[model]['model_id']
                                             })
                 
-
-            print(f'job_response: {job_response}')
-
-        else:
-            job_response = 'Oopsie Poopsie!'
+                print(f'job_response: {job_response}')
+            
 
         return job_response
 
