@@ -840,15 +840,15 @@ class LayoutHandler:
                     dbc.Col(
                         html.Div([
                             dbc.Label('Select Structures:',html_for='structure-type'),
-                            dcc.Dropdown(structures,placeholder = 'It better be kidney',id='structure-type',disabled=True),
+                            dcc.Dropdown(structures,multi=True,id='structure-type',disabled=True),
                             dbc.Button('Start Segmenting!',id='segment-butt'),
                             dcc.Markdown('**Please note**, this process may take some time as the segmentation models and cell deconvolution pipelines run in the backend')
                         ]),md=12
                     )
                 ]),
                 dbc.Row([
-                    html.Div(id = 'seg-woodshed',children = [],style={'overflow':'scroll'}),
-                    html.Progress(id='seg-progress',value="0")
+                    html.Div(id = 'seg-woodshed',children = [],style={'maxHeight':'200px','overflow':'scroll'}),
+                    #html.Progress(id='seg-progress',value="0")
                 ])
             ])
         ])
@@ -1749,7 +1749,6 @@ class GirderHandler:
             most_recent_log = ''
         return job_info['status'], most_recent_log
     
-
     def get_slide_thumbnail(self,item_id:str):
 
         #thumbnail = Image.open(BytesIO(self.gc.get(f'/item/{item_id}/tiles/thumbnail?token={self.user_token}')))
