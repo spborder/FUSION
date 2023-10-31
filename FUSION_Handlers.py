@@ -759,6 +759,7 @@ class LayoutHandler:
 
         # File upload card:
         upload_types = [
+            {'label':'Regular Histology','value':'Regular','disabled':False},
             {'label':'10x Visium','value':'Visium','disabled':False},
             {'label':'Co-Detection by Indexing (CODEX)','value':'CODEX','disabled':True},
             {'label':'CosMx','value':'CoxMx','disabled':True}

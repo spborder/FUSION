@@ -105,8 +105,6 @@ class FUSION:
             self.ftu_colors = self.wsi.ftu_colors
 
             self.current_ftu_layers = self.wsi.ftu_names+['Spots']
-            #self.current_ftus = self.wsi.ftu_names+['Spots']
-            #self.pie_ftu = self.current_ftu_layers[-1]
         else:
             # Initialization of these properties
             self.ftu_colors = {
@@ -117,9 +115,6 @@ class FUSION:
             }
             self.ftus = None
             self.current_ftu_layers = None
-            #self.current_ftus = None
-            #self.pie_ftu = None
-
         # Specifying available properties with visualizations implemented
         self.visualization_properties = [
             'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
@@ -2768,6 +2763,33 @@ class FUSION:
             ])
         
             self.upload_check = {'WSI':False,'Omics':False}
+        
+        elif upload_type =='Regular':
+            # Regular slide with no --omics
+            upload_reqs = html.Div([
+                dbc.Row([
+                    html.Div(
+                        id = {'type':'wsi-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload Whole Slide Image Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-upload','index':0},
+                                uploadComplete=False,
+                                baseurl=self.dataset_handler.apiUrl,
+                                girderToken=self.dataset_handler.user_token,
+                                parentId=parentId,
+                                filetypes=['svs','ndpi','scn','tiff','tif']                      
+                            )
+                        ],
+                        style={'marginBottom':'10px','display':'inline-block'}
+                    )
+                ],align='center')
+            ])
+        
+            self.upload_check = {'WSI':False}
+        
+        self.upload_wsi_id = None
+        self.upload_omics_id = None
 
         return upload_reqs, input_disabled
 
@@ -2881,8 +2903,6 @@ class FUSION:
         elif ctx.triggered_id['type']=='omics-upload':
             
             self.upload_omics_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
-            print(self.upload_omics_id)
-            print(omics_file_flag)
             if not self.upload_omics_id is None:
                 if type(omics_file_flag)==list:
                     if len(omics_file_flag)>0:
@@ -3015,28 +3035,34 @@ class FUSION:
             print(f'Running segmentation!')
             segmentation_info = self.prep_handler.segment_image(self.upload_wsi_id,organ_selection)
             print(f'Running spot annotation!')
-            cell_deconv_info = self.prep_handler.run_cell_deconvolution(self.upload_wsi_id,self.upload_omics_id)
+            if not self.upload_omics_id is None:
+                cell_deconv_info = self.prep_handler.run_cell_deconvolution(self.upload_wsi_id,self.upload_omics_id)
 
             # Monitoring the running jobs down here
             seg_status = 0
-            cell_status = 0
+            if not self.upload_omics_id is None:
+                cell_status = 0
+            else:
+                cell_status = 3
             while seg_status+cell_status<6:
 
                 seg_status = self.dataset_handler.get_job_status(segmentation_info['_id'])
-                cell_status = self.dataset_handler.get_job_status(cell_deconv_info['_id'])
+                if not self.upload_omics_id is None:
+                    cell_status = self.dataset_handler.get_job_status(cell_deconv_info['_id'])
 
                 print(f'seg_status: {seg_status}')
                 print(f'cell_status: {cell_status}')
 
                 time.sleep(1)
 
-            # Generating spot annotations based on cell types
-            spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
-            print(self.dataset_handler.get_job_status(spot_annotation_info['_id']))
+            if not self.upload_omics_id is None:
+                # Generating spot annotations based on cell types
+                spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
+                print(self.dataset_handler.get_job_status(spot_annotation_info['_id']))
 
-            # Aggregating spot-level cell composition information to intersecting FTUs
-            spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
-            print(self.dataset_handler.get_job_status(spot_aggregation_info['_id']))
+                # Aggregating spot-level cell composition information to intersecting FTUs
+                spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
+                print(self.dataset_handler.get_job_status(spot_aggregation_info['_id']))
 
             # Extract annotation and initial sub-compartment mask
             self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
