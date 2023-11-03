@@ -42,17 +42,17 @@ class PrepHandler:
         self.model_zoo = {
             'MultiCompartment_Model':{
                 'plugin_name':'sayatmimar_histo-cloud_MultiCompartmentSegment_2/MultiCompartmentSegment',
-                'model_id':'648123751019450486d13dcd',
+                'model_id':'648123761019450486d13dce',
                 'structures':['Cortical interstitium','Medullary interstitium','Glomeruli','Sclerotic Glomeruli','Tubules','Arteries and Arterioles']
             },
             'IFTA_Model':{
                 'plugin_name':'dpraveen511_ifta_ifta_seg_aws_1/IFTASegmentation',
-                'model_id':'64c9429c287cfdce1e9c2535',
+                'model_id':'64c9429c287cfdce1e9c2536',
                 'structures':['IFTA']
             },
             'PTC_Model':{
                 'plugin_name':'dpraveen511_ptc_ptc_seg_aws_1/PTCSegmentation',
-                'model_id':'64b5d4ec5fd253763e671720',
+                'model_id':'64b5d4ec5fd253763e671721',
                 'structures':['PTC']
             }
         }

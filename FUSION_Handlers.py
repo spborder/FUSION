@@ -123,7 +123,6 @@ class LayoutHandler:
             zoom_levels = wsi.zoom_levels
             map_bounds = wsi.map_bounds
 
-
         else:
             self.initial_overlays = []
 
@@ -134,7 +133,6 @@ class LayoutHandler:
             combined_colors_dict = {}
             zoom_levels = 8
             map_bounds = [[0,240],[0,240]]
-        
         
         center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
 

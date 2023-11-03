@@ -2106,11 +2106,20 @@ class FUSION:
                 # Adding "Hidden" column with image grabbing info
                 feature_data['Hidden'] = self.clustering_data['Hidden']       
                 feature_data['label'] = label_data
+                feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
+                feature_data['Cell_States'] = self.clustering_data['Cell_States']
 
-                feature_data = feature_data.dropna()
+                self.feature_data = feature_data.dropna()
+
+                # Adding unique point index to hidden data
+                hidden_data = self.feature_data['Hidden'].tolist()
+                for h_i,h in enumerate(hidden_data):
+                    h['Index'] = h_i
+
+                self.feature_data.loc[:,'Hidden'] = hidden_data
 
                 figure = px.violin(
-                    data_frame=feature_data,
+                    data_frame = self.feature_data,
                     x = 'label',
                     y = feature_names[0],
                     custom_data='Hidden',
@@ -2125,11 +2134,20 @@ class FUSION:
                 # Adding "Hidden" column with image grabbing info
                 feature_data['Hidden'] = self.clustering_data['Hidden']       
                 feature_data['label'] = label_data
+                feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
+                feature_data['Cell_States'] = self.clustering_data['Cell_States']
 
-                feature_data = feature_data.dropna()
+                self.feature_data = feature_data.dropna()
+
+                # Adding point index to hidden data
+                hidden_data = self.feature_data['Hidden'].tolist()
+                for h_i,h in enumerate(hidden_data):
+                    h['Index'] = h_i
+
+                self.feature_data.loc[:,'Hidden'] = hidden_data
 
                 figure = px.scatter(
-                    data_frame=feature_data,
+                    data_frame=self.feature_data,
                     x = feature_columns[0],
                     y = feature_columns[1],
                     color = 'label',
@@ -2145,11 +2163,21 @@ class FUSION:
                 feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()
                 feature_data['label'] = label_data
 
-                feature_data = feature_data.dropna()
+                feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
+                feature_data['Cell_States'] = self.clustering_data['Cell_States']
 
-                hidden_col = feature_data['Hidden'].tolist()
-                label_col = feature_data['label'].tolist()
-                feature_data = feature_data.loc[:,[i for i in feature_names]].values
+                self.feature_data = feature_data.dropna()
+
+                hidden_col = self.feature_data['Hidden'].tolist()
+
+                # Adding point index to hidden_col
+                for h_i,h in enumerate(hidden_col):
+                    h['Index'] = h_i
+
+                label_col = self.feature_data['label'].tolist()
+                main_cell_types_col = self.feature_data['Main_Cell_Types'].tolist()
+                cell_states_col = self.feature_data['Cell_States'].tolist()
+                feature_data = self.feature_data.loc[:,[i for i in feature_names]].values
 
                 # Scaling feature_data
                 feature_data_means = np.nanmean(feature_data,axis=0)
@@ -2159,13 +2187,14 @@ class FUSION:
                 scaled_data[np.isnan(scaled_data)] = 0.0
                 scaled_data[~np.isfinite(scaled_data)] = 0.0
 
-
                 umap_reducer = UMAP()
                 embeddings = umap_reducer.fit_transform(scaled_data)
 
                 umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'])
                 umap_df['Hidden'] = hidden_col
                 umap_df['label'] = label_col
+                umap_df['Main_Cell_Types'] = main_cell_types_col
+                umap_df['Cell_States'] = cell_states_col
 
                 figure = px.scatter(
                     data_frame = umap_df,
@@ -2201,16 +2230,18 @@ class FUSION:
 
     def update_selected(self,click,selected):
 
+        print(click)
         if click is not None:
             print(f'triggered_prop_ids: {ctx.triggered_prop_ids.keys()}')
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
                 sample_info = [i['customdata'][0] for i in selected['points']]
-                sample_index = [i['pointNumber'] for i in selected['points']]
+                sample_index = [i['Index'] for i in sample_info]
 
             else:
                 if click is not None:
                     sample_info = [click['points'][0]['customdata'][0]]
-                    sample_index = [click['points'][0]['pointNumber']]
+
+                    sample_index = [sample_info[0]['Index']]
                 else:
                     sample_info = []
 
@@ -2235,7 +2266,7 @@ class FUSION:
                 print(f'self.current_selected_samples: {self.current_selected_samples}')
 
             # Preparing figure containing cell types + cell states info
-            main_cell_types_list = self.clustering_data['Main_Cell_Types'].tolist()
+            main_cell_types_list = self.feature_data['Main_Cell_Types'].tolist()
             counts_data = pd.DataFrame([main_cell_types_list[i] for i in sample_index]).sum(axis=0).to_frame()
             counts_data.columns = ['Selected Data Points']
             counts_data = counts_data.reset_index()
@@ -2243,13 +2274,16 @@ class FUSION:
             counts_data['Selected Data Points'] = counts_data['Selected Data Points']/counts_data['Selected Data Points'].sum()
             # Only getting the top-5
             counts_data = counts_data.sort_values(by='Selected Data Points',ascending=False)
+            print(counts_data)
             counts_data = counts_data[counts_data['Selected Data Points']>0]
             if counts_data.shape[0]>0:
                 f_pie = px.pie(counts_data,values='Selected Data Points',names='index')
 
                 # Getting initial cell state info
                 first_cell = counts_data['index'].tolist()[0]
-                cell_states_list = self.clustering_data['Cell_States'].tolist()
+                print(first_cell)
+                cell_states_list = self.feature_data['Cell_States'].tolist()
+                print(cell_states_list[sample_index[0]])
                 state_data = pd.DataFrame([cell_states_list[i][first_cell] for i in sample_index]).sum(axis=0).to_frame()
                 state_data = state_data.reset_index()
                 state_data.columns = ['Cell States',f'Cell States for {first_cell}']
