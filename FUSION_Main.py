@@ -3174,6 +3174,14 @@ class FUSION:
             sub_comp_style = {'display':'flex'}
             disable_organ = True
 
+            if not self.upload_omics_id is None:
+                # Generating spot annotations based on cell types
+                spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
+
+                # Aggregating spot-level cell composition information to intersecting FTUs
+                spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
+
+
             # Extracting annotations and initial sub-compartment mask
             self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
 
