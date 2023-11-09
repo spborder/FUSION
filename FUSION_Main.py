@@ -51,6 +51,8 @@ from FUSION_Prep import PrepHandler
 
 from upload_component import UploadComponent
 
+from waitress import serve
+
 
 class FUSION:
     def __init__(self,
@@ -305,7 +307,9 @@ class FUSION:
         self.upload_callbacks()
 
         # Running server
-        self.app.run_server(host = '0.0.0.0',debug=False,use_reloader=False,port=8000)
+        #self.app.run_server(host = '0.0.0.0',debug=False,use_reloader=False,port=8000)
+        serve(self.app.server,host='0.0.0.0',port=8000)
+
 
     def __getstate__(self):
 
