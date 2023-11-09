@@ -85,7 +85,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self, wsi, feature_select_dict, label_dict, cli_list = None):
+    def gen_vis_layout(self, wsi, feature_select_dict, label_dict, label_filter_dict, cli_list = None):
 
         #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
@@ -354,31 +354,58 @@ class LayoutHandler:
                                             expanded=[],
                                             data = feature_select_dict
                                         ),
-                                        style={'maxHeight':'200px','overflow':'scroll'}
+                                        style={'maxHeight':'225px','overflow':'scroll'}
                                     )
                                 ]),
                                 html.Hr(),
-                                dbc.Row([
-                                    dbc.Col('Select Label',md=11),
-                                    dbc.Col(self.gen_info_button('Select a label for the plot of selected features'),md=1)
-                                ]),
-                                html.Hr(),
-                                dbc.Row([
-                                    dcc.Dropdown(
-                                        options = label_dict,
-                                        id = 'label-select'
-                                    )
-                                ])
+                                html.Div(
+                                    id = 'label-and-filter-div',
+                                    children = [
+                                        dbc.Row([
+                                            dbc.Col('Select Label',md=11),
+                                            dbc.Col(self.gen_info_button('Select a label for the plot of selected features'),md=1)
+                                        ]),
+                                        html.Hr(),
+                                        html.Div(id = 'label-info',children = [],style={'marginBottom':'5px'}),
+                                        dbc.Row([
+                                            dcc.Dropdown(
+                                                options = label_dict,
+                                                id = 'label-select'
+                                            )
+                                        ]),
+                                        html.Hr(),
+                                        dbc.Row([
+                                            dbc.Col(dbc.Label('Select Filter'),md=11),
+                                            dbc.Col(self.gen_info_button('Select specific label items to remove from your plot'),md=1)
+                                        ]),
+                                        html.Hr(),
+                                        dbc.Row([
+                                            html.Div(id='filter-info',children = [],style={'marginBottom':'5px'}),
+                                            html.Div(
+                                                dta.TreeView(
+                                                    id = 'filter-select-tree',
+                                                    multiple = True,
+                                                    checkable = True,
+                                                    checked = [],
+                                                    selected = [],
+                                                    expanded = [],
+                                                    data = label_filter_dict
+                                                ),
+                                                style = {'maxHeight':'225px','overflow':'scroll'}
+                                            )
+                                        ])
+                                    ]
+                                )
                             ])
                         ]
                     )
-                ],md=12))
+                ],md=12),style={'maxHeight':'30vh','overflow':'scroll'})
             ]),
             dbc.Row([
                 dbc.Col([
                     self.gen_info_button('Click on a point in the graph or select a group of points with the lasso select tool to view the FTU and cell type data at that point'),
                     html.Div(
-                        dcc.Graph(id='cluster-graph',figure=go.Figure())
+                        dcc.Loading(dcc.Graph(id='cluster-graph',figure=go.Figure()))
                     )
                 ],md=6),
                 dbc.Col([
@@ -1531,7 +1558,7 @@ class GirderHandler:
             path_type = [path_type]
 
         self.slide_datasets = {}
-
+        self.all_slide_names = []
         for p,p_type in zip(path,path_type):
             self.current_collection['path'].append(p)
             self.current_collection['id'].append(self.gc.get('resource/lookup',parameters={'path':p})['_id'])
@@ -1556,6 +1583,9 @@ class GirderHandler:
 
                     # Aggregating non-dictionary metadata
                     folder_slide_meta = [i['meta'] for i in folder_slides]
+                    # Adding slide names to all_slide_names list
+                    self.all_slide_names.extend([i['name'] for i in folder_slides])
+
                     # Get all the unique keys present in this folder's metadata
                     meta_keys = []
                     for i in folder_slide_meta:
@@ -1804,6 +1834,66 @@ class GirderHandler:
                 'disabled':False
             })
 
+        # Creating filter label dict for subsetting plot data
+        self.filter_keys = []
+        label_filter_children = []
+        for l_i,l in enumerate(self.label_dict):
+            if not l['disabled']:
+                
+                l_dict = {
+                    'title':l['label'],
+                    'key':f'0-{l_i}',
+                    'children':[]
+                }
+                # Finding the different possible values for each of those labels
+                l_vals = []
+                for f in self.slide_datasets:
+                    if l['label'] in list(self.slide_datasets[f]['Metadata'].keys()):
+                        if not type(self.slide_datasets[f]['Metadata'][l['label']])==int:
+                            if ',' in self.slide_datasets[f]['Metadata'][l['label']]:
+                                l_vals.extend(self.slide_datasets[f]['Metadata'][l['label']].split(','))
+                            else:
+                                l_vals.append(self.slide_datasets[f]['Metadata'][l['label']])
+                        else:
+                            l_vals.append(self.slide_datasets[f]['Metadata'][l['label']])
+                # Getting unique label values
+                u_l_vals = np.unique(l_vals).tolist()
+                for u_l_i,u_l in enumerate(u_l_vals):
+                    l_dict['children'].append({
+                        'title': u_l,
+                        'key':f'0-{l_i}-{u_l_i}'
+                    })
+                    self.filter_keys.append({'title':u_l,'key':f'0-{l_i}-{u_l_i}'})
+                
+                # Only add the labels that have sub-values, if they don't then it isn't used for any of the current slides
+                if len(l_vals)>0:
+                    label_filter_children.append(l_dict)
+                    self.filter_keys.append({'title':l['label'],'key':f'0-{l_i}'})
+
+
+        # Adding slide names to label_filter_children
+        slide_names_children = {
+            'title':'Slide Names',
+            'key':f'0-{l_i+1}',
+            'children':[]
+        }
+        for s_i,s in enumerate(self.all_slide_names):
+            slide_names_children['children'].append(
+                {
+                    'title':s,
+                    'key':f'0-{l_i+1}-{s_i}',
+                }
+            )
+            self.filter_keys.append({'title':s,'key':f'0-{l_i+1}-{s_i}'})
+        
+        self.filter_keys.append({'title':'Slide Names','key':f'0-{l_i+1}'})
+        label_filter_children.append(slide_names_children)
+
+        self.label_filter_dict = {
+            'title':'Filter Labels',
+            'key':'0',
+            'children': label_filter_children
+        }
 
         # Dictionary defining plotting items in hierarchy
         morphometrics_children = []
@@ -1883,8 +1973,11 @@ class GirderHandler:
             cluster_data_id = private_folder_contents[private_folder_names.index('FUSION_Clustering_data.json')]['_id']
 
             cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={self.user_token}').content)
-            cluster_data = pd.DataFrame.from_dict(cluster_json)
-            print('Clustering data loaded')
+            try:
+                cluster_data = pd.DataFrame.from_dict(cluster_json)
+                print('Clustering data loaded')
+            except ValueError:
+                cluster_data = pd.DataFrame()    
 
             return cluster_data
         else:
