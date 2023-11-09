@@ -1963,25 +1963,29 @@ class GirderHandler:
         }
 
     def load_clustering_data(self):
-        # Grabbing feature clustering info from user's private folder
-        private_folder_id = self.gc.get('/resource/lookup',parameters={'path':f'/user/{self.username}/Private'})['_id']
-        private_folder_contents = self.gc.get(f'/resource/{private_folder_id}/items?token={self.user_token}',parameters={'type':'folder','limit':10000})
+        # Grabbing feature clustering info from user's public folder
+        try:
+            public_folder_id = self.gc.get('/resource/lookup',parameters={'path':f'/user/{self.username}/Public'})['_id']
+            public_folder_contents = self.gc.get(f'/resource/{public_folder_id}/items?token={self.user_token}',parameters={'type':'folder','limit':10000})
 
-        private_folder_names = [i['name'] for i in private_folder_contents]
-        if 'FUSION_Clustering_data.json' in private_folder_names:
-            print('Found clustering data')
-            cluster_data_id = private_folder_contents[private_folder_names.index('FUSION_Clustering_data.json')]['_id']
+            public_folder_names = [i['name'] for i in public_folder_contents]
+            if 'FUSION_Clustering_data.json' in public_folder_names:
+                print('Found clustering data')
+                cluster_data_id = public_folder_contents[public_folder_names.index('FUSION_Clustering_data.json')]['_id']
 
-            cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={self.user_token}').content)
-            try:
-                cluster_data = pd.DataFrame.from_dict(cluster_json)
-                print('Clustering data loaded')
-            except ValueError:
-                cluster_data = pd.DataFrame()    
+                cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={self.user_token}').content)
+                try:
+                    cluster_data = pd.DataFrame.from_dict(cluster_json)
+                    print('Clustering data loaded')
+                except ValueError:
+                    cluster_data = pd.DataFrame()    
 
-            return cluster_data
-        else:
-            print('No clustering data found')
+                return cluster_data
+            else:
+                print('No clustering data found')
+                return pd.DataFrame()
+        except girder_client.HttpError:
+            # Maybe just load the default clustering data if there's an error?
             return pd.DataFrame()
 
     """
