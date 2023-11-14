@@ -626,6 +626,10 @@ class LayoutHandler:
             ])
         ])
 
+
+
+
+
         # List of all tools tabs
         tool_tabs = [
             dbc.Tab(overlays_tab, label = 'Overlays',tab_id='overlays-tab'),
@@ -633,7 +637,7 @@ class LayoutHandler:
             dbc.Tab(cell_card,label = "Cell Graphics"),
             dbc.Tab(cluster_card,label = 'Morphological Clustering'),
             dbc.Tab(extract_card,label = 'Download Data'),
-            dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True),
+            #dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True),
         ]
         
         tools = [
@@ -1828,12 +1832,14 @@ class GirderHandler:
         # Adding only unique labels
         meta_labels = np.unique(meta_labels).tolist()
         for m in meta_labels:
-            self.label_dict.append({
-                'label': m,
-                'value': m,
-                'disabled':False
-            })
-
+            if m=='FTUs':
+                self.label_dict.append({
+                    'label': m,
+                    'value': m,
+                    'disabled':False
+                })
+        
+        
         # Creating filter label dict for subsetting plot data
         self.filter_keys = []
         label_filter_children = []

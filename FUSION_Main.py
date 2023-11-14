@@ -1470,7 +1470,7 @@ class FUSION:
                 cell_sub_select_children = []
 
                 #cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
-                cell_types = list(self.cell_graphics_key.keys())
+                cell_types = sorted(list(self.cell_graphics_key.keys()))
                 color_bar = dlx.categorical_colorbar(
                     categories = cell_types,
                     colorscale = list(self.hex_color_key.values()),
@@ -2238,13 +2238,21 @@ class FUSION:
                         h['Index'] = h_i
 
                     self.feature_data.loc[:,'Hidden'] = hidden_data
-
+                    """
                     figure = px.violin(
                         data_frame = self.feature_data,
                         x = 'label',
                         y = feature_names[0],
                         custom_data='Hidden',
                         title = f'Violin plot of {feature_names[0]} labeled by {label}'
+                    )
+                    """
+                    figure = go.Violin(
+                        x = self.feature_data['label'],
+                        y = self.feature_data[feature_names[0]],
+                        customdata = self.feature_data['Hidden'],
+                        points = 'all',
+                        pointpos=0
                     )
 
                 else:
@@ -2293,7 +2301,7 @@ class FUSION:
                 print(f'Running UMAP and returning a scatter plot')
                 print(f'len of feature_names: {len(feature_names)}')
 
-                if ctx.triggered_id=='feature-select-tree':
+                if ctx.triggered_id=='feature-select-tree' or self.umap_df is None:
                     # Scaling and reducing feature data using UMAP
                     feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()
                     feature_data['label'] = label_data
@@ -2312,7 +2320,7 @@ class FUSION:
                     label_col = self.feature_data['label'].tolist()
                     main_cell_types_col = self.feature_data['Main_Cell_Types'].tolist()
                     cell_states_col = self.feature_data['Cell_States'].tolist()
-                    feature_data = self.feature_data.loc[:,[i for i in feature_names]].values
+                    feature_data = self.feature_data.loc[:,[i for i in feature_names if i in self.feature_data.columns]].values
 
                     # Scaling feature_data
                     feature_data_means = np.nanmean(feature_data,axis=0)
@@ -2404,15 +2412,23 @@ class FUSION:
         return img_list        
 
     def update_selected(self,click,selected):
-
+        print(click)
         if click is not None:
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
                 # Custom data contains Slide_Id and BBox coordinates for pulling images
-                sample_info = [i['customdata'][0] for i in selected['points']]
+                try:
+                    sample_info = [i['customdata'][0] for i in selected['points']]
+                except KeyError:
+                    sample_info = [i['customdata'] for i in selected['points']]
+                    
                 # Index corresponds to the row in the feature dataframe used for pulling cell type/state information
                 sample_index = [i['Index'] for i in sample_info]
             else:
-                sample_info = [click['points'][0]['customdata'][0]]
+                try:
+                    sample_info = [click['points'][0]['customdata'][0]]
+                except KeyError:
+                    sample_info = [click['points'][0]['customdata']]
+
                 sample_index = [sample_info[0]['Index']]
 
             self.current_selected_samples = sample_index
@@ -2436,6 +2452,8 @@ class FUSION:
 
             # Preparing figure containing cell types + cell states info
             main_cell_types_list = self.feature_data['Main_Cell_Types'].tolist()
+            print(f'size of main_cell_types_list: {len(main_cell_types_list)}')
+            print(f'sample_index: {sample_index}')
             counts_data = pd.DataFrame([main_cell_types_list[i] for i in sample_index]).sum(axis=0).to_frame()
             counts_data.columns = ['Selected Data Points']
             counts_data = counts_data.reset_index()
