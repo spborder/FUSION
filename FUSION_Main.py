@@ -2238,15 +2238,7 @@ class FUSION:
                         h['Index'] = h_i
 
                     self.feature_data.loc[:,'Hidden'] = hidden_data
-                    """
-                    figure = px.violin(
-                        data_frame = self.feature_data,
-                        x = 'label',
-                        y = feature_names[0],
-                        custom_data='Hidden',
-                        title = f'Violin plot of {feature_names[0]} labeled by {label}'
-                    )
-                    """
+
                     figure = go.Violin(
                         x = self.feature_data['label'],
                         y = self.feature_data[feature_names[0]],
@@ -2270,6 +2262,12 @@ class FUSION:
                 feature_data['Cell_States'] = self.clustering_data['Cell_States']
 
                 self.feature_data = feature_data
+                
+                # Dropping filtered out rows
+                if len(filter_idx)>0:
+                    self.feature_data = self.feature_data.iloc[[int(i) for i in range(self.feature_data.shape[0]) if int(i) not in filter_idx],:]
+
+                self.feature_data = self.feature_data.dropna()
 
                 # Adding point index to hidden data
                 hidden_data = self.feature_data['Hidden'].tolist()
@@ -2277,12 +2275,6 @@ class FUSION:
                     h['Index'] = h_i
 
                 self.feature_data.loc[:,'Hidden'] = hidden_data
-                
-                # Dropping filtered out rows
-                if len(filter_idx)>0:
-                    self.feature_data = self.feature_data.iloc[[int(i) for i in range(self.feature_data.shape[0]) if int(i) not in filter_idx],:]
-
-                self.feature_data = self.feature_data.dropna()
 
                 # Generating labels_info_children and filter_info_children
                 labels_left = self.feature_data['label'].tolist()
@@ -2310,6 +2302,10 @@ class FUSION:
                     feature_data['Cell_States'] = self.clustering_data['Cell_States']
 
                     self.feature_data = feature_data.dropna()
+
+                    # Dropping filtered out rows
+                    if len(filter_idx)>0:
+                        self.feature_data = self.feature_data.iloc[[int(i) for i in range(self.feature_data.shape[0]) if int(i) not in filter_idx],:]
 
                     hidden_col = self.feature_data['Hidden'].tolist()
 
@@ -2356,6 +2352,10 @@ class FUSION:
                     print(f'len after dropping: {len(non_dropped_index)}')
                     self.umap_df = self.umap_df.loc[non_dropped_index,:]
 
+                    # Dropping filtered out rows
+                    if len(filter_idx)>0:
+                        self.umap_df = self.umap_df.iloc[[int(i) for i in range(self.umap_df.shape[0]) if int(i) not in filter_idx],:]
+
                     hidden_col = self.feature_data['Hidden'].tolist()
 
                     # Adding point index to hidden_col
@@ -2365,10 +2365,6 @@ class FUSION:
                     label_col = self.feature_data['label'].tolist()
                     self.umap_df.loc[:,'label'] = label_col
                 
-                # Dropping filtered out rows
-                if len(filter_idx)>0:
-                    self.umap_df = self.umap_df.iloc[[int(i) for i in range(self.umap_df.shape[0]) if int(i) not in filter_idx],:]
-
                 # Generating labels_info_children and filter_info_children
                 labels_left = self.umap_df['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
@@ -2420,7 +2416,7 @@ class FUSION:
                     sample_info = [i['customdata'][0] for i in selected['points']]
                 except KeyError:
                     sample_info = [i['customdata'] for i in selected['points']]
-                    
+
                 # Index corresponds to the row in the feature dataframe used for pulling cell type/state information
                 sample_index = [i['Index'] for i in sample_info]
             else:

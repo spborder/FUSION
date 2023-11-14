@@ -29,7 +29,8 @@ class BulkProcessApp:
                  app,
                  layout,
                  dataset_handler,
-                 prep_handler):
+                 prep_handler,
+                 ):
         
         self.app = app
         self.app.layout = layout
@@ -251,8 +252,9 @@ class BulkProcessApp:
             if type(feat_butt) == list:
                 if len(feat_butt)>0:
                     if feat_butt[0]>0:
-                        feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
 
+                        feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
+                        
                         self.done_slides.append(self.upload_wsi_id)
 
                         # Updating slide-drop options
