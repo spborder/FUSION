@@ -761,7 +761,7 @@ class LayoutHandler:
                     self.gen_info_button('Select different metadata options to view the distribution of FTU values within each selected dataset or slide'),
                     dcc.Loading(html.Div(id='slide-metadata-plots'))
                 ],
-            style = {'height':'90vh','marginBottom':'10px'}
+            style = {'maxHeight':'90vh','overflow':'scroll','marginBottom':'10px'}
             )
 
         self.current_builder_layout = builder_layout
@@ -1558,6 +1558,38 @@ class GirderHandler:
 
         return cli
 
+    def update_folder_structure(self):
+
+        # Adding Public folders if any "FUSION_Upload" are in there
+        user_folder_path = f'/user/{self.username}/Public'
+        folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder_path})['_id']
+        folder_contents = self.gc.get(f'/resource/{folder_id}/items',parameters={'type':'folder','limit':10000})
+        folder_ids = [i['folderId'] for i in folder_contents]
+        for f in np.unique(folder_ids):
+            if f not in list(self.slide_datasets.keys()):
+                folder_name = self.gc.get(f'/folder/{f}')['name']
+                if 'FUSION_Upload' in folder_name:
+
+                    self.slide_datasets[f] = {
+                        'name':folder_name
+                    }
+
+                    folder_slides = [i for i in folder_contents if 'largeImage' in i and i['folderId']==f]
+
+                    self.slide_datasets[f]['Slides'] = folder_slides
+                    folder_slide_meta = [i['meta'] for i in folder_slides]
+                    meta_keys = []
+                    for i in folder_slide_meta:
+                        meta_keys.extend(list(i.keys()))
+
+                    self.slide_datasets[f]['Metadata'] = {}
+                    for m in meta_keys:
+                        item_metadata = [item[m] for item in folder_slide_meta if m in item]
+                        if type(item_metadata[0])==str:
+                            self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
+                        elif type(item_metadata[0])==int or type(item_metadata[0])==float:
+                            self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+
     def initialize_folder_structure(self,path,path_type):
 
         self.current_collection = {
@@ -1621,28 +1653,29 @@ class GirderHandler:
         folder_contents = self.gc.get(f'/resource/{folder_id}/items',parameters={'type':'folder','limit':10000})
         folder_ids = [i['folderId'] for i in folder_contents]
         for f in np.unique(folder_ids):
-            folder_name = self.gc.get(f'/folder/{f}')['name']
-            if 'FUSION_Upload' in folder_name:
+            if f not in list(self.slide_datasets.keys()):
+                folder_name = self.gc.get(f'/folder/{f}')['name']
+                if 'FUSION_Upload' in folder_name:
 
-                self.slide_datasets[f] = {
-                    'name':folder_name
-                }
+                    self.slide_datasets[f] = {
+                        'name':folder_name
+                    }
 
-                folder_slides = [i for i in folder_contents if 'largeImage' in i and i['folderId']==f]
+                    folder_slides = [i for i in folder_contents if 'largeImage' in i and i['folderId']==f]
 
-                self.slide_datasets[f]['Slides'] = folder_slides
-                folder_slide_meta = [i['meta'] for i in folder_slides]
-                meta_keys = []
-                for i in folder_slide_meta:
-                    meta_keys.extend(list(i.keys()))
+                    self.slide_datasets[f]['Slides'] = folder_slides
+                    folder_slide_meta = [i['meta'] for i in folder_slides]
+                    meta_keys = []
+                    for i in folder_slide_meta:
+                        meta_keys.extend(list(i.keys()))
 
-                self.slide_datasets[f]['Metadata'] = {}
-                for m in meta_keys:
-                    item_metadata = [item[m] for item in folder_slide_meta if m in item]
-                    if type(item_metadata[0])==str:
-                        self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
-                    elif type(item_metadata[0])==int or type(item_metadata[0])==float:
-                        self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+                    self.slide_datasets[f]['Metadata'] = {}
+                    for m in meta_keys:
+                        item_metadata = [item[m] for item in folder_slide_meta if m in item]
+                        if type(item_metadata[0])==str:
+                            self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
+                        elif type(item_metadata[0])==int or type(item_metadata[0])==float:
+                            self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
 
     def set_default_slides(self,default_slide_list):
         # Setting default slides with name and item information
@@ -1652,37 +1685,19 @@ class GirderHandler:
         
     def get_collection_annotation_meta(self,select_ids:list):
 
-        # Passing image ids as a string
-        if len(self.cached_annotation_ids)==0:
-            self.cached_annotation_ids = select_ids
-            add_ids = ','.join(select_ids)
-            remove_ids = ''
-            run_plugin = True
-        else:
-            remove_ids = [i for i in self.cached_annotation_ids if i not in select_ids]
-            add_ids = [i for i in select_ids if i not in self.cached_annotation_ids]
-
-            add_ids = ','.join(add_ids)
-            remove_ids = ','.join(remove_ids)
-            self.cached_annotation_ids = select_ids
-            if len(add_ids)>0 or len(remove_ids)>0:
-                run_plugin = True
-            else:
-                run_plugin = False
-
-        if run_plugin:
+        if len(select_ids)>0:
             print(f'Getting annotation metadata for: {select_ids}')
             # Running get_cluster_data plugin 
-            try:
-                job_response = self.gc.post(f'/slicer_cli_web/{self.get_cluster_data_plugin}/run',
-                                            parameters = {
-                                                'girderApiUrl':self.apiUrl,
-                                                'girderToken':self.user_token,
-                                                'add_ids':add_ids,
-                                                'remove_ids':remove_ids
-                                            })
-            except girder_client.HttpError:
-                print(f'Plugin is not added to this DSA instance')
+            #try:
+            job_response = self.gc.post(f'/slicer_cli_web/{self.get_cluster_data_plugin}/run',
+                                        parameters = {
+                                            'girderApiUrl':self.apiUrl,
+                                            'girderToken':self.user_token,
+                                            'add_ids':','.join(select_ids),
+                                            'remove_ids':''
+                                        })
+            #except girder_client.HttpError:
+            #   print(f'Plugin is not added to this DSA instance')
 
     def get_image_region(self,item_id,coords_list):
 
@@ -1849,7 +1864,6 @@ class GirderHandler:
                     'disabled':False
                 })
         
-        
         # Creating filter label dict for subsetting plot data
         self.filter_keys = []
         label_filter_children = []
@@ -1885,7 +1899,6 @@ class GirderHandler:
                 if len(l_vals)>0:
                     label_filter_children.append(l_dict)
                     self.filter_keys.append({'title':l['label'],'key':f'0-{l_i}'})
-
 
         # Adding slide names to label_filter_children
         slide_names_children = {
