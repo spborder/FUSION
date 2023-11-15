@@ -354,7 +354,7 @@ class LayoutHandler:
                                             expanded=[],
                                             data = feature_select_dict
                                         ),
-                                        style={'maxHeight':'225px','overflow':'scroll'}
+                                        style={'maxHeight':'250px','overflow':'scroll'}
                                     )
                                 ]),
                                 html.Hr(),
@@ -391,8 +391,21 @@ class LayoutHandler:
                                                     expanded = [],
                                                     data = label_filter_dict
                                                 ),
-                                                style = {'maxHeight':'225px','overflow':'scroll'}
+                                                style = {'maxHeight':'250px','overflow':'scroll'}
                                             )
+                                        ]),
+                                        html.Hr(),
+                                        dbc.Row([
+                                            html.Div(
+                                                dbc.Button(
+                                                    'Generate Plot!',
+                                                    id = 'gen-plot-butt',
+                                                    n_clicks = 0,
+                                                    disabled = False,
+                                                    class_name = 'd-grid col-12 mx-auto'
+                                                )
+                                            ),
+                                            html.Div(id='gen-plot-alert')
                                         ])
                                     ]
                                 )
@@ -625,10 +638,6 @@ class LayoutHandler:
                 ])
             ])
         ])
-
-
-
-
 
         # List of all tools tabs
         tool_tabs = [
@@ -1821,6 +1830,7 @@ class GirderHandler:
         self.label_dict = [
             {'label':'FTU','value':'FTU','disabled':False},
             {'label':'Slide Name','value':'Slide Name','disabled':False},
+            {'label':'Folder Name','value':'Folder Name','disabled':False},
             {'label':'Cell Type','value':'Cell Type','disabled':True},
             {'label':'Morphometric','value':'Morphometric','disabled':True}
         ]
