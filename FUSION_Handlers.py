@@ -1905,6 +1905,24 @@ class GirderHandler:
         self.filter_keys.append({'title':'Slide Names','key':f'0-{l_i+1}'})
         label_filter_children.append(slide_names_children)
 
+        # Adding folder names to label_filter_children
+        folder_names_children = {
+            'title':'Folder Names',
+            'key':f'0-{l_i+2}',
+            'children':[]
+        }
+        for f_i, f in enumerate(list(self.slide_datasets.keys())):
+            folder_names_children['children'].append(
+                {
+                    'title':self.slide_datasets[f]['name'],
+                    'key':f'0-{l_i+2}-{f_i}'
+                }
+            )
+            self.filter_keys.append({'title':self.slide_datasets[f]['name'],'key':f'0-{l_i+2}-{f_i}'})
+
+        self.filter_keys.append({'title':'Folder Names','key':f'0-{l_i+2}'})
+        label_filter_children.append(folder_names_children)
+
         self.label_filter_dict = {
             'title':'Filter Labels',
             'key':'0',

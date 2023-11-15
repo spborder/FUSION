@@ -20,12 +20,11 @@ import shapely
 from shapely.geometry import Point, shape, box
 from skimage.transform import resize
 import random
-import time
 
-from sklearn.preprocessing import StandardScaler
 from umap import UMAP
 
 from uuid import uuid4
+import textwrap
 
 import girder_client
 
@@ -34,7 +33,6 @@ import plotly.graph_objects as go
 from matplotlib import colormaps
 
 from dash import dcc, ctx, MATCH, ALL, dash_table, exceptions, callback_context, no_update, DiskcacheManager
-import diskcache
 
 import dash_bootstrap_components as dbc
 import dash_leaflet as dl
@@ -2264,19 +2262,35 @@ class FUSION:
                         figure.update_layout(
                             legend = dict(
                                 orientation='h',
-                                legend_y = 0,
+                                y = 0,
                                 yanchor='top',
                                 xanchor='left'
                             ),
-                            title = f'{feature_names[0]}',
+                            title = '<br>'.join(
+                                textwrap.wrap(
+                                    f'{feature_names[0]}',
+                                    width=30
+                                )
+                            ),
                             yaxis_title = dict(
-                                text = f'{feature_names[0]}',
-                                size = 10
+                                text = '<br>'.join(
+                                    textwrap.wrap(
+                                        f'{feature_names[0]}',
+                                        width=15
+                                    )
+                                ),
+                                font = dict(size = 10)
                             ),
                             xaxis_title = dict(
-                                text = label,
-                                size = 10
-                            )
+                                text = '<br>'.join(
+                                    textwrap.wrap(
+                                        label,
+                                        width=15
+                                    )
+                                ),
+                                font = dict(size = 10)
+                            ),
+                            margin = {'r':0,'b':15}
                         )
 
                     else:
@@ -2318,16 +2332,22 @@ class FUSION:
                         y = feature_columns[1],
                         color = 'label',
                         custom_data = 'Hidden',
-                        title = f'Scatter plot of {feature_names[0]} and {feature_names[1]} labeled by {label}'
+                        title = '<br>'.join(
+                            textwrap.wrap(
+                                f'Scatter plot of {feature_names[0]} and {feature_names[1]} labeled by {label}',
+                                width = 30
+                                )
+                            )
                     ))
 
                     figure.update_layout(
                         legend = dict(
                             orientation='h',
-                            legend_y = 0,
+                            y = 0,
                             yanchor='top',
                             xanchor='left'
-                        )
+                        ),
+                        margin = {'r':0,'b':15}
                     )
 
 
@@ -2417,16 +2437,22 @@ class FUSION:
                         y = 'UMAP2',
                         color = 'label',
                         custom_data = 'Hidden',
-                        title = f'UMAP of selected features labeled with {label}'
+                        title = '<br>'.join(
+                            textwrap.wrap(
+                                f'UMAP of selected features labeled with {label}',
+                                width=30
+                            )
+                        )
                     ))
 
                     figure.update_layout(
                         legend = dict(
                             orientation='h',
-                            legend_y = 0,
+                            y = 0,
                             yanchor='top',
                             xanchor='left'
-                        )
+                        ),
+                        margin = {'r':0,'b':15}
                     )
 
                 else:
