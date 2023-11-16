@@ -2947,8 +2947,8 @@ class FUSION:
         return new_children
 
     def download_data(self,options,button_click):
-        print(ctx.triggered_id)
-        print(options)
+        #print(ctx.triggered_id)
+        #print(options)
         if button_click:
             if ctx.triggered_id['type'] == 'download-butt':
                 # Download data has to be a dictionary with content and filename keys. The filename extension will vary
@@ -2961,7 +2961,7 @@ class FUSION:
                 print(f'Download type: {self.download_handler.what_data(options)}')
                 download_type = self.download_handler.what_data(options)
                 if download_type == 'annotations':
-                    download_list = self.download_handler.extract_annotations(self.wsi,options)
+                    download_list = self.download_handler.extract_annotations(self.wsi,self.current_slide_bounds, options)
                 elif download_type == 'cell':
                     download_list = self.download_handler.extract_cell(self.current_ftus,options)
                 else:

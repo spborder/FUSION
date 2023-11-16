@@ -24,6 +24,7 @@ class DSASlide:
                  marked_ftus = []):
 
         self.slide_name = slide_name
+        self.slide_ext = slide_name.split('.')[-1]
         self.item_id = item_id
         self.girder_handler = girder_handler
         self.ftu_colors = ftu_colors

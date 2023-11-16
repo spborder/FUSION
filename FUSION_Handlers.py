@@ -31,7 +31,10 @@ import datetime
 
 import plotly.express as px
 import plotly.graph_objects as go
-from skimage.draw import polygon_perimeter
+#from skimage.draw import polygon_perimeter
+
+from wsi_annotations_kit import wsi_annotations_kit as wak
+from shapely import Polygon
 
 from dash import dcc, ctx, Dash, dash_table
 import dash_bootstrap_components as dbc
@@ -1086,7 +1089,7 @@ class LayoutHandler:
                             autoPlay = True,
                             preload=False,
                             id = {'type':'video','index':0})
-                ]),
+                ],style={'height':'80vh'}),
                 html.Hr(),
                 html.Div(id='tutorial-content',children = [])
             ]
@@ -2087,6 +2090,19 @@ class DownloadHandler:
 
         output_file = './assets/FUSION_Download.zip'
         # Writing files to the temp directory
+
+        # Checking if there are any xlsx files first
+        excel_files = [i for i in download_data_list if i['filename'].split('.')[-1]=='xlsx']
+        if len(excel_files)>0:
+            # Getting unique filenames
+            unique_filenames = np.unique([i['filename'] for i in excel_files]).tolist()
+            for u_f in unique_filenames:
+                save_path = './assets/FUSION_Download/'+u_f
+                with pd.ExcelWriter(save_path) as writer:
+                    for e in excel_files:
+                        if e['filename']==u_f:
+                            e['content'].to_excel(writer,sheet_name=e['sheet'],engine='openpyxl')
+
         for d in download_data_list:
             filename = d['filename']
             file_ext = filename.split('.')[-1]
@@ -2110,11 +2126,18 @@ class DownloadHandler:
 
                 d['content'].to_csv(save_path)
             
+            """
             elif file_ext == 'xlsx':
                 # If it's supposed to be an excel file, include sheet name as a key
-                with pd.ExcelWriter(save_path,mode='a') as writer:
-                    d['content'].to_excel(writer,sheet_name=d['sheet'],engine='openpyxl')
-
+                if not os.path.exists(save_path):
+                    with pd.ExcelWriter(save_path,mode='w') as writer:
+                        d['content'].to_excel(writer,sheet_name=d['sheet'],engine='openpyxl')
+                        writer.close()
+                else:
+                    with pd.ExcelWriter(save_path,mode='a') as writer:
+                        d['content'].to_excel(writer,sheet_name=d['sheet'],engine='openpyxl')
+                        writer.close()
+            """
         # Writing temporary data to a zip file
         with zipfile.ZipFile(output_file,'w', zipfile.ZIP_DEFLATED) as zip:
             for file in os.listdir('./assets/FUSION_Download/'):
@@ -2125,107 +2148,57 @@ class DownloadHandler:
         except OSError as e:
             print(f'OSError removing FUSION_Download directory: {e.strerror}')
 
-    def extract_annotations(self, slide, format):
+    def extract_annotations(self, slide, box_poly, format):
         
         # Extracting annotations from the current slide object
-        annotations = slide.geojson_ftus
-
+        intersecting_annotations = wak.Annotation()
+        intersecting_annotations.add_names(slide.ftu_names)
         width_scale = slide.x_scale
         height_scale = slide.y_scale
+        for ftu in slide.ftu_names:
+        
+            # Finding which members of a specfied ftu group intersect with the provided box_poly
+            if not ftu=='Spots':
+                ftu_intersect_idx = [i for i in range(0,len(slide.ftu_polys[ftu])) if slide.ftu_polys[ftu][i].intersects(box_poly)]
+                intersecting_polys = [slide.ftu_polys[ftu][i] for i in ftu_intersect_idx]
+                intersecting_props = [slide.ftu_props[ftu][i] for i in ftu_intersect_idx]
+            else:
+                ftu_intersect_idx = [i for i in range(0,len(slide.spot_polys)) if slide.spot_polys[i].intersects(box_poly)]
+                intersecting_polys = [slide.spot_polys[i] for i in ftu_intersect_idx]
+                intersecting_props = [slide.spot_polys[i] for i in ftu_intersect_idx]
+
+            if len(intersecting_polys)>0:
+
+                # Adjusting coordinates for polygons based on width and height scale
+                #scaled_polys = []
+                for i_p_idx,i_p in enumerate(intersecting_polys):
+                    og_coords = list(i_p.exterior.coords)
+                    scaled_coords = [(i[1]/height_scale,i[0]/width_scale) for i in og_coords]
+
+                    intersecting_annotations.add_shape(
+                        poly = Polygon(scaled_coords),
+                        box_crs=[0,0],
+                        structure = ftu,
+                        name = f'{ftu}_{ftu_intersect_idx[i_p_idx]}',
+                        properties=intersecting_props[i_p_idx]
+                    )
 
         if format=='GeoJSON':
             
             save_name = slide.slide_name.replace('.'+slide.slide_ext,'.geojson')
-
-            # Have to re-normalize coordinates and only save one or two properties
-            final_ann = {'type':'FeatureCollection','features':[]}
-            for f in annotations['features']:
-                f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]}}
-
-                scaled_coords = np.squeeze(np.array(f['geometry']['coordinates']))
-                if len(np.shape(scaled_coords))==2:
-                    scaled_coords[:,0] *= height_scale
-                    scaled_coords[:,1] *= width_scale
-                    scaled_coords = scaled_coords.astype(int).tolist()
-                    f_dict['geometry']['coordinates'] = scaled_coords
-
-                    f_dict['properties'] = {'label':f['properties']['label'], 'structure':f['properties']['structure']}
-
-                    final_ann['features'].append(f_dict)
+            final_ann = wak.GeoJSON(intersecting_annotations,verbose=False).geojson
 
         elif format == 'Aperio XML':
             
             save_name = slide.slide_name.replace('.'+slide.slide_ext,'.xml')
 
-            # Initializing xml file
-            final_ann = ET.Element('Annotations')
-
-            for l,name in enumerate(list(slide.ftus.keys())):
-                # Need some kinda random color here
-                ann = ET.SubElement(final_ann,'Annotation',attrib={'Type':'4','Visible':'1','ReadOnly':'0',
-                                                            'Incremental':'0','LineColorReadOnly':'0',
-                                                            'LineColor':'65280','Id':str(l),'NameReadOnly':'0'})
-                
-                regions = ET.SubElement(ann,'Regions')
-
-                # Getting the features to add to this layer based on name
-                layer_features = [i for i in annotations['features'] if i['properties']['structure']==name]
-
-                for r_idx,f in enumerate(layer_features):
-
-                    region = ET.SubElement(regions,'Region',attrib = {'NegativeROA':'0','ImageFocus':'-1',
-                                                                    'DisplayId':'1','InputRegionId':'0',
-                                                                    'Analyze':'0','Type':'0','Id':str(r_idx),
-                                                                    'Text': f['properties']['label']})
-
-                    verts = ET.SubElement(region,'Vertices')
-                    scaled_coords = np.squeeze(np.array(f['geometry']['coordinates']))
-                    if len(np.shape(scaled_coords))==2:
-                        scaled_coords[:,0] *= height_scale
-                        scaled_coords[:,1] *= width_scale
-                        scaled_coords = scaled_coords.astype(int).tolist()
-
-                        for v in scaled_coords:
-                            ET.SubElement(verts,'Vertex',attrib={'X':str(v[1]),'Y':str(v[0]),'Z':'0'})
-
-                        ET.SubElement(verts,'Vertex',attrib={'X':str(scaled_coords[0][1]),'Y':str(scaled_coords[0][0]),'Z':'0'})
-
+            final_ann = wak.AperioXML(intersecting_annotations,verbose=False).xml
             final_ann = ET.tostring(final_ann,encoding='unicode',pretty_print=True)
 
         elif format == 'Histomics JSON':
             
             save_name = slide.slide_name.replace('.'+slide.slide_ext,'.json')
-
-            # Following histomics JSON formatting
-            final_ann = []
-
-            for ftu_name in list(slide.ftus.keys()):
-
-                output_dict = {'name':ftu_name,'attributes':{},'elements':[]}
-                ftu_annotations = [i for i in annotations['features'] if i['properties']['structure']==ftu_name]
-
-                for f in ftu_annotations:
-                    scaled_coords = np.squeeze(np.array(f['geometry']['coordinates']))
-                    if len(np.shape(scaled_coords))==2:
-                        scaled_coords[:,0] *= height_scale
-                        scaled_coords[:,1] *= width_scale
-                        scaled_coords = scaled_coords.astype(int).tolist()
-
-                        struct_id = uuid.uuid4().hex[:24]
-                        struct_dict = {
-                            'type':'polyline',
-                            'points':[i+[0] for i in scaled_coords],
-                            'id':struct_id,
-                            'closed':True,
-                            'user':{
-                                'label':f['properties']['label']
-                            }
-                        }
-                        output_dict['elements'].append(struct_dict)
-
-            final_ann.append(output_dict)
-
-        
+            final_ann = wak.Histomics(intersecting_annotations,verbose=False).json       
 
         return [{'filename': save_name, 'content':final_ann}]
     
@@ -2241,12 +2214,15 @@ class DownloadHandler:
         # Formatting for downloads
         download_data = []
         for ftu in list(intersecting_ftus.keys()):
+            
+            # intersecting_ftus is a dictionary containing each FTU and a list of intersecting properties
+            ftu_cell_types_df = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in intersecting_ftus[ftu] if 'Main_Cell_Types' in i])
 
             # Main cell types should just be one file
-            if 'xlsx' in file_name:
-                main_content = {'filename':file_name,'sheet':ftu,'content':intersecting_ftus[ftu]['Main_Cell_Types']}
-            elif 'csv' in file_name:
-                main_content = {'filename':file_name,'content':intersecting_ftus[ftu]['Main_Cell_Types']}
+            if 'Excel' in file_name:
+                main_content = {'filename':'Main_Cell_Types.xlsx','sheet':ftu,'content':ftu_cell_types_df}
+            elif 'CSV' in file_name:
+                main_content = {'filename':f'{ftu}_Main_Cell_Types.csv','content':ftu_cell_types_df}
             else:
                 print('Invalid format (RDS will come later)')
                 main_content = {}
@@ -2254,11 +2230,16 @@ class DownloadHandler:
             download_data.append(main_content)
 
             # Cell state info
-            for mc in intersecting_ftus[ftu]['Cell_States']:
-                if 'xlsx' in file_name:
-                    state_content = {'filename':file_name.replace('.xlsx','')+f'_{ftu}_Cell_States.xlsx','sheet':mc.replace('/',''),'content':intersecting_ftus[ftu]['Cell_States'][mc]}
-                elif 'csv' in file_name:
-                    state_content = {'filename':file_name.replace('.csv','')+f'_{ftu}_{mc.replace("/","")}_Cell_States.csv','content':intersecting_ftus[ftu]['Cell_States'][mc]}
+            cell_states_list = [i['Cell_States'] for i in intersecting_ftus[ftu] if 'Cell_States' in i]
+            main_cell_types = np.unique([list(i.keys()) for i in cell_states_list]).tolist()
+            for mc in main_cell_types:
+
+                ftu_cell_states_df = pd.DataFrame.from_records([i[mc] for i in cell_states_list if mc in i])
+
+                if 'Excel' in file_name:
+                    state_content = {'filename':f'{ftu}_Cell_States.xlsx','sheet':mc.replace('/',''),'content':ftu_cell_states_df}
+                elif 'CSV' in file_name:
+                    state_content = {'filename':f'{ftu}_{mc.replace("/","")}_Cell_States.csv','content':ftu_cell_states_df}
                 else:
                     print('Invalid format (RDS will come later)')
                     state_content = {}
