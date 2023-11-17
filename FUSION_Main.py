@@ -707,7 +707,17 @@ class FUSION:
         self.app.callback(
             output = [
                 Output({'type':'seg-logs','index':ALL},'children'),
-                Output({'type':'seg-log-interval','index':ALL},'disabled'),
+                Output({'type':'seg-log-interval','index':ALL},'disabled')
+            ],
+            inputs = [
+                Input({'type':'seg-log-interval','index':ALL},'n_intervals')
+            ],
+            prevent_initial_call = True
+        )(self.update_logs)
+
+        # Populating the post-segmentation sub-compartment segmentation and feature extraction row
+        self.app.callback(
+            output = [
                 Output('post-segment-row','style'),
                 Output('structure-type','disabled'),
                 Output('ftu-select','options'),
@@ -716,10 +726,10 @@ class FUSION:
                 Output('ex-ftu-img','figure')
             ],
             inputs = [
-                Input({'type':'seg-log-interval','index':ALL},'n_intervals')
+                Input({'type':'seg-log-interval','index':ALL},'disabled')
             ],
             prevent_initial_call = True
-        )(self.update_logs)
+        )(self.post_segmentation)
 
         # Updating sub-compartment segmentation
         self.app.callback(
@@ -3363,7 +3373,7 @@ class FUSION:
                     seg_woodshed = [
                         dcc.Interval(
                             id = {'type':'seg-log-interval','index':0},
-                            interval = 1000,
+                            interval = 3000,
                             max_intervals = -1,
                             n_intervals = 0
                         ),
@@ -3395,7 +3405,9 @@ class FUSION:
         else:
             cell_status = 3
             cell_log = ''
-
+        
+        print(cell_status)
+        print(seg_status)
         # This would be at the end of the two jobs
         if seg_status+cell_status==6:
 
@@ -3432,6 +3444,7 @@ class FUSION:
             # disabling interval object
             seg_log_disable = True
 
+            """
             # post-segment-row stuff
             sub_comp_style = {'display':'flex'}
             disable_organ = True
@@ -3439,7 +3452,6 @@ class FUSION:
             if not self.upload_omics_id is None:
                 # Generating spot annotations based on cell types
                 spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
-
                 # Aggregating spot-level cell composition information to intersecting FTUs
                 spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
 
@@ -3494,7 +3506,7 @@ class FUSION:
                 data = px.imshow(image)['data'],
                 layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
             )
-
+            """
         else:
             # For during segmentation/cell-deconvolution
             seg_log_disable = False
@@ -3549,8 +3561,81 @@ class FUSION:
                     ),style={'height':'200px','display':'inline-block'}
                 )
 
-        return [seg_logs_div], [seg_log_disable], sub_comp_style, disable_organ, ftu_names, ftu_value, sub_comp_method, image_figure
-        
+        print(f'disabling interval: {seg_log_disable}')
+        return [seg_logs_div], [seg_log_disable]
+
+    def post_segmentation(self, seg_log_disable):
+
+        print(f'seg_log_disable: {seg_log_disable}')
+        if seg_log_disable[0] is not None:
+            if seg_log_disable[0]:
+                # post-segment-row stuff
+                sub_comp_style = {'display':'flex'}
+                disable_organ = True
+
+                if not self.upload_omics_id is None:
+                    # Generating spot annotations based on cell types
+                    spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
+                    # Aggregating spot-level cell composition information to intersecting FTUs
+                    spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
+
+                # Extracting annotations and initial sub-compartment mask
+                self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
+
+                # Populate with default sub-compartment parameters
+                self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
+
+                # Adding options to FTU options dropdown menu
+                ftu_names = []
+                for idx,i in enumerate(self.upload_annotations):
+                    if 'annotation' in i:
+                        if 'elements' in i['annotation']:
+                            if not 'interstitium' in i['annotation']['name']:
+                                if len(i['annotation']['elements'])>0:
+                                    ftu_names.append({
+                                        'label':i['annotation']['name'],
+                                        'value':idx,
+                                        'disabled':False
+                                    })
+                                else:
+                                    ftu_names.append({
+                                        'label':i['annotation']['name']+' (None detected in slide)',
+                                        'value':idx,
+                                        'disabled':True
+                                    })
+                            else:
+                                ftu_names.append({
+                                    'label':i['annotation']['name']+' (Not implemented for interstitium)',
+                                    'value':idx,
+                                    'disabled':True
+                                })
+
+                sub_comp_method = 'Manual'
+                # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+                self.layer_ann = {
+                    'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
+                    'current_annotation':0,
+                    'previous_annotation':0,
+                    'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
+                }
+
+                self.feature_extract_ftus = ftu_names
+                ftu_value = ftu_names[self.layer_ann['current_layer']]
+                image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+
+                self.layer_ann['current_image'] = image
+                self.layer_ann['current_mask'] = mask
+
+                image_figure = go.Figure(
+                    data = px.imshow(image)['data'],
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                )                
+
+                return sub_comp_style, disable_organ, ftu_names, ftu_value, sub_comp_method, image_figure
+        else:
+            
+            return no_update, no_update, no_update, no_update, no_update, no_update
+    
     def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state):
 
         new_ex_ftu = go.Figure()
