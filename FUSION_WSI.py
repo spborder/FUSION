@@ -124,6 +124,8 @@ class DSASlide:
         if os.path.exists('./assets/slide_annotations/'):
             shutil.rmtree('./assets/slide_annotations/')
 
+        # Assigning a unique integer id to each element
+        integer_idx = 0
         for a in tqdm(self.annotations):
             if 'elements' in a['annotation']:
                 f_name = a['annotation']['name']
@@ -174,6 +176,8 @@ class DSASlide:
                             f_dict['properties'] = f['user']
 
                         f_dict['properties']['name'] = f_name
+                        f_dict['properties']['unique_index'] = integer_idx
+                        integer_idx+=1
                         individual_geojson['features'].append(f_dict)
 
                         if not f_name=='Spots':

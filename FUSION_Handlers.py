@@ -104,12 +104,12 @@ class LayoutHandler:
         ]
 
         if not wsi is None:
+            print(f'Generating initial overlays for WSI')
             # View of WSI
             combined_colors_dict = {}
             for f in wsi.map_dict['FTUs']:
                 combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
             
-
             self.initial_overlays = [
                 dl.Overlay(
                     dl.LayerGroup(
@@ -211,7 +211,7 @@ class LayoutHandler:
             {
             'selector':'edge',
             'style':{
-                'line-width':15,
+                'lineWidth':15,
                 'line-color':'blue'
             }
             }

@@ -610,6 +610,7 @@ class FUSION:
         )(self.download_data)
 
         # Selecting and running CLIs
+        """
         self.app.callback(
             [Input('cli-drop','value'),
              Input('cli-run','n_clicks')],
@@ -620,7 +621,8 @@ class FUSION:
              Output('cli-results-followup','children')],
              prevent_initial_call = True
         )(self.run_analysis)
-
+        """
+        
         # Callback for Ask Fusey
         self.app.callback(
             [Output('ask-fusey-box','children'),
@@ -629,6 +631,14 @@ class FUSION:
             State('ask-fusey-box','style'),
             prevent_initial_call = True
         )(self.ask_fusey)
+
+        # Adding labels from popup boxes
+        self.app.callback(
+            Output({'type':'added-labels-div','index':MATCH},'children'),
+            Input({'type':'add-popup-note','index':MATCH},'n_clicks'),
+            State({'type':'popup-notes','index':MATCH},'value'),
+            prevent_initial_call = True
+        )(self.add_label)
 
     def builder_callbacks(self):
 
@@ -1334,6 +1344,8 @@ class FUSION:
                         cluster_label = int(g['Cluster'])
                         raw_values_list.append(cluster_label)
             
+        elif color_type is None:
+            raw_values_list = []
         else:
             # For specific morphometrics
             for f in self.wsi.ftu_props:
@@ -1357,7 +1369,6 @@ class FUSION:
                 hex_list.append('#'+"%02x%02x%02x" % (rgb_values[row,0],rgb_values[row,1],rgb_values[row,2]))
 
             self.hex_color_key = {i:j for i,j in zip(raw_values_list,hex_list)}
-            #print(f'hex color key: {self.hex_color_key}')
         else:
             self.hex_color_key = {}
 
@@ -1563,19 +1574,6 @@ class FUSION:
             for struct in self.wsi.map_dict['FTUs']
         ]
 
-        """
-        new_children += [
-            dl.Overlay(
-                dl.LayerGroup(
-                    dl.GeoJSON(url = './assets/slide_annotations/Spots.json', id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
-                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = self.ftu_colors['Spots'],filter_vals = self.filter_vals),
-                                hoverStyle = arrow_function(dict(weight=5,color=self.wsi.spot_dict['hover_color'],dashArray='')),
-                                children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],
-                                zoomToBounds=False)
-                ),name = 'Spots', checked = False, id = self.wsi.item_id+'_Spots'
-            )
-        ]
-        """
         for m_idx,man in enumerate(self.wsi.manual_rois):
             new_children.append(
                 dl.Overlay(
@@ -1602,6 +1600,8 @@ class FUSION:
 
         self.current_overlays = new_children
                     
+        print(f'Generated: {len(new_children)} annotation layers')
+
         return new_children, color_bar, filter_max_val, filter_disable, cell_sub_select_children
 
     def update_cell_hierarchy(self,cell_clickData):
@@ -1664,6 +1664,7 @@ class FUSION:
 
         if not ftu_click is None:
             self.clicked_ftu = ftu_click
+            ftu_idx = ftu_click['properties']['unique_index']
 
             if 'Main_Cell_Types' in ftu_click['properties']:
 
@@ -1776,7 +1777,11 @@ class FUSION:
                             ],title = 'Other Properties'),
                             dbc.AccordionItem([
                                 html.Div([
-                                    dcc.Input(type='text',placeholder='Notes',id={'type':'popup-notes','index':0})
+                                    dbc.Row(html.Div(id={'type':'added-labels-div','index':ftu_idx})),
+                                    dbc.Row([
+                                        dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
+                                        dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
+                                    ])
                                 ])
                             ],title = 'Custom Properties')
                         ])
@@ -2255,8 +2260,9 @@ class FUSION:
                     # Adding "Hidden" column with image grabbing info
                     feature_data['Hidden'] = self.clustering_data['Hidden']       
                     feature_data['label'] = label_data
-                    feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
-                    feature_data['Cell_States'] = self.clustering_data['Cell_States']
+                    if 'Main_Cell_Types' in self.clustering_data.columns:
+                        feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
+                        feature_data['Cell_States'] = self.clustering_data['Cell_States']
 
                     self.feature_data = feature_data
                     
@@ -2331,8 +2337,9 @@ class FUSION:
                     # Adding "Hidden" column with image grabbing info
                     feature_data['Hidden'] = self.clustering_data['Hidden']       
                     feature_data['label'] = label_data
-                    feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
-                    feature_data['Cell_States'] = self.clustering_data['Cell_States']
+                    if 'Main_Cell_Types' in self.clustering_data.columns:
+                        feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
+                        feature_data['Cell_States'] = self.clustering_data['Cell_States']
 
                     self.feature_data = feature_data
                     
@@ -2384,9 +2391,9 @@ class FUSION:
                     # Scaling and reducing feature data using UMAP
                     feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()
                     feature_data['label'] = label_data
-
-                    feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
-                    feature_data['Cell_States'] = self.clustering_data['Cell_States']
+                    if 'Main_Cell_Types' in self.clustering_data.columns:
+                        feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
+                        feature_data['Cell_States'] = self.clustering_data['Cell_States']
 
                     self.feature_data = feature_data
                     # Dropping filtered out rows
@@ -2509,6 +2516,17 @@ class FUSION:
 
             self.current_selected_samples = sample_index
 
+            # Creating selected_image_info children
+            # This could have more functionality
+            # Like adding markers or going to that region in the current slide (if the selected image is from the current slide)
+            slide_names = [self.dataset_handler.gc.get(f'/item/{s_i["Slide_Id"]}')["name"] for s_i in sample_info]
+            label_list = self.feature_data['label'].tolist()
+            image_labels = [label_list[l] for l in sample_index]
+            selected_image_info = html.Div([
+                dbc.Row(dbc.Col(html.P(f'Image: {i}, Slide: {j}, Label: {k}')))
+                for i,j,k in list(zip(list(range(len(slide_names))),slide_names,image_labels))
+            ],style = {'maxHeight':'100px','overflow':'scroll'})
+
             current_image = self.grab_image(sample_info)
             if len(current_image)==1:
                 selected_image = go.Figure(
@@ -2526,60 +2544,51 @@ class FUSION:
                 print(f'selected:{selected}')
                 print(f'self.current_selected_samples: {self.current_selected_samples}')
 
-            # Preparing figure containing cell types + cell states info
-            main_cell_types_list = self.feature_data['Main_Cell_Types'].tolist()
-            #print(f'size of main_cell_types_list: {len(main_cell_types_list)}')
-            #print(f'sample_index: {sample_index}')
-            counts_data = pd.DataFrame([main_cell_types_list[i] for i in sample_index]).sum(axis=0).to_frame()
-            counts_data.columns = ['Selected Data Points']
-            counts_data = counts_data.reset_index()
-            # Normalizing to sum to 1
-            counts_data['Selected Data Points'] = counts_data['Selected Data Points']/(counts_data['Selected Data Points'].sum()+0.00000001)
+            if 'Main_Cell_Types' in self.feature_data.columns:
+                # Preparing figure containing cell types + cell states info
+                main_cell_types_list = self.feature_data['Main_Cell_Types'].tolist()
+                #print(f'size of main_cell_types_list: {len(main_cell_types_list)}')
+                #print(f'sample_index: {sample_index}')
+                counts_data = pd.DataFrame([main_cell_types_list[i] for i in sample_index]).sum(axis=0).to_frame()
+                counts_data.columns = ['Selected Data Points']
+                counts_data = counts_data.reset_index()
+                # Normalizing to sum to 1
+                counts_data['Selected Data Points'] = counts_data['Selected Data Points']/(counts_data['Selected Data Points'].sum()+0.00000001)
 
-            # Only getting the top-5
-            counts_data = counts_data.sort_values(by='Selected Data Points',ascending=False)
-            counts_data = counts_data[counts_data['Selected Data Points']>0]
-            if counts_data.shape[0]>0:
-                f_pie = px.pie(counts_data,values='Selected Data Points',names='index')
+                # Only getting the top-5
+                counts_data = counts_data.sort_values(by='Selected Data Points',ascending=False)
+                counts_data = counts_data[counts_data['Selected Data Points']>0]
+                if counts_data.shape[0]>0:
+                    f_pie = px.pie(counts_data,values='Selected Data Points',names='index')
 
-                # Getting initial cell state info
-                first_cell = counts_data['index'].tolist()[0]
-                cell_states_list = self.feature_data['Cell_States'].tolist()
-                state_data = pd.DataFrame([cell_states_list[i][first_cell] for i in sample_index]).sum(axis=0).to_frame()
-                state_data = state_data.reset_index()
-                state_data.columns = ['Cell States',f'Cell States for {first_cell}']
+                    # Getting initial cell state info
+                    first_cell = counts_data['index'].tolist()[0]
+                    cell_states_list = self.feature_data['Cell_States'].tolist()
+                    state_data = pd.DataFrame([cell_states_list[i][first_cell] for i in sample_index]).sum(axis=0).to_frame()
+                    state_data = state_data.reset_index()
+                    state_data.columns = ['Cell States',f'Cell States for {first_cell}']
 
-                state_data[f'Cell States for {first_cell}'] = state_data[f'Cell States for {first_cell}']/state_data[f'Cell States for {first_cell}'].sum()
+                    state_data[f'Cell States for {first_cell}'] = state_data[f'Cell States for {first_cell}']/state_data[f'Cell States for {first_cell}'].sum()
 
-                s_bar = px.bar(state_data, x='Cell States', y = f'Cell States for {first_cell}', title = f'Cell States for:<br><sup>{self.cell_graphics_key[first_cell]["full"]} in:</sup><br><sup>selected points</sup>')
-                
-                selected_cell_types = go.Figure(f_pie)
-                selected_cell_states = go.Figure(s_bar)
+                    s_bar = px.bar(state_data, x='Cell States', y = f'Cell States for {first_cell}', title = f'Cell States for:<br><sup>{self.cell_graphics_key[first_cell]["full"]} in:</sup><br><sup>selected points</sup>')
+                    
+                    selected_cell_types = go.Figure(f_pie)
+                    selected_cell_states = go.Figure(s_bar)
 
-                selected_cell_states.update_layout(
-                    margin=dict(l=0,r=0,t=85,b=0)
-                )
-                selected_cell_types.update_layout(
-                    margin=dict(l=0,r=0,t=0,b=0),
-                    showlegend=False
-                )
+                    selected_cell_states.update_layout(
+                        margin=dict(l=0,r=0,t=85,b=0)
+                    )
+                    selected_cell_types.update_layout(
+                        margin=dict(l=0,r=0,t=0,b=0),
+                        showlegend=False
+                    )
 
-                # Creating selected_image_info children
-                # This could have more functionality
-                # Like adding markers or going to that region in the current slide (if the selected image is from the current slide)
-                slide_names = [self.dataset_handler.gc.get(f'/item/{s_i["Slide_Id"]}')["name"] for s_i in sample_info]
-                label_list = self.feature_data['label'].tolist()
-                image_labels = [label_list[l] for l in sample_index]
-                selected_image_info = html.Div([
-                    dbc.Row(dbc.Col(html.P(f'Image: {i}, Slide: {j}, Label: {k}')))
-                    for i,j,k in list(zip(list(range(len(slide_names))),slide_names,image_labels))
-                ],style = {'maxHeight':'100px','overflow':'scroll'})
-
+                else:
+                    selected_cell_types = go.Figure()
+                    selected_cell_states = go.Figure()
             else:
                 selected_cell_types = go.Figure()
                 selected_cell_states = go.Figure()
-                #selected_image = go.Figure()
-                selected_image_info = []
 
             return selected_image, selected_cell_types, selected_cell_states, selected_image_info
         else:
@@ -3410,10 +3419,11 @@ class FUSION:
             s_stat, s_log = self.dataset_handler.get_job_status(seg_job['_id'])
             seg_log.append(s_log)
             seg_status+=s_stat
-        seg_log = '<br>'.join(seg_log)
+        seg_log = [html.P(s) for s in seg_log]
 
         if not self.upload_omics_id is None:
             cell_status, cell_log = self.dataset_handler.get_job_status(self.cell_deconv_job_info['_id'])
+            cell_log = [html.P(cell_log)]
         else:
             cell_status = 3
             cell_log = ''
@@ -3478,10 +3488,10 @@ class FUSION:
                 seg_logs_div = html.Div(
                     dbc.Row([
                         dbc.Col(html.Div(
-                            seg_part
+                            children = seg_part
                         ),md=6),
                         dbc.Col(html.Div(
-                            cell_part
+                            children = cell_part
                         ),md=6)
                     ],align='center'),style={'height':'200px','display':'inline-block'}
                 )
@@ -3497,7 +3507,7 @@ class FUSION:
                 seg_logs_div = html.Div(
                     dbc.Row(
                         dbc.Col(html.Div(
-                            seg_part
+                            children = seg_part
                         ),md=12),align='center'
                     ),style={'height':'200px','display':'inline-block'}
                 )
@@ -3809,6 +3819,30 @@ class FUSION:
         
         return fusey_child, parent_style
 
+    def add_label(self,notes_click,pop_input):
+
+        if not pop_input is None:
+
+            # Creating the pop_label_children object with delete button
+            # Have to also add other labels
+            pop_label_children = [
+                dbc.Row([
+                    dbc.Col(html.P(textwrap.wrap(pop_input,width=250)),md=11),
+                    dbc.Col(
+                        html.I(
+                            id = {'type':'delete-user-label','index':self.clicked_ftu['properties']['unique_index']},
+                            n_clicks = 0,
+                            className = 'bi bi-x-circle-fill',
+                            style={'color':'rgb(255,0,0)'}
+                        ),
+                        md = 1
+                    )
+                ],align='center')
+            ]
+
+            return pop_label_children
+        else:
+            raise exceptions.PreventUpdate
 
 def app(*args):
     
