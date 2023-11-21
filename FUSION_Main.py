@@ -622,7 +622,7 @@ class FUSION:
              prevent_initial_call = True
         )(self.run_analysis)
         """
-        
+
         # Callback for Ask Fusey
         self.app.callback(
             [Output('ask-fusey-box','children'),
@@ -3827,7 +3827,7 @@ class FUSION:
             # Have to also add other labels
             pop_label_children = [
                 dbc.Row([
-                    dbc.Col(html.P(textwrap.wrap(pop_input,width=250)),md=11),
+                    dbc.Col(html.P(textwrap.wrap(pop_input,width=200)),md=8),
                     dbc.Col(
                         html.I(
                             id = {'type':'delete-user-label','index':self.clicked_ftu['properties']['unique_index']},
@@ -3835,7 +3835,7 @@ class FUSION:
                             className = 'bi bi-x-circle-fill',
                             style={'color':'rgb(255,0,0)'}
                         ),
-                        md = 1
+                        md = 4
                     )
                 ],align='center')
             ]
