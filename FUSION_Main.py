@@ -3830,31 +3830,12 @@ class FUSION:
 
     def add_label(self,notes_click,delete_click,pop_input):
 
-        print(ctx.triggered_id)
-
         if ctx.triggered_id['type']=='add-popup-note':        
             # Adding provided label to ftu's user_label property
             self.wsi.add_label(self.clicked_ftu,pop_input[0],'add')
 
             # Getting current user-labels
             pop_label_children = self.layout_handler.get_user_ftu_labels(self.wsi,self.clicked_ftu)
-
-            # Creating the pop_label_children object with delete button
-            # Have to also add other labels
-            pop_label_children.append(
-                dbc.Row([
-                    dbc.Col(html.P(textwrap.wrap(pop_input[0],width=200)),md=8),
-                    dbc.Col(
-                        html.I(
-                            id = {'type':'delete-user-label','index':len(pop_label_children)},
-                            n_clicks = 0,
-                            className = 'bi bi-x-circle-fill',
-                            style={'color':'rgb(255,0,0)'}
-                        ),
-                        md = 4
-                    )
-                ],align='center')
-            )
 
         elif ctx.triggered_id['type']=='delete-user-label':
             
