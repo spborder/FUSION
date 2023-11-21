@@ -10,6 +10,7 @@ import numpy as np
 from shapely.geometry import shape
 import random
 import json
+import geojson
 import shutil
 
 from tqdm import tqdm
@@ -42,6 +43,47 @@ class DSASlide:
     def __str__(self):
         
         return f'{self.slide_name}'
+
+    def add_label(self,ftu,label,mode):
+        
+        # Updating geojson for an FTU to include the provided label
+        ftu_name = ftu['properties']['name']
+        ftu_index = ftu['properties']['unique_index']
+        
+        # Reading in original geojson
+        with open(f'./assets/slide_annotations/{ftu_name}.json') as f:
+            og_geojson = geojson.load(f)
+        
+        if mode=='add':
+            if 'user_labels' in og_geojson['features'][ftu_index]['properties']:
+                og_geojson['features'][ftu_index]['properties']['user_labels'].append(label)
+            else:
+                og_geojson['features'][ftu_index]['properties']['user_labels'] = [label]
+
+            # Adding to props
+            if ftu_name == 'Spots':
+                if 'user_labels' in self.spot_props[ftu_index]:
+                    self.spot_props[ftu_index]['user_labels'].append(label)
+                else:
+                    self.spot_props[ftu_index]['user_labels'] = [label]
+            else:
+                if 'user_labels' in self.ftu_props[ftu_name][ftu_index]:
+                    self.ftu_props[ftu_name][ftu_index]['user_labels'].append(label)
+                else:
+                    self.ftu_props[ftu_name][ftu_index]['user_labels'] = [label]
+
+        elif mode=='remove':
+            og_geojson['features'][ftu_index]['properties']['user_labels'].pop(label)
+
+            # Removing from props
+            if ftu_name=='Spots':
+                self.spot_props[ftu_index]['user_labels'].pop(label)
+            else:
+                self.ftu_props[ftu_name][ftu_index]['user_labels'].pop(label)
+
+        # Writing edited geojson back
+        with open(f'./assets/slide_annotations/{ftu_name}.json','w') as f:
+            json.dump(og_geojson,f)
 
     def get_slide_map_data(self,resource):
         # Getting all of the necessary materials for loading a new slide

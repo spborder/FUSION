@@ -634,9 +634,10 @@ class FUSION:
 
         # Adding labels from popup boxes
         self.app.callback(
-            Output({'type':'added-labels-div','index':MATCH},'children'),
-            Input({'type':'add-popup-note','index':MATCH},'n_clicks'),
-            State({'type':'popup-notes','index':MATCH},'value'),
+            Output({'type':'added-labels-div','index':ALL},'children'),
+            [Input({'type':'add-popup-note','index':ALL},'n_clicks'),
+             Input({'type':'delete-user-label','index':ALL},'n_clicks')],
+            State({'type':'popup-notes','index':ALL},'value'),
             prevent_initial_call = True
         )(self.add_label)
 
@@ -1717,6 +1718,7 @@ class FUSION:
                     f_pie.update_traces(textposition='inside')
 
                     # popup div
+                    add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
                     popup_div = html.Div([
                         dbc.Accordion([
                             dbc.AccordionItem([
@@ -1777,7 +1779,14 @@ class FUSION:
                             ],title = 'Other Properties'),
                             dbc.AccordionItem([
                                 html.Div([
-                                    dbc.Row(html.Div(id={'type':'added-labels-div','index':ftu_idx})),
+                                    dbc.Row([
+                                        dbc.Col(html.Div(
+                                                id={'type':'added-labels-div','index':ftu_idx},
+                                                children = add_labels_children
+                                            ), md=11
+                                        ),
+                                        dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
+                                    ]),
                                     dbc.Row([
                                         dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
                                         dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
@@ -3819,18 +3828,25 @@ class FUSION:
         
         return fusey_child, parent_style
 
-    def add_label(self,notes_click,pop_input):
+    def add_label(self,notes_click,delete_click,pop_input):
 
-        if not pop_input is None:
+        print(ctx.triggered_id)
+
+        if ctx.triggered_id['type']=='add-popup-note':        
+            # Adding provided label to ftu's user_label property
+            self.wsi.add_label(self.clicked_ftu,pop_input[0],'add')
+
+            # Getting current user-labels
+            pop_label_children = self.layout_handler.get_user_ftu_labels(self.wsi,self.clicked_ftu)
 
             # Creating the pop_label_children object with delete button
             # Have to also add other labels
-            pop_label_children = [
+            pop_label_children.append(
                 dbc.Row([
-                    dbc.Col(html.P(textwrap.wrap(pop_input,width=200)),md=8),
+                    dbc.Col(html.P(textwrap.wrap(pop_input[0],width=200)),md=8),
                     dbc.Col(
                         html.I(
-                            id = {'type':'delete-user-label','index':self.clicked_ftu['properties']['unique_index']},
+                            id = {'type':'delete-user-label','index':len(pop_label_children)},
                             n_clicks = 0,
                             className = 'bi bi-x-circle-fill',
                             style={'color':'rgb(255,0,0)'}
@@ -3838,11 +3854,20 @@ class FUSION:
                         md = 4
                     )
                 ],align='center')
-            ]
+            )
 
-            return pop_label_children
-        else:
-            raise exceptions.PreventUpdate
+        elif ctx.triggered_id['type']=='delete-user-label':
+            
+            # Removing label based on index
+            remove_index = ctx.triggered_id['index']
+
+            self.wsi.add_label(self.clicked_ftu,remove_index,'remove')
+
+            # Getting current user-labels
+            pop_label_children = self.layout_handler.get_user_ftu_labels(self.wsi,self.clicked_ftu)
+        
+        return [pop_label_children]
+
 
 def app(*args):
     

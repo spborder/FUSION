@@ -49,6 +49,7 @@ from dash_extensions.javascript import arrow_function
 import girder_client
 from tqdm import tqdm
 from timeit import default_timer as timer
+import textwrap
 
 
 
@@ -683,6 +684,40 @@ class LayoutHandler:
         self.validation_layout.append(vis_content)
         self.layout_dict['vis'] = vis_content
         self.description_dict['vis'] = vis_description
+
+    def get_user_ftu_labels(self,wsi,ftu):
+
+        # Getting user-provided ftu labels entered in the popup input
+        ftu_name = ftu['properties']['name']
+        ftu_index = ftu['properties']['id']
+        print(ftu_name)
+        print(ftu_index)
+        ftu_properties = wsi.ftu_props[ftu_name][ftu_index]
+        if 'user_labels' in ftu_properties:
+            # Creating div with user-labels
+            user_ftu_labels_children = []
+            for u_idx,u in enumerate(ftu_properties['user_labels']):
+                user_ftu_labels_children.append(
+                    dbc.Row([
+                        dbc.Col(
+                            html.P(textwrap.wrap(u,width=200)),
+                            md = 8
+                        ),
+                        dbc.Col(
+                            html.I(
+                                id = {'type':'delete-user-label','index':u_idx},
+                                n_clicks=0,
+                                className='bi bi-x-circle-fill',
+                                style={'color':'rgb(255,0,0)'}
+                            ),
+                            md = 4
+                        )
+                    ],align='center')
+                )
+        else:
+            user_ftu_labels_children = []
+
+        return user_ftu_labels_children
 
     def gen_builder_layout(self, dataset_handler):
 
