@@ -144,6 +144,7 @@ class PrepHandler:
         folder_id = item_info['folderId']
         file_id = item_info['largeImage']['fileId']
 
+        job_responses = []
         for model in self.model_zoo:
 
             # Testing if a structure from structure_types is included in that model's structures
@@ -161,7 +162,8 @@ class PrepHandler:
                                                     'base_dir':folder_id,
                                                     'modelfile':self.model_zoo[model]['model_id']
                                                 })
-                else:
+                    job_responses.append(job_response)
+                elif model=='IFTA_Model':
                     # The other models have slightly different input parameter names :/
                     job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.model_zoo[model]["plugin_name"]}/run',
                                                 parameters = {
@@ -171,11 +173,24 @@ class PrepHandler:
                                                     'basedir':folder_id,
                                                     'model':self.model_zoo[model]['model_id']
                                                 })
-                    
-                print(f'job_response: {job_response}')
-            
+                    job_responses.append(job_response)
 
-        return job_response
+                elif model=='PTC_Model':
+                    # The other models have slightly different input parameter names :/
+                    job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.model_zoo[model]["plugin_name"]}/run',
+                                                parameters = {
+                                                    'girderApiUrl':self.girder_handler.apiUrl,
+                                                    'girderToken':self.girder_handler.user_token,
+                                                    'input_files':file_id,
+                                                    'base_dir':folder_id,
+                                                    'patch_size': 256,
+                                                    'batch_size': 10,
+                                                    'resize':1,
+                                                    'model':self.model_zoo[model]['model_id']
+                                                })
+                    job_responses.append(job_response)
+                                
+        return job_responses
 
     def sub_segment_image(self,image,mask,seg_params,view_method,transparency_val):
         

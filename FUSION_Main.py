@@ -3399,15 +3399,20 @@ class FUSION:
         # structure-type disabled, ftu-select options, ftu-select value, sub-comp-method value,
         # ex-ftu-img figure
         # Getting most recent logs:
-        seg_status, seg_log = self.dataset_handler.get_job_status(self.segmentation_job_info['_id'])
+        seg_status = 0
+        seg_log = []
+        for seg_job in self.segmentation_info:
+            s_stat, s_log = self.dataset_handler.get_job_status(seg_job['_id'])
+            seg_log.append(s_log)
+            seg_status+=s_stat
+        seg_log = '<br>'.join(seg_log)
+        
         if not self.upload_omics_id is None:
             cell_status, cell_log = self.dataset_handler.get_job_status(self.cell_deconv_job_info['_id'])
         else:
             cell_status = 3
             cell_log = ''
         
-        print(cell_status)
-        print(seg_status)
         # This would be at the end of the two jobs
         if seg_status+cell_status==6:
 
@@ -3444,78 +3449,9 @@ class FUSION:
             # disabling interval object
             seg_log_disable = True
 
-            """
-            # post-segment-row stuff
-            sub_comp_style = {'display':'flex'}
-            disable_organ = True
-
-            if not self.upload_omics_id is None:
-                # Generating spot annotations based on cell types
-                spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
-                # Aggregating spot-level cell composition information to intersecting FTUs
-                spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
-
-            # Extracting annotations and initial sub-compartment mask
-            self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
-
-            # Populate with default sub-compartment parameters
-            self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
-
-            # Adding options to FTU options dropdown menu
-            ftu_names = []
-            for idx,i in enumerate(self.upload_annotations):
-                if 'annotation' in i:
-                    if 'elements' in i['annotation']:
-                        if not 'interstitium' in i['annotation']['name']:
-                            if len(i['annotation']['elements'])>0:
-                                ftu_names.append({
-                                    'label':i['annotation']['name'],
-                                    'value':idx,
-                                    'disabled':False
-                                })
-                            else:
-                                ftu_names.append({
-                                    'label':i['annotation']['name']+' (None detected in slide)',
-                                    'value':idx,
-                                    'disabled':True
-                                })
-                        else:
-                            ftu_names.append({
-                                'label':i['annotation']['name']+' (Not implemented for interstitium)',
-                                'value':idx,
-                                'disabled':True
-                            })
-
-            sub_comp_method = 'Manual'
-            # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
-            self.layer_ann = {
-                'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
-                'current_annotation':0,
-                'previous_annotation':0,
-                'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
-            }
-
-            self.feature_extract_ftus = ftu_names
-            ftu_value = ftu_names[self.layer_ann['current_layer']]
-            image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
-
-            self.layer_ann['current_image'] = image
-            self.layer_ann['current_mask'] = mask
-
-            image_figure = go.Figure(
-                data = px.imshow(image)['data'],
-                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-            )
-            """
         else:
             # For during segmentation/cell-deconvolution
             seg_log_disable = False
-            sub_comp_style = {'display':'none'}
-            disable_organ = True
-            ftu_names = no_update
-            ftu_value = no_update
-            sub_comp_method = no_update
-            image_figure = no_update
 
             if not self.upload_omics_id is None:
                 if seg_status==3:
@@ -3632,6 +3568,8 @@ class FUSION:
                 )                
 
                 return sub_comp_style, disable_organ, ftu_names, ftu_value, sub_comp_method, image_figure
+            else:
+                return no_update, no_update, no_update, no_update,no_update, no_update
         else:
             
             return no_update, no_update, no_update, no_update, no_update, no_update
