@@ -685,7 +685,8 @@ class FUSION:
              Output({'type':'wsi-upload-div','index':ALL},'children'),
              Output({'type':'omics-upload-div','index':ALL},'children'),
              Output('structure-type','disabled'),
-             Output('post-upload-row','style')],
+             Output('post-upload-row','style'),
+             Output('upload-type','disabled')],
             prevent_initial_call=True
         )(self.upload_data)
 
@@ -3329,16 +3330,20 @@ class FUSION:
 
             structure_type_disabled = False
             post_upload_style = {'display':'flex'}
+            disable_upload_type = True
             
             if 'Omics' in self.upload_check:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type
             else:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style    
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type
         else:
+
+            disable_upload_type = True
+
             if 'Omics' in self.upload_check:
-                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update
+                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type
             else:
-                return no_update, no_update, [wsi_upload_children], [], True, no_update
+                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type
 
     def slide_qc(self, upload_id):
 
@@ -3401,12 +3406,12 @@ class FUSION:
         # Getting most recent logs:
         seg_status = 0
         seg_log = []
-        for seg_job in self.segmentation_info:
+        for seg_job in self.segmentation_job_info:
             s_stat, s_log = self.dataset_handler.get_job_status(seg_job['_id'])
             seg_log.append(s_log)
             seg_status+=s_stat
         seg_log = '<br>'.join(seg_log)
-        
+
         if not self.upload_omics_id is None:
             cell_status, cell_log = self.dataset_handler.get_job_status(self.cell_deconv_job_info['_id'])
         else:
@@ -3414,7 +3419,7 @@ class FUSION:
             cell_log = ''
         
         # This would be at the end of the two jobs
-        if seg_status+cell_status==6:
+        if seg_status+cell_status==3*(1+len(self.segmentation_job_info)):
 
             # Div containing the job logs:
             if not self.upload_omics_id is None:

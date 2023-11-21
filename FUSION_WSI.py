@@ -98,14 +98,13 @@ class DSASlide:
         # bottom_right[0]-top_left[0] --> range of x values in target crs
         # bottom_right[1]-top_left[1] --> range of y values in target crs
         # scaling values so they fall into the current map (pixels)
-        x_scale = self.tile_dims[0]/self.image_dims[0]
-        y_scale = self.tile_dims[1]/self.image_dims[1]
+        # This method works for all tile sizes, leaflet container must just be expecting 240
+        x_scale = (self.tile_dims[0])/(self.image_dims[0]*(self.tile_dims[0]/240))
+        y_scale = (self.tile_dims[1])/(self.image_dims[1]*(self.tile_dims[1]/240))
         y_scale*=-1
 
         print(f'x_scale: {x_scale}, y_scale: {y_scale}')
         # y_scale has to be inverted because y is measured upward in these maps
-
-        ## Error occurs with tile sizes = 256, all work with tile size=240 ##
 
         print('Processing annotations')
         self.ftu_names = []
@@ -141,61 +140,65 @@ class DSASlide:
                 individual_geojson = {'type':'FeatureCollection','features':[]}
                 for f in tqdm(a['annotation']['elements']):
                     f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]},'properties':{}}
-                    
-                    # This is only for polyline type elements
-                    if f['type']=='polyline':
-                        og_coords = np.squeeze(np.array(f['points']))
+
+                    # Checking if the shape is valid (some models output single pixel/bad predictions which aren't shapes)
+                    if self.check_validity(f):
                         
-                        scaled_coords = og_coords.tolist()
-                        scaled_coords = [i[0:-1] for i in scaled_coords]
-                        scaled_coords = [[base_x_scale*((i[0]*x_scale)),base_y_scale*((i[1]*y_scale))] for i in scaled_coords]
-                        f_dict['geometry']['coordinates'] = [scaled_coords]
+                        # This is only for polyline type elements
+                        if f['type']=='polyline':
+                            og_coords = np.squeeze(np.array(f['points']))
+                            
+                            scaled_coords = og_coords.tolist()
+                            scaled_coords = [i[0:-1] for i in scaled_coords]
+                            scaled_coords = [[base_x_scale*((i[0]*x_scale)),base_y_scale*((i[1]*y_scale))] for i in scaled_coords]
+                            
+                            f_dict['geometry']['coordinates'] = [scaled_coords]
 
-                    elif f['type']=='rectangle':
-                        width = f['width']
-                        height = f['height']
-                        center = f['center'][0:-1]
-                        # Coords: top left, top right, bottom right, bottom left
-                        bbox_coords = [
-                            [int(center[0])-int(width/2),int(center[1])-int(height/2)],
-                            [int(center[0])+int(width/2),int(center[1])-int(height/2)],
-                            [int(center[0])+int(width/2),int(center[1])+int(height/2)],
-                            [int(center[0])-int(width/2),int(center[1])+int(height/2)]
-                        ]
-                        scaled_coords = [[base_x_scale*(i[0]*x_scale),base_y_scale*(i[1]*y_scale)] for i in bbox_coords]
-                        f_dict['geometry']['coordinates'] = [scaled_coords]
+                        elif f['type']=='rectangle':
+                            width = f['width']
+                            height = f['height']
+                            center = f['center'][0:-1]
+                            # Coords: top left, top right, bottom right, bottom left
+                            bbox_coords = [
+                                [int(center[0])-int(width/2),int(center[1])-int(height/2)],
+                                [int(center[0])+int(width/2),int(center[1])-int(height/2)],
+                                [int(center[0])+int(width/2),int(center[1])+int(height/2)],
+                                [int(center[0])-int(width/2),int(center[1])+int(height/2)]
+                            ]
+                            scaled_coords = [[base_x_scale*(i[0]*x_scale),base_y_scale*(i[1]*y_scale)] for i in bbox_coords]
+                            f_dict['geometry']['coordinates'] = [scaled_coords]
 
-                    # Who even cares about circles and ellipses??
-                    # If any user-provided metadata is provided per element add it to "properties" key                       
-                    if 'user' in f:
-                        f_dict['properties'] = f['user']
+                        # Who even cares about circles and ellipses??
+                        # If any user-provided metadata is provided per element add it to "properties" key                       
+                        if 'user' in f:
+                            f_dict['properties'] = f['user']
 
-                    f_dict['properties']['name'] = f_name
-                    individual_geojson['features'].append(f_dict)
+                        f_dict['properties']['name'] = f_name
+                        individual_geojson['features'].append(f_dict)
 
-                    if not f_name=='Spots':
-                        self.ftu_polys[f_name].append(shape(f_dict['geometry']))
-                        self.ftu_props[f_name].append(f_dict['properties'])
-                    else:
-                        self.spot_polys.append(shape(f_dict['geometry']))
-                        self.spot_props.append(f_dict['properties'])
+                        if not f_name=='Spots':
+                            self.ftu_polys[f_name].append(shape(f_dict['geometry']))
+                            self.ftu_props[f_name].append(f_dict['properties'])
+                        else:
+                            self.spot_polys.append(shape(f_dict['geometry']))
+                            self.spot_props.append(f_dict['properties'])
 
-                    for p in f_dict['properties']:
-                        if p not in included_props:
-                            if p in self.visualization_properties:
-                                
-                                if type(f_dict['properties'][p])==dict:
-                                    included_props.append(p)
-                                    f_k = list(f_dict['properties'][p].keys())
-                                    if p=='Main_Cell_Types':
-                                        f_prop_list = [f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}' for i in f_k]
+                        for p in f_dict['properties']:
+                            if p not in included_props:
+                                if p in self.visualization_properties:
+                                    
+                                    if type(f_dict['properties'][p])==dict:
+                                        included_props.append(p)
+                                        f_k = list(f_dict['properties'][p].keys())
+                                        if p=='Main_Cell_Types':
+                                            f_prop_list = [f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}' for i in f_k]
+                                        else:
+                                            f_prop_list = [f'{p} --> {i}' for i in f_k]
                                     else:
-                                        f_prop_list = [f'{p} --> {i}' for i in f_k]
-                                else:
-                                    included_props.append(p)
-                                    f_prop_list = [p]
+                                        included_props.append(p)
+                                        f_prop_list = [p]
 
-                                self.properties_list.extend(f_prop_list)
+                                    self.properties_list.extend(f_prop_list)
 
                 self.map_dict['FTUs'][f_name] = {
                     'id':{'type':'ftu-bounds','index':len(self.ftu_names)-1},
@@ -217,9 +220,25 @@ class DSASlide:
         if any(main_cell_types_test):
             self.properties_list.append('Max Cell Type')
 
-
         return base_x_scale*x_scale, base_y_scale*y_scale
 
+    def check_validity(self,element):
+
+        # Pretty much just a check for if a polyline object has enough vertices.
+        # Rectangles will always be valid, circles and ellipses will be ignored
+        valid = False
+        try:
+            if element['type']=='polyline':
+                if len(element['points'])>=4:
+                    valid = True
+            else:
+                valid = True
+            
+            return valid
+        except KeyError:
+            # Return false if element doesn't have "type" property
+            return valid
+            
     def find_intersecting_spots(self,box_poly):
 
         # Finging intersecting spots

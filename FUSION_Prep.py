@@ -47,7 +47,7 @@ class PrepHandler:
             },
             'IFTA_Model':{
                 'plugin_name':'dpraveen511_ifta_ifta_seg_aws_1/IFTASegmentation',
-                'model_id':'64c9429c287cfdce1e9c2536',
+                'model_id':'64c9422a287cfdce1e9c2530',
                 'structures':['IFTA']
             },
             'PTC_Model':{
@@ -171,6 +171,8 @@ class PrepHandler:
                                                     'girderToken':self.girder_handler.user_token,
                                                     'input_files':file_id,
                                                     'basedir':folder_id,
+                                                    'boxSizeHR':3000,
+                                                    'overlap_percentHR':0.5,
                                                     'model':self.model_zoo[model]['model_id']
                                                 })
                     job_responses.append(job_response)
