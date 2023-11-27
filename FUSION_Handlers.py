@@ -89,7 +89,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self, wsi, feature_select_dict, label_dict, label_filter_dict, cli_list = None):
+    def gen_vis_layout(self, wsi, cli_list = None):
 
         #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
@@ -328,6 +328,7 @@ class LayoutHandler:
                 html.P('Use this tab to dynamically view clustering results of morphological properties for select FTUs')
             ]),
             html.Hr(),
+            dbc.Row(html.Div(id='get-data-div',style={'height':'20px','display':'inline-block'})),
             dbc.Row([
                 html.Div(dbc.Col([
                     dbc.Card(
@@ -356,9 +357,19 @@ class LayoutHandler:
                                             checked = [],
                                             selected = [],
                                             expanded=[],
-                                            data = feature_select_dict
+                                            data = []
                                         ),
                                         style={'maxHeight':'250px','overflow':'scroll'}
+                                    ),
+                                    html.B(),
+                                    dcc.RadioItems(
+                                        options = [
+                                            {'label':html.Span('Include Cell States separately?',style={'marginRight':'5px'}),'value':'separate'},
+                                            {'label':html.Span('Only Main Cell Types Proportions',style={'marginLeft':'5px'}),'value':'main'}
+                                            ],
+                                        value = 'main',
+                                        id = 'cell-states-clustering',
+                                        inline=True
                                     )
                                 ]),
                                 html.Hr(),
@@ -373,7 +384,7 @@ class LayoutHandler:
                                         html.Div(id = 'label-info',children = [],style={'marginBottom':'5px'}),
                                         dbc.Row([
                                             dcc.Dropdown(
-                                                options = label_dict,
+                                                options = [],
                                                 id = 'label-select'
                                             )
                                         ]),
@@ -393,7 +404,7 @@ class LayoutHandler:
                                                     checked = [],
                                                     selected = [],
                                                     expanded = [],
-                                                    data = label_filter_dict
+                                                    data = []
                                                 ),
                                                 style = {'maxHeight':'250px','overflow':'scroll'}
                                             )
@@ -483,7 +494,8 @@ class LayoutHandler:
             {'label':'Cell Type and State','value':'Cell Type and State','disabled':False},
             {'label':'Slide Metadata','value':'Slide Metadata','disabled':False},
             {'label':'Selected FTUs and Metadata','value':'Selected FTUs and Metadata','disabled':True},
-            {'label':'Manual ROIs','value':'Manual ROIs','disabled':True}
+            {'label':'Manual ROIs','value':'Manual ROIs','disabled':True},
+            {'label':'FTU User Labels','value':'FTU User Labels','disabled':True}
         ]
         extract_card = dbc.Card([
             dbc.CardBody([
@@ -646,11 +658,11 @@ class LayoutHandler:
         # List of all tools tabs
         tool_tabs = [
             dbc.Tab(overlays_tab, label = 'Overlays',tab_id='overlays-tab'),
-            dbc.Tab(roi_pie, label = "Cell Compositions"),
-            dbc.Tab(cell_card,label = "Cell Graphics"),
-            dbc.Tab(cluster_card,label = 'Morphological Clustering'),
-            dbc.Tab(extract_card,label = 'Download Data'),
-            #dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True),
+            dbc.Tab(roi_pie, label = "Cell Compositions",tab_id='cell-compositions-tab'),
+            dbc.Tab(cell_card,label = "Cell Graphics",tab_id='cell-graphics-tab'),
+            dbc.Tab(cluster_card,label = 'Morphological Clustering',tab_id='clustering-tab'),
+            dbc.Tab(extract_card,label = 'Download Data',tab_id='download-tab'),
+            #dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True,tab_id='analyses-tab'),
         ]
         
         tools = [
@@ -661,7 +673,7 @@ class LayoutHandler:
                     dbc.CardBody([
                         dbc.Form([
                             dbc.Row([
-                                dbc.Tabs(tool_tabs,active_tab = 'overlays-tab')
+                                dbc.Tabs(tool_tabs,active_tab = 'overlays-tab',id='tools-tabs')
                             ])
                         ],style={'maxHeight':'90vh','overflow':'scroll'})
                     ])
@@ -689,31 +701,34 @@ class LayoutHandler:
 
         # Getting user-provided ftu labels entered in the popup input
         ftu_name = ftu['properties']['name']
-        ftu_index = ftu['properties']['id']
-        print(ftu_name)
-        print(ftu_index)
-        ftu_properties = wsi.ftu_props[ftu_name][ftu_index]
+        ftu_index = ftu['properties']['unique_index']
+        if not ftu_name == 'Spots':
+            ftu_properties = wsi.ftu_props[ftu_name][ftu_index]
+        else:
+            ftu_properties = wsi.spot_props[ftu_index]
+        
         if 'user_labels' in ftu_properties:
             # Creating div with user-labels
             user_ftu_labels_children = []
             for u_idx,u in enumerate(ftu_properties['user_labels']):
-                user_ftu_labels_children.append(
-                    dbc.Row([
-                        dbc.Col(
-                            html.P(textwrap.wrap(u,width=200)),
-                            md = 8
-                        ),
-                        dbc.Col(
-                            html.I(
-                                id = {'type':'delete-user-label','index':u_idx},
-                                n_clicks=0,
-                                className='bi bi-x-circle-fill',
-                                style={'color':'rgb(255,0,0)'}
+                if not u is None:
+                    user_ftu_labels_children.append(
+                        dbc.Row([
+                            dbc.Col(
+                                html.P(textwrap.wrap(u,width=200)),
+                                md = 8
                             ),
-                            md = 4
-                        )
-                    ],align='center')
-                )
+                            dbc.Col(
+                                html.I(
+                                    id = {'type':'delete-user-label','index':u_idx},
+                                    n_clicks=0,
+                                    className='bi bi-x-circle-fill',
+                                    style={'color':'rgb(255,0,0)'}
+                                ),
+                                md = 4
+                            )
+                        ],align='center')
+                    )
         else:
             user_ftu_labels_children = []
 
@@ -1726,7 +1741,6 @@ class GirderHandler:
         if len(select_ids)>0:
             print(f'Getting annotation metadata for: {select_ids}')
             # Running get_cluster_data plugin 
-            #try:
             job_response = self.gc.post(f'/slicer_cli_web/{self.get_cluster_data_plugin}/run',
                                         parameters = {
                                             'girderApiUrl':self.apiUrl,
@@ -1734,8 +1748,11 @@ class GirderHandler:
                                             'add_ids':','.join(select_ids),
                                             'remove_ids':''
                                         })
-            #except girder_client.HttpError:
-            #   print(f'Plugin is not added to this DSA instance')
+
+        else:
+            job_response = []
+        
+        return job_response
 
     def get_image_region(self,item_id,coords_list):
 
@@ -1875,10 +1892,14 @@ class GirderHandler:
         self.asct_b_table = pd.read_csv(self.apiUrl+f'item/{asct_b_table_id}/download?token={self.user_token}',skiprows=list(range(10)))
 
         # Generating plot feature selection dictionary
-        self.generate_feature_dict()
+        self.generate_feature_dict(self.default_slides)
 
-    def generate_feature_dict(self):
+    def generate_feature_dict(self,slide_list):
         
+        # Given a list of slides (output of GET /item/{item_id}), generate label options, feature options, and filter options
+        slide_folders = [i['folderId'] for i in slide_list]
+        slide_names = [i['name'] for i in slide_list]
+
         # Default labels are FTU, Slide Name, Cell Type, and Morphometric
         self.label_dict = [
             {'label':'FTU','value':'FTU','disabled':False},
@@ -1890,7 +1911,7 @@ class GirderHandler:
 
         # Adding labels according to current slide-dataset metadata
         meta_labels = []
-        for f in self.slide_datasets:
+        for f in slide_folders:
             meta_labels.extend(list(self.slide_datasets[f]['Metadata'].keys()))
         # Adding only unique labels
         meta_labels = np.unique(meta_labels).tolist()
@@ -1915,7 +1936,7 @@ class GirderHandler:
                 }
                 # Finding the different possible values for each of those labels
                 l_vals = []
-                for f in self.slide_datasets:
+                for f in slide_folders:
                     if l['label'] in list(self.slide_datasets[f]['Metadata'].keys()):
                         if not type(self.slide_datasets[f]['Metadata'][l['label']])==int:
                             if ',' in self.slide_datasets[f]['Metadata'][l['label']]:
@@ -1944,7 +1965,7 @@ class GirderHandler:
             'key':f'0-{l_i+1}',
             'children':[]
         }
-        for s_i,s in enumerate(self.all_slide_names):
+        for s_i,s in enumerate(slide_names):
             slide_names_children['children'].append(
                 {
                     'title':s,
@@ -1962,7 +1983,7 @@ class GirderHandler:
             'key':f'0-{l_i+2}',
             'children':[]
         }
-        for f_i, f in enumerate(list(self.slide_datasets.keys())):
+        for f_i, f in enumerate(slide_folders):
             folder_names_children['children'].append(
                 {
                     'title':self.slide_datasets[f]['name'],

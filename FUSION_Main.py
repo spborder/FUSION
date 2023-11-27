@@ -103,7 +103,7 @@ class FUSION:
 
         # FTU settings
         self.wsi = None
-        self.current_slides = []
+        self.current_slides = self.dataset_handler.default_slides
         if not self.wsi is None:
             self.ftus = self.wsi.ftu_names
             self.ftu_colors = self.wsi.ftu_colors
@@ -308,21 +308,6 @@ class FUSION:
         #self.app.run_server(host = '0.0.0.0',debug=False,use_reloader=False,port=8000)
         serve(self.app.server,host='0.0.0.0',port=8000)
 
-
-    def __getstate__(self):
-
-        # Copying FUSION object's state from self.__dict__ which contains all attributes
-        state = self.__dict__.copy()
-        # Removing unpicklable entries (have to find which ones those are)
-
-        return state
-    
-    def __setstate__(self,state):
-        # Restoring instance attributes
-        self.__dict__.update(state)
-
-        # Manually restore unpicklable entries
-
     def view_instructions(self,n,is_open):
         if n:
             return not is_open
@@ -378,9 +363,9 @@ class FUSION:
                 self.filter_vals = [0,1]
                 self.layout_handler.gen_vis_layout(
                     self.wsi,
-                    self.dataset_handler.plotting_feature_dict,
-                    self.dataset_handler.label_dict,
-                    self.dataset_handler.label_filter_dict
+                    #self.dataset_handler.plotting_feature_dict,
+                    #self.dataset_handler.label_dict,
+                    #self.dataset_handler.label_filter_dict
                     )
                 self.clustering_data = self.dataset_handler.load_clustering_data()
                 self.update_hex_color_key(self.current_cell)
@@ -400,9 +385,9 @@ class FUSION:
                 self.wsi = DSASlide(slide_name,pathname.split('/')[-1],self.dataset_handler,self.ftu_colors)
                 self.layout_handler.gen_vis_layout(
                     self.wsi,
-                    self.dataset_handler.plotting_feature_dict,
-                    self.dataset_handler.label_dict,
-                    self.dataset_handler.label_filter_dict
+                    #self.dataset_handler.plotting_feature_dict,
+                    #self.dataset_handler.label_dict,
+                    #self.dataset_handler.label_filter_dict
                     )
                 self.clustering_data = self.dataset_handler.load_clustering_data()
 
@@ -564,7 +549,8 @@ class FUSION:
              Output('filter-info','children')],
             [State('feature-select-tree','checked'),
              State('filter-select-tree','checked'),
-             State('label-select','value')],
+             State('label-select','value'),
+             State('cell-states-clustering','value')],
             prevent_initial_call=True
         )(self.update_graph)
 
@@ -640,6 +626,19 @@ class FUSION:
             State({'type':'popup-notes','index':ALL},'value'),
             prevent_initial_call = True
         )(self.add_label)
+
+        # Checking if there is aligned clustering data currently available
+        self.app.callback(
+            [Output('get-data-div','children'),
+             Output('feature-select-tree','data'),
+             Output('label-select','disabled'),
+             Output('label-select','options'),
+             Output('filter-select-tree','data')],
+            [Input('tools-tabs','active_tab'),
+             Input({'type':'get-clustering-butt','index':ALL},'n_clicks')],
+            prevent_initial_call=True
+        )(self.populate_cluster_tab)
+
 
     def builder_callbacks(self):
 
@@ -2127,7 +2126,7 @@ class FUSION:
 
         return label_info_children, filter_info_children
 
-    def update_graph(self,gen_plot_butt,checked_feature,filter_labels,label):
+    def update_graph(self,gen_plot_butt,checked_feature,filter_labels,label,states_option):
         
         # Grabbing current metadata from user private folder        
         # Finding features checked:
@@ -2138,27 +2137,45 @@ class FUSION:
                     self.clustering_data = self.dataset_handler.load_clustering_data()
 
                 feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
-                print(f'{[]}')
                 cell_features = [i for i in feature_names if i in self.cell_names_key]
                 if len(cell_features)>0:
                     feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
 
-                    cell_values = self.clustering_data['Main_Cell_Types'].tolist()
-                    for c in cell_features:
-                        cell_abbrev = self.cell_names_key[c]
+                    if 'Main_Cell_Types' in self.clustering_data.columns:
+                        cell_values = self.clustering_data['Main_Cell_Types'].tolist()
+                        state_values = self.clustering_data['Cell_States'].tolist()
+                        if states_option=='main':
+                            for c in cell_features:
+                                cell_abbrev = self.cell_names_key[c]
 
-                        specific_cell_values = []
-                        for i in cell_values:
-                            if not i is None:
-                                if cell_abbrev in i:
-                                    specific_cell_values.append(i[cell_abbrev])
-                                else:
-                                    specific_cell_values.append(0)
-                            else:
-                                specific_cell_values.append(0)
-                        
-                        feature_data[c] = specific_cell_values
+                                specific_cell_values = []
+                                for i in cell_values:
+                                    if not i is None:
+                                        if cell_abbrev in i:
+                                            specific_cell_values.append(i[cell_abbrev])
+                                        else:
+                                            specific_cell_values.append(0)
+                                    else:
+                                        specific_cell_values.append(0)
+                                
+                                feature_data[c] = specific_cell_values
+                        elif states_option=='separate':
+                            for c in cell_features:
+                                cell_abbrev = self.cell_names_key[c]
 
+                                cell_and_states = []
+                                for i,j in zip(cell_values,state_values):
+                                    if not i is None:
+                                        if cell_abbrev in i and cell_abbrev in j:
+                                            main_val = i[cell_abbrev]
+                                            states = j[cell_abbrev]
+                                            states_dict = {}
+                                            for c_s in states:
+                                                states_dict[cell_abbrev+'_'+c_s] = main_val*states[c_s]
+
+                                            cell_and_states.append(states_dict)
+                                
+                                feature_data = pd.concat([feature_data,pd.DataFrame.from_records(cell_and_states)],axis=1,ignore_index=True)
                 else:
                     feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
 
@@ -2218,7 +2235,6 @@ class FUSION:
 
                 # Now filtering labels according to any selected filter labels
                 filter_label_names = [i['title'] for i in self.dataset_handler.filter_keys if i['key'] in filter_labels]
-                print(f'filter_label_names: {filter_label_names}')
                 filter_idx = []
                 if len(filter_label_names)>0:
                     # Now have to find the parents for each of these
@@ -2259,12 +2275,10 @@ class FUSION:
                                         filter_idx.extend([i for i in range(len(sample_ids)) if sample_ids[i]==u_id and i not in filter_idx])
 
                 filter_idx = np.unique(filter_idx).tolist()
-                print(f'{len(filter_idx)} samples filtered out')
 
                 # Generating appropriate plot
                 if len(feature_names)==1:
                     print(f'Generating violin plot for {feature_names}')
-                    print(f'len of feature_names: {len(feature_names)}')
 
                     # Adding "Hidden" column with image grabbing info
                     feature_data['Hidden'] = self.clustering_data['Hidden']       
@@ -2340,7 +2354,6 @@ class FUSION:
 
                 elif len(feature_names)==2:
                     print(f'Generating a scatter plot')
-                    print(f'len of feature_names: {len(feature_names)}')
                     feature_columns = feature_names
 
                     # Adding "Hidden" column with image grabbing info
@@ -2395,7 +2408,6 @@ class FUSION:
 
                 elif len(feature_names)>2:
                     print(f'Running UMAP and returning a scatter plot')
-                    print(f'len of feature_names: {len(feature_names)}')
 
                     # Scaling and reducing feature data using UMAP
                     feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()
@@ -3830,9 +3842,22 @@ class FUSION:
 
     def add_label(self,notes_click,delete_click,pop_input):
 
-        if ctx.triggered_id['type']=='add-popup-note':        
-            # Adding provided label to ftu's user_label property
-            self.wsi.add_label(self.clicked_ftu,pop_input[0],'add')
+        expected_outputs = callback_context.outputs_list
+        triggered_list = [i['value'] for i in ctx.triggered]
+        if not any(triggered_list):
+            raise exceptions.PreventUpdate
+        
+        if len(expected_outputs)>1:
+            output_list = [no_update]*(len(expected_outputs)-1)
+            pop_input = pop_input[-1]
+        else:
+            pop_input = pop_input[0]
+            output_list = []
+
+        if ctx.triggered_id['type']=='add-popup-note':
+            if not pop_input is None:
+                # Adding provided label to ftu's user_label property
+                self.wsi.add_label(self.clicked_ftu,pop_input,'add')
 
             # Getting current user-labels
             pop_label_children = self.layout_handler.get_user_ftu_labels(self.wsi,self.clicked_ftu)
@@ -3846,9 +3871,100 @@ class FUSION:
 
             # Getting current user-labels
             pop_label_children = self.layout_handler.get_user_ftu_labels(self.wsi,self.clicked_ftu)
-        
-        return [pop_label_children]
 
+        output_list.append(pop_label_children)
+
+        return output_list
+
+    def populate_cluster_tab(self,active_tab, cluster_butt):
+
+        print(ctx.triggered_id)
+        if active_tab == 'clustering-tab':
+            if ctx.triggered_id=='tools-tabs':
+                # Checking current clustering data (either a full or empty pandas dataframe)
+                if not self.clustering_data.empty:
+                    # Checking the current slides to see if they match self.current_slides:
+                    current_slide_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
+                    unique_ids = np.unique(current_slide_ids).tolist()
+                    print(f'current unique ids in self.clustering_data: {unique_ids}')
+                    current_ids = [i['_id'] for i in self.current_slides]
+                    print(f'current ids in self.current_slides: {current_ids}')
+                    # Checking if these are the same (regardless of order)
+                    if set(unique_ids)==set(current_ids):
+
+                        # Populating feature-select-tree (tree), label-select (dropdown), filter-select-tree (tree)
+                        get_data_div_children = dbc.Alert(
+                            'Clustering data aligned!',
+                            color='success',
+                            style={'height':'20px'}
+                            )
+                        
+                        # Generating options
+                        self.dataset_handler.generate_feature_dict(self.current_slides)
+
+                        feature_select_data = self.dataset_handler.plotting_feature_dict
+                        label_select_options = self.dataset_handler.label_dict
+                        label_select_disabled = False
+                        filter_select_data = self.dataset_handler.label_filter_dict
+
+                    else:
+
+                        # If they are not aligned, have to grab aligning clustering data manually
+                        get_data_div_children = dbc.Button(
+                            'Get Data for Clustering!',
+                            className = 'd-grid col-12 mx-auto',
+                            id = {'type':'get-clustering-butt','index':0},
+                            style={'height':'20px'}
+                        )
+
+                        feature_select_data = []
+                        label_select_options = []
+                        label_select_disabled = True
+                        filter_select_data = []
+                else:
+                    # If its empty, have to grab aligning clustering data manually
+                    get_data_div_children = dbc.Button(
+                        'Get Data for Clustering!',
+                        className = 'd-grid col-12 mx-auto',
+                        id = {'type':'get-clustering-butt','index':0},
+                        style={'height':'20px'}
+                    )
+
+                    feature_select_data = []
+                    label_select_options = []
+                    label_select_disabled = True
+                    filter_select_data = []
+            else:
+
+                # Retrieving clustering data
+                data_getting_response = self.dataset_handler.get_collection_annotation_meta([i['_id'] for i in self.current_slides if i['included']])
+                
+                self.dataset_handler.generate_feature_dict([i for i in self.current_slides if i['included']])
+                # Monitoring getting the data:
+                data_get_status = 0
+                while data_get_status<3:
+                    data_status, data_log = self.dataset_handler.get_job_status(data_getting_response['_id'])
+                    data_get_status=data_status
+                    print(f'data_get_status: {data_get_status}')
+                    time.sleep(1)
+
+                self.clustering_data = self.dataset_handler.load_clustering_data()
+
+                get_data_div_children = dbc.Alert(
+                    'Clustering data aligned!',
+                    color = 'success',
+                    style = {'height':'20px'}
+                )
+                feature_select_data = self.dataset_handler.plotting_feature_dict
+                label_select_options = self.dataset_handler.label_dict
+                label_select_disabled = False
+                filter_select_data = self.dataset_handler.label_filter_dict
+
+        else:
+            # If in another tab, just leave alone
+            raise exceptions.PreventUpdate
+
+        return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, filter_select_data
 
 def app(*args):
     
@@ -3928,9 +4044,9 @@ def app(*args):
     layout_handler.gen_initial_layout(slide_names,username)
     layout_handler.gen_vis_layout(
         wsi,
-        dataset_handler.plotting_feature_dict,
-        dataset_handler.label_dict,
-        dataset_handler.label_filter_dict,
+        #dataset_handler.plotting_feature_dict,
+        #dataset_handler.label_dict,
+        #dataset_handler.label_filter_dict,
         cli_list
         )
     layout_handler.gen_builder_layout(dataset_handler)

@@ -49,16 +49,10 @@ class DSASlide:
         # Updating geojson for an FTU to include the provided label
         ftu_name = ftu['properties']['name']
         ftu_index = ftu['properties']['unique_index']
-        
-        # Reading in original geojson
-        with open(f'./assets/slide_annotations/{ftu_name}.json') as f:
-            og_geojson = geojson.load(f)
+
+        print(f'ftu_name: {ftu_name}, ftu_index: {ftu_index}, mode: {mode}, label: {label}')
         
         if mode=='add':
-            if 'user_labels' in og_geojson['features'][ftu_index]['properties']:
-                og_geojson['features'][ftu_index]['properties']['user_labels'].append(label)
-            else:
-                og_geojson['features'][ftu_index]['properties']['user_labels'] = [label]
 
             # Adding to props
             if ftu_name == 'Spots':
@@ -73,17 +67,12 @@ class DSASlide:
                     self.ftu_props[ftu_name][ftu_index]['user_labels'] = [label]
 
         elif mode=='remove':
-            og_geojson['features'][ftu_index]['properties']['user_labels'].pop(label)
 
             # Removing from props
             if ftu_name=='Spots':
                 self.spot_props[ftu_index]['user_labels'].pop(label)
             else:
                 self.ftu_props[ftu_name][ftu_index]['user_labels'].pop(label)
-
-        # Writing edited geojson back
-        with open(f'./assets/slide_annotations/{ftu_name}.json','w') as f:
-            json.dump(og_geojson,f)
 
     def get_slide_map_data(self,resource):
         # Getting all of the necessary materials for loading a new slide
@@ -167,7 +156,6 @@ class DSASlide:
             shutil.rmtree('./assets/slide_annotations/')
 
         # Assigning a unique integer id to each element
-        integer_idx = 0
         for a in tqdm(self.annotations):
             if 'elements' in a['annotation']:
                 f_name = a['annotation']['name']
@@ -182,6 +170,7 @@ class DSASlide:
                     self.ftu_colors[f_name] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
 
                 individual_geojson = {'type':'FeatureCollection','features':[]}
+                integer_idx = 0
                 for f in tqdm(a['annotation']['elements']):
                     f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]},'properties':{}}
 
