@@ -351,14 +351,16 @@ class LayoutHandler:
                                 html.Hr(),
                                 dbc.Row([
                                     html.Div(
-                                        dta.TreeView(
-                                            id='feature-select-tree',
-                                            multiple=True,
-                                            checkable=True,
-                                            checked = [],
-                                            selected = [],
-                                            expanded=[],
-                                            data = []
+                                        dcc.Loading(
+                                            dta.TreeView(
+                                                id='feature-select-tree',
+                                                multiple=True,
+                                                checkable=True,
+                                                checked = [],
+                                                selected = [],
+                                                expanded=[],
+                                                data = []
+                                            )
                                         ),
                                         style={'maxHeight':'250px','overflow':'scroll'}
                                     ),
@@ -384,9 +386,11 @@ class LayoutHandler:
                                         html.Hr(),
                                         html.Div(id = 'label-info',children = [],style={'marginBottom':'5px'}),
                                         dbc.Row([
-                                            dcc.Dropdown(
-                                                options = [],
-                                                id = 'label-select'
+                                            dcc.Loading(
+                                                dcc.Dropdown(
+                                                    options = [],
+                                                    id = 'label-select'
+                                                )
                                             )
                                         ]),
                                         html.Hr(),
@@ -397,17 +401,19 @@ class LayoutHandler:
                                         html.Hr(),
                                         dbc.Row([
                                             html.Div(id='filter-info',children = [],style={'marginBottom':'5px'}),
-                                            html.Div(
-                                                dta.TreeView(
-                                                    id = 'filter-select-tree',
-                                                    multiple = True,
-                                                    checkable = True,
-                                                    checked = [],
-                                                    selected = [],
-                                                    expanded = [],
-                                                    data = []
-                                                ),
-                                                style = {'maxHeight':'250px','overflow':'scroll'}
+                                            dcc.Loading(
+                                                html.Div(
+                                                    dta.TreeView(
+                                                        id = 'filter-select-tree',
+                                                        multiple = True,
+                                                        checkable = True,
+                                                        checked = [],
+                                                        selected = [],
+                                                        expanded = [],
+                                                        data = []
+                                                    ),
+                                                    style = {'maxHeight':'250px','overflow':'scroll'}
+                                                )
                                             )
                                         ]),
                                         html.Hr(),

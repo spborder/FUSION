@@ -42,6 +42,7 @@ from dash_extensions.enrich import DashProxy, html, Input, Output, MultiplexerTr
 import dash_mantine_components as dmc
 
 from timeit import default_timer as timer
+import time
 
 from FUSION_WSI import DSASlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler
@@ -2141,6 +2142,7 @@ class FUSION:
                 feature_data = pd.DataFrame()
                 if len(cell_features)>0:
                     feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+                    print(f'shape of feature_data: {feature_data.shape}')
                     if 'Main_Cell_Types' in self.clustering_data.columns:
                         cell_values = self.clustering_data['Main_Cell_Types'].tolist()
                         state_values = self.clustering_data['Cell_States'].tolist()
@@ -2161,6 +2163,7 @@ class FUSION:
                                 feature_data[c] = specific_cell_values
                         elif states_option=='separate':
                             for c in cell_features:
+                                print(c)
                                 cell_abbrev = self.cell_names_key[c]
 
                                 cell_and_states = []
@@ -2170,21 +2173,32 @@ class FUSION:
                                         if cell_abbrev in i and cell_abbrev in j:
                                             main_val = i[cell_abbrev]
                                             states = j[cell_abbrev]
-                                            states_dict = {}
-                                            for c_s in states:
-                                                states_dict[c+'_'+c_s] = main_val*states[c_s]
-                                                cell_state_names.append(c+'_'+c_s)
+                                        else:
+                                            main_val = 0.0
+                                            states = {c_state:0.0 for c_state in np.unique(self.cell_graphics_key[cell_abbrev]['states'])}
+                                    else:
+                                        main_val = 0.0
+                                        states = {c_state:0.0 for c_state in np.unique(self.cell_graphics_key[cell_abbrev]['states'])}
 
-                                            cell_and_states.append(states_dict)
+                                    states_dict = {}
+                                    for c_s in states:
+                                        states_dict[c+'_'+c_s] = main_val*states[c_s]
+                                        cell_state_names.append(c+'_'+c_s)
+
+                                    cell_and_states.append(states_dict)
+
                                 if feature_data.empty:
+                                    print(f'initializing feature_data')
                                     feature_data = pd.DataFrame.from_records(cell_and_states)
                                 else:
+                                    print(f'adding to feature_data: {feature_data.shape}')
                                     feature_data = pd.concat([feature_data,pd.DataFrame.from_records(cell_and_states)],axis=1,ignore_index=False)
-                                
+                                    print(f'feature_data shape after concatenation: {feature_data.shape}')
                                 feature_names[feature_names.index(c):feature_names.index(c)+1] = tuple(np.unique(cell_state_names).tolist())
                 else:
                     feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
 
+                print(feature_data.shape)
                 # Coercing dtypes of columns in feature_data
                 for f in feature_data.columns.tolist():
                     feature_data[f] = pd.to_numeric(feature_data[f],errors='coerce')
@@ -2247,13 +2261,11 @@ class FUSION:
                     filter_label_parent_names = [i['title'] for i in self.dataset_handler.filter_keys if i['key'] in filter_label_parents]
 
                     unique_parent_filters = np.unique(filter_label_parent_names).tolist()
-                    print(f'Unique parent filters: {unique_parent_filters}')
                     if 'FTUs' in unique_parent_filters:
                         # Removing specific FTUs by name
                         ftu_labels = self.clustering_data['FTU'].tolist()
                         filter_idx.extend([i for i in range(len(ftu_labels)) if ftu_labels[i] in filter_label_names])
                         unique_parent_filters = [i for i in unique_parent_filters if not i=='FTUs']
-                        print(f'{len(filter_idx)} samples removed because of their FTU')
                         
                     if len(unique_parent_filters)>0:
                         # Grab slide metadata
@@ -2286,11 +2298,11 @@ class FUSION:
                     print(f'Generating violin plot for {feature_names}')
 
                     # Adding "Hidden" column with image grabbing info
-                    feature_data['Hidden'] = self.clustering_data['Hidden']       
+                    feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()       
                     feature_data['label'] = label_data
                     if 'Main_Cell_Types' in self.clustering_data.columns:
-                        feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
-                        feature_data['Cell_States'] = self.clustering_data['Cell_States']
+                        feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types'].tolist()
+                        feature_data['Cell_States'] = self.clustering_data['Cell_States'].tolist()
 
                     self.feature_data = feature_data
                     
