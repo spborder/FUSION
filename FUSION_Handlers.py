@@ -328,7 +328,8 @@ class LayoutHandler:
                 html.P('Use this tab to dynamically view clustering results of morphological properties for select FTUs')
             ]),
             html.Hr(),
-            dbc.Row(html.Div(id='get-data-div',style={'height':'20px','display':'inline-block'})),
+            dbc.Row(html.Div(id='get-data-div',style={'display':'flex'})),
+            html.Hr(),
             dbc.Row([
                 html.Div(dbc.Col([
                     dbc.Card(
@@ -364,8 +365,8 @@ class LayoutHandler:
                                     html.B(),
                                     dcc.RadioItems(
                                         options = [
-                                            {'label':html.Span('Include Cell States separately?',style={'marginRight':'5px'}),'value':'separate'},
-                                            {'label':html.Span('Only Main Cell Types Proportions',style={'marginLeft':'5px'}),'value':'main'}
+                                            {'label':html.Span('Include Cell States separately?',style={'padding':'10px'}),'value':'separate'},
+                                            {'label':html.Span('Only Main Cell Types Proportions',style={'padding':'10px'}),'value':'main'}
                                             ],
                                         value = 'main',
                                         id = 'cell-states-clustering',
@@ -1342,7 +1343,8 @@ class LayoutHandler:
             ),
             dbc.Container([
                 html.H1('Welcome to FUSION!'),
-                ],fluid=True,id='container-content',style = {'height':'100vh'}),
+                ],fluid=True,id='container-content',style = {'height':'100vh'}
+            ),
             html.Hr(),
             html.P('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
         ])
@@ -1897,7 +1899,7 @@ class GirderHandler:
     def generate_feature_dict(self,slide_list):
         
         # Given a list of slides (output of GET /item/{item_id}), generate label options, feature options, and filter options
-        slide_folders = [i['folderId'] for i in slide_list]
+        slide_folders = np.unique([i['folderId'] for i in slide_list]).tolist()
         slide_names = [i['name'] for i in slide_list]
 
         # Default labels are FTU, Slide Name, Cell Type, and Morphometric

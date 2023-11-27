@@ -2138,9 +2138,9 @@ class FUSION:
 
                 feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
                 cell_features = [i for i in feature_names if i in self.cell_names_key]
+                feature_data = pd.DataFrame()
                 if len(cell_features)>0:
                     feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
-
                     if 'Main_Cell_Types' in self.clustering_data.columns:
                         cell_values = self.clustering_data['Main_Cell_Types'].tolist()
                         state_values = self.clustering_data['Cell_States'].tolist()
@@ -2164,6 +2164,7 @@ class FUSION:
                                 cell_abbrev = self.cell_names_key[c]
 
                                 cell_and_states = []
+                                cell_state_names = []
                                 for i,j in zip(cell_values,state_values):
                                     if not i is None:
                                         if cell_abbrev in i and cell_abbrev in j:
@@ -2171,22 +2172,26 @@ class FUSION:
                                             states = j[cell_abbrev]
                                             states_dict = {}
                                             for c_s in states:
-                                                states_dict[cell_abbrev+'_'+c_s] = main_val*states[c_s]
+                                                states_dict[c+'_'+c_s] = main_val*states[c_s]
+                                                cell_state_names.append(c+'_'+c_s)
 
                                             cell_and_states.append(states_dict)
+                                if feature_data.empty:
+                                    feature_data = pd.DataFrame.from_records(cell_and_states)
+                                else:
+                                    feature_data = pd.concat([feature_data,pd.DataFrame.from_records(cell_and_states)],axis=1,ignore_index=False)
                                 
-                                feature_data = pd.concat([feature_data,pd.DataFrame.from_records(cell_and_states)],axis=1,ignore_index=True)
+                                feature_names[feature_names.index(c):feature_names.index(c)+1] = tuple(np.unique(cell_state_names).tolist())
                 else:
                     feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
 
                 # Coercing dtypes of columns in feature_data
                 for f in feature_data.columns.tolist():
                     feature_data[f] = pd.to_numeric(feature_data[f],errors='coerce')
-                print(f'shape of feature_data 2120: {feature_data.shape}')
 
                 # Getting the label data
                 if label in self.clustering_data.columns:
-                    label_data = self.clustering_data[label]
+                    label_data = self.clustering_data[label].tolist()
                 else:
                     sample_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
                     unique_ids = np.unique(sample_ids).tolist()
@@ -2232,7 +2237,7 @@ class FUSION:
                                 slide_meta.append(None)
                         
                         label_data = [slide_meta[unique_ids.index(i)] for i in sample_ids]
-
+                
                 # Now filtering labels according to any selected filter labels
                 filter_label_names = [i['title'] for i in self.dataset_handler.filter_keys if i['key'] in filter_labels]
                 filter_idx = []
@@ -2357,27 +2362,25 @@ class FUSION:
                     feature_columns = feature_names
 
                     # Adding "Hidden" column with image grabbing info
-                    feature_data['Hidden'] = self.clustering_data['Hidden']       
+                    feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()     
                     feature_data['label'] = label_data
                     if 'Main_Cell_Types' in self.clustering_data.columns:
-                        feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
-                        feature_data['Cell_States'] = self.clustering_data['Cell_States']
+                        feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types'].tolist()
+                        feature_data['Cell_States'] = self.clustering_data['Cell_States'].tolist()
 
                     self.feature_data = feature_data
                     
                     # Dropping filtered out rows
                     if len(filter_idx)>0:
                         self.feature_data = self.feature_data.iloc[[int(i) for i in range(self.feature_data.shape[0]) if int(i) not in filter_idx],:]
-
+                    
                     self.feature_data = self.feature_data.dropna(subset=[i for i in feature_names if i in self.feature_data.columns]+['label','Hidden'])
-
                     # Adding point index to hidden data
                     hidden_data = self.feature_data['Hidden'].tolist()
                     for h_i,h in enumerate(hidden_data):
                         h['Index'] = h_i
 
                     self.feature_data.loc[:,'Hidden'] = hidden_data
-
                     # Generating labels_info_children and filter_info_children
                     labels_left = self.feature_data['label'].tolist()
                     label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
@@ -2413,8 +2416,8 @@ class FUSION:
                     feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()
                     feature_data['label'] = label_data
                     if 'Main_Cell_Types' in self.clustering_data.columns:
-                        feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types']
-                        feature_data['Cell_States'] = self.clustering_data['Cell_States']
+                        feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types'].tolist()
+                        feature_data['Cell_States'] = self.clustering_data['Cell_States'].tolist()
 
                     self.feature_data = feature_data
                     # Dropping filtered out rows
@@ -2422,7 +2425,6 @@ class FUSION:
                         self.feature_data = self.feature_data.iloc[[int(i) for i in range(self.feature_data.shape[0]) if int(i) not in filter_idx],:]
 
                     self.feature_data = self.feature_data.dropna(subset=[i for i in feature_names if i in self.feature_data.columns]+['label','Hidden'])
-
                     hidden_col = self.feature_data['Hidden'].tolist()
 
                     # Adding point index to hidden_col
@@ -2433,7 +2435,6 @@ class FUSION:
                     main_cell_types_col = self.feature_data['Main_Cell_Types'].tolist()
                     cell_states_col = self.feature_data['Cell_States'].tolist()
                     feature_data = self.feature_data.loc[:,[i for i in feature_names if i in self.feature_data.columns]].values
-
                     # Scaling feature_data
                     feature_data_means = np.nanmean(feature_data,axis=0)
                     feature_data_stds = np.nanstd(feature_data,axis=0)
@@ -3878,7 +3879,6 @@ class FUSION:
 
     def populate_cluster_tab(self,active_tab, cluster_butt):
 
-        print(ctx.triggered_id)
         if active_tab == 'clustering-tab':
             if ctx.triggered_id=='tools-tabs':
                 # Checking current clustering data (either a full or empty pandas dataframe)
@@ -3896,7 +3896,9 @@ class FUSION:
                         get_data_div_children = dbc.Alert(
                             'Clustering data aligned!',
                             color='success',
-                            style={'height':'20px'}
+                            dismissable=True,
+                            is_open=True,
+                            className='d-grid col-12 mx-auto'
                             )
                         
                         # Generating options
@@ -3913,8 +3915,7 @@ class FUSION:
                         get_data_div_children = dbc.Button(
                             'Get Data for Clustering!',
                             className = 'd-grid col-12 mx-auto',
-                            id = {'type':'get-clustering-butt','index':0},
-                            style={'height':'20px'}
+                            id = {'type':'get-clustering-butt','index':0}
                         )
 
                         feature_select_data = []
@@ -3926,8 +3927,7 @@ class FUSION:
                     get_data_div_children = dbc.Button(
                         'Get Data for Clustering!',
                         className = 'd-grid col-12 mx-auto',
-                        id = {'type':'get-clustering-butt','index':0},
-                        style={'height':'20px'}
+                        id = {'type':'get-clustering-butt','index':0}
                     )
 
                     feature_select_data = []
@@ -3953,7 +3953,9 @@ class FUSION:
                 get_data_div_children = dbc.Alert(
                     'Clustering data aligned!',
                     color = 'success',
-                    style = {'height':'20px'}
+                    dismissable=True,
+                    is_open = True,
+                    className='d-grid col-12 mx-auto'
                 )
                 feature_select_data = self.dataset_handler.plotting_feature_dict
                 label_select_options = self.dataset_handler.label_dict
