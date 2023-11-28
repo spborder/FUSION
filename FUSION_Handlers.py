@@ -379,21 +379,6 @@ class LayoutHandler:
                                     id = 'label-and-filter-div',
                                     children = [
                                         dbc.Row([
-                                            dbc.Col('Select Label',md=11),
-                                            dbc.Col(self.gen_info_button('Select a label for the plot of selected features'),md=1)
-                                        ]),
-                                        html.Hr(),
-                                        html.Div(id = 'label-info',children = [],style={'marginBottom':'5px'}),
-                                        dbc.Row([
-                                            dcc.Loading(
-                                                dcc.Dropdown(
-                                                    options = [],
-                                                    id = 'label-select'
-                                                )
-                                            )
-                                        ]),
-                                        html.Hr(),
-                                        dbc.Row([
                                             dbc.Col(dbc.Label('Select Filter'),md=11),
                                             dbc.Col(self.gen_info_button('Select specific label items to remove from your plot'),md=1)
                                         ]),
@@ -435,6 +420,26 @@ class LayoutHandler:
                     )
                 ],md=12),style={'maxHeight':'30vh','overflow':'scroll'})
             ]),
+            html.Hr(),
+            dbc.Row([
+                dbc.Col('Select Label',md=11),
+                dbc.Col(self.gen_info_button('Select a label for the plot of selected features'),md=1)
+            ]),
+            dbc.Row([
+                dbc.Col([
+                    dcc.Loading(
+                        dcc.Dropdown(
+                            options = [],
+                            id = 'label-select',
+                            disabled=True
+                        )
+                    )
+                ],md=8),
+                dbc.Col([
+                    html.Div(id = 'label-info',children = [])
+                ],md=4)
+            ],align='center'),
+            html.Hr(),
             dbc.Row([
                 dbc.Col([
                     self.gen_info_button('Click on a point in the graph or select a group of points with the lasso select tool to view the FTU and cell type data at that point'),
