@@ -2140,6 +2140,8 @@ class FUSION:
                 feature_data = pd.DataFrame()
                 if len(cell_features)>0:
                     feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+                    feature_data = feature_data.reset_index(drop=True)
+
                     print(f'shape of feature_data: {feature_data.shape}')
                     if 'Main_Cell_Types' in self.clustering_data.columns:
                         cell_values = self.clustering_data['Main_Cell_Types'].tolist()
@@ -2186,17 +2188,14 @@ class FUSION:
                                     cell_and_states.append(states_dict)
 
                                 if feature_data.empty:
-                                    print(f'initializing feature_data')
                                     feature_data = pd.DataFrame.from_records(cell_and_states)
                                 else:
-                                    print(f'adding to feature_data: {feature_data.shape}')
                                     feature_data = pd.concat([feature_data,pd.DataFrame.from_records(cell_and_states)],axis=1,ignore_index=False)
-                                    print(f'feature_data shape after concatenation: {feature_data.shape}')
                                 feature_names[feature_names.index(c):feature_names.index(c)+1] = tuple(np.unique(cell_state_names).tolist())
                 else:
                     feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+                    feature_data = feature_data.reset_index(drop=True)
 
-                print(feature_data.shape)
                 # Coercing dtypes of columns in feature_data
                 for f in feature_data.columns.tolist():
                     feature_data[f] = pd.to_numeric(feature_data[f],errors='coerce')
