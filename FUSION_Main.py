@@ -148,6 +148,7 @@ class FUSION:
 
         self.ftu_style_handle = assign("""function(feature,context){
             const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.hideout;
+                                       
             if (current_cell){
                 if (current_cell==='cluster'){
                     if (current_cell in feature.properties){
@@ -639,7 +640,6 @@ class FUSION:
              Input({'type':'get-clustering-butt','index':ALL},'n_clicks')],
             prevent_initial_call=True
         )(self.populate_cluster_tab)
-
 
     def builder_callbacks(self):
 
@@ -1347,6 +1347,7 @@ class FUSION:
             
         elif color_type is None:
             raw_values_list = []
+        
         else:
             # For specific morphometrics
             for f in self.wsi.ftu_props:
@@ -1375,7 +1376,7 @@ class FUSION:
 
     def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color,cell_sub_val):
 
-        print(f'Updating overlays for current slide: {self.wsi.slide_name}')
+        print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
 
         m_prop = None
         cell_sub_select_children = no_update
@@ -1404,11 +1405,9 @@ class FUSION:
             # Index of which ftu is different
             new_color = [i for i in range(len(current_ftu_colors)) if current_ftu_colors[i] not in ftu_color]
             if len(new_color)>0:
-                print(new_color)
                 for n in new_color:
                     check_for_new = [i for i in ftu_color if i not in current_ftu_colors]
                     if len(check_for_new)>0:
-                        print(check_for_new)
                         self.ftu_colors[ftu_list[n]] = check_for_new[0]
                     
             self.filter_vals = filter_vals
@@ -1534,6 +1533,23 @@ class FUSION:
                 filter_max_val = 1.0
                 filter_disable = True
                 
+            elif cell_val == 'FTU Label':
+                self.current_cell = 'name'
+                self.update_hex_color_key(cell_val)
+
+                cell_sub_select_children = []
+
+                ftu_types = list(self.hex_color_key.keys())
+                color_bar = dlx.categorical_colorbar(
+                    categories = ftu_types,
+                    colorscale = list(self.hex_color_key.values()),
+                    width = 600, height = 10, position = 'bottom left',
+                    id = f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style
+                )
+
+                filter_max_val = 1.0
+                filter_disable = True
             else:
                 # For other morphometric properties
                 print(cell_val)
@@ -1601,8 +1617,6 @@ class FUSION:
 
         self.current_overlays = new_children
                     
-        print(f'Generated: {len(new_children)} annotation layers')
-
         return new_children, color_bar, filter_max_val, filter_disable, cell_sub_select_children
 
     def update_cell_hierarchy(self,cell_clickData):
@@ -1995,20 +2009,6 @@ class FUSION:
             for struct in self.wsi.map_dict['FTUs']
         ]
 
-        """
-        new_children += [
-            dl.Overlay(
-                dl.LayerGroup(
-                    dl.GeoJSON(url = f'./assets/slide_annotations/Spots.json', id = self.wsi.spot_dict['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
-                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors['Spots'], filter_vals = self.filter_vals),
-                                hoverStyle = arrow_function(dict(weight=5, color = self.wsi.spot_dict['hover_color'], dashArray='')),
-                                children = [dl.Popup(id=self.wsi.spot_dict['popup_id'])],
-                                zoomToBounds=True),
-                ), name = 'Spots', checked = False, id = new_slide.item_id+'_Spots'
-            )
-        ]
-        """
-
         # Now iterating through manual ROIs
         for m_idx, man in enumerate(self.wsi.manual_rois):
             new_children.append(
@@ -2028,8 +2028,8 @@ class FUSION:
         new_url = self.wsi.tile_url
         center_point = [0.5*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),0.5*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
 
-        self.current_ftus = self.wsi.ftu_names+['Spots']
-        self.current_ftu_layers = self.wsi.ftu_names+['Spots']
+        self.current_ftus = self.wsi.ftu_names
+        self.current_ftu_layers = self.wsi.ftu_names
 
         # Adding the layers to be a property for the edit_control callback
         self.current_overlays = new_children
@@ -2046,8 +2046,6 @@ class FUSION:
         for f in self.wsi.map_dict['FTUs']:
             combined_colors_dict[f] = {'color':self.wsi.map_dict['FTUs'][f]['color']}
         
-        #combined_colors_dict['Spots'] = {'color':self.wsi.spot_dict['color']}
-
         boundary_options_children = [
             dbc.Tab(
                 children = [
@@ -3979,6 +3977,7 @@ class FUSION:
             raise exceptions.PreventUpdate
 
         return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, filter_select_data
+
 
 def app(*args):
     

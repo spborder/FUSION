@@ -8,6 +8,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     ftu_color,
                     filter_vals
                 } = context.hideout;
+
                 if (current_cell) {
                     if (current_cell === 'cluster') {
                         if (current_cell in feature.properties) {

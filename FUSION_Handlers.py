@@ -114,13 +114,13 @@ class LayoutHandler:
             self.initial_overlays = [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(url=f'./assets/slide_annotations/{struct}.json', id = wsi.map_dict['FTUs'][struct]['id'], options = dict(style=dict(color = wsi.map_dict['FTUs'][struct]['color'])),
+                        dl.GeoJSON(url=f'./assets/slide_annotations/{struct}.json', id = wsi.map_dict['FTUs'][struct]['id'], options = {'style':{'color':combined_colors_dict[struct]}},
                             hideout = dict(color_key = {},current_cell = '',fillOpacity=0.5,ftu_color = combined_colors_dict,filter_vals = [0,1]), hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                             zoomToBounds=True,children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
                     name = struct, checked = True, id = struct)
             for struct in wsi.map_dict['FTUs']
             ] 
-
+            
             map_url = wsi.map_dict['url']
             tile_size = wsi.tile_dims[0]
             slide_properties = wsi.properties_list
@@ -164,7 +164,7 @@ class LayoutHandler:
         ]
 
         map_layer = dl.Map(
-            center = center_point, zoom = 3, minZoom = 0, maxZoom = zoom_levels, crs='Simple',bounds = map_bounds,
+            center = center_point, zoom = 3, minZoom = 0, maxZoom = zoom_levels-1, crs='Simple',bounds = map_bounds,
             style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             preferCanvas=True,
@@ -212,7 +212,6 @@ class LayoutHandler:
             {
             'selector':'edge',
             'style':{
-                'lineWidth':15,
                 'line-color':'blue'
             }
             }
@@ -582,7 +581,7 @@ class LayoutHandler:
                         html.Div(
                             id = 'cell-select-div',
                             children=[
-                                dcc.Dropdown(cell_types_list,placeholder='Select Property for Overlaid Heatmap',id='cell-drop'),
+                                dcc.Dropdown(options = cell_types_list, placeholder='Select Property for Overlaid Heatmap',id='cell-drop'),
                                 html.Div(id='cell-sub-select-div',children = [],style={'marginTop':'5px'})
                             ]
                         )
@@ -703,6 +702,101 @@ class LayoutHandler:
         self.validation_layout.append(vis_content)
         self.layout_dict['vis'] = vis_content
         self.description_dict['vis'] = vis_description
+
+    def gen_wsi_view(self, wsi):
+
+        # Grabbing all the necessary properties to generate the children of the wsi viewer card
+        # This should add more robustness to the application as it doesn't have to automatically populate
+        # but instead use the ingest_wsi callback. Also may lead to having multiple WSIs at a time.
+        if not wsi is None:
+
+            combined_colors_dict = {}
+            for f in wsi.map_dict['FTUs']:
+                combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
+
+            #TODO: Maybe save the slide_annotations to another descriptive name so that other slides don't overlap?
+            overlays = [
+                dl.Overlay(
+                    dl.LayerGroup(
+                        dl.GeoJSON(url=f'./assets/slide_annotations/{struct}.json', id = wsi.map_dict['FTUs'][struct]['id'], options = {'style':{'color':combined_colors_dict[struct]}},
+                            hideout = dict(color_key = {},current_cell=None,fillOpacity=0.5,ftu_color=combined_colors_dict,filter_vals=[0,1]),hoverStyle=arrow_function(dict(weight=5,color=wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
+                            zoomToBounds=True, children = [dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])
+                    ), name = struct, checked = True, id = struct
+                )
+                for struct in wsi.map_dict['FTUs']
+            ]
+
+            map_url = wsi.map_dict['url']
+            tile_size = wsi.tile_dims[0]
+            slide_properties = wsi.zoom_levels
+            map_bounds = wsi.map_bounds
+
+            center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
+            
+            map_children = [
+                dl.TileLayer(
+                    id = 'slide-tile',
+                    url = map_url,
+                    tileSize = tile_size
+                ),
+                dl.FullScreenControl(position='topleft'),
+                dl.FeatureGroup(
+                    id = 'feature-group',
+                    children = [
+                        dl.EditControl(
+                            id = {'type':'edit_control','index':0},
+                            draw = dict(polyline=False, line = False, circle = False, circlemarker=False),
+                            position='topleft'
+                        )
+                    ]
+                ),
+                html.Div(
+                    id = 'colorbar-div',
+                    children = [
+                        dl.Colorbar(id='map-colorbar')
+                    ]
+                ),
+                dl.LayersControl(
+                    id = 'layer-control',
+                    children = overlays
+                ),
+                dl.EasyButton(
+                    icon = 'fa-solid fa-user-doctor',
+                    title = 'Ask Fusey',
+                    id = 'fusey-button',
+                    position='bottomright'
+                ),
+                html.Div(
+                    id = 'ask-fusey-box',
+                    style  = {
+                        'visibility':'hidden',
+                        'position':'absolute',
+                        'top':'50px',
+                        'right':'10px',
+                        'zIndex':'1000'
+                    }
+                )
+            ]
+
+            map_layer = dl.Map(
+                center = center_point,
+                zoom = 3,
+                minZoom = 0,
+                maxZoom = wsi.zoom_levels-1,
+                crs = 'Simple',
+                bounds = map_bounds,
+                style = {
+                    'width':'100%',
+                    'height':'90vh',
+                    'margin':'auto',
+                    'display':'inline-block'
+                },
+                id = 'slide-map',
+                preferCanvas=True,
+                children = map_children
+            )
+
+            return map_children
 
     def get_user_ftu_labels(self,wsi,ftu):
 
