@@ -316,9 +316,6 @@ class DSASlide:
             raise ValueError
         
     def convert_map_coords(self, input_coords):
-        
-        print(f'x_scale: {self.x_scale}')
-        print(f'y_scale: {self.y_scale}')
 
         # Convert map coordinates to slide coordinates
         # input_coords are in terms of the tile map and returned coordinates are relative to the slide pixel dimensions
@@ -328,3 +325,15 @@ class DSASlide:
 
         return return_coords
 
+    def convert_slide_coords(self, input_coords):
+
+        # Inverse of convert_map_coords, takes a set of slide pixel coordinates
+        # and converts to be map coordinates
+        return_coords = []
+        for i in input_coords:
+            return_coords.append([i[0]*self.x_scale,i[1]*y_scale])
+
+        return return_coords
+    
+
+    

@@ -576,7 +576,8 @@ class FUSION:
 
         # Adding manual ROIs using EditControl
         self.app.callback(
-            Input({'type':'edit_control','index':ALL},'geojson'),
+            [Input({'type':'edit_control','index':ALL},'geojson'),
+             Input({'type':'add-mark-cluster','index':ALL},'n_clicks')],
             [Output('layer-control','children'),
              Output('data-select','options')],
             prevent_initial_call=True
@@ -2083,7 +2084,10 @@ class FUSION:
             label_pie = px.pie(
                 data_frame = label_pie_data,
                 names='label',
-                values='count'
+                values='count',
+                title = '<br>'.join(
+                    textwrap.wrap('Count of samples in each label category',width=20)
+                )
             )
             label_pie.update_traces(textposition='inside')
             label_pie.update_layout(
@@ -2091,14 +2095,14 @@ class FUSION:
                 uniformtext_mode='hide',
                 showlegend=False,
                 autosize=True,
-                margin={'t':0,'b':0,'l':0,'r':0}
+                margin={'b':0,'l':0,'r':0}
                 )
 
             label_info_children = [
                 dbc.Button(
                     'See Label Distribution',
                     id='label-dist',
-                    className='me-1',
+                    className='d-grid mx-auto',
                     n_clicks=0
                 ),
                 dbc.Popover(
@@ -2163,7 +2167,6 @@ class FUSION:
                             feature_data[c] = specific_cell_values
                     elif states_option=='separate':
                         for c in cell_features:
-                            print(c)
                             cell_abbrev = self.cell_names_key[c]
 
                             cell_and_states = []
@@ -2711,7 +2714,23 @@ class FUSION:
             label_list = self.feature_data['label'].tolist()
             image_labels = [label_list[l] for l in sample_index]
             selected_image_info = html.Div([
-                dbc.Row(dbc.Col(html.P(f'Image: {i}, Slide: {j}, Label: {k}')))
+                dbc.Row([
+                    dbc.Col(
+                        html.P(f'Image: {i}, Slide: {j}, Label: {k}'),md=8
+                        ),
+                    dbc.Col(
+                        dbc.Button(
+                            'Add Marker',
+                            id = {'type':'add-mark-cluster','index':i},
+                            className='d-grid mx-auto'
+                        ),md=4
+                    )
+                ]) if j==self.wsi.slide_name else
+                dbc.Row([
+                    dbc.Col(
+                        html.P(f'Image: {i}, Slide: {j}, Label: {k}')
+                    )
+                ])
                 for i,j,k in list(zip(list(range(len(slide_names))),slide_names,image_labels))
             ],style = {'maxHeight':'100px','overflow':'scroll'})
 
@@ -2804,13 +2823,19 @@ class FUSION:
         else:
             return go.Figure()
 
-    def add_manual_roi(self,new_geojson):
+    def add_manual_roi(self,new_geojson,mark_click):
         
-        triggered_id = ctx.triggered_id['type']
-        if type(new_geojson)==list:
-            new_geojson = new_geojson[0]
+        try:
+            # Used for pattern-matching callbacks
+            triggered_id = ctx.triggered_id['type']
+        except TypeError:
+            # Used for normal callbacks
+            triggered_id = ctx.triggered_id
 
         if triggered_id == 'edit_control':
+            if type(new_geojson)==list:
+                new_geojson = new_geojson[0]
+
             if not new_geojson is None:
                 if len(new_geojson['features'])>0:
                     
@@ -2870,6 +2895,7 @@ class FUSION:
 
                         elif geo['properties']['type']=='marker':
                             # Separate procedure for marking regions/FTUs with a marker
+                            print(f'marker geo: {geo}')
                             new_marked = {'type':'FeatureCollection','features':[geo]}
 
                             overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
@@ -2977,6 +3003,23 @@ class FUSION:
                     return self.current_overlays, data_select_options
             else:
                 raise exceptions.PreventUpdate
+        
+        elif triggered_id=='add-mark-cluster':
+            if ctx.triggered[0]['value']:
+                print(f'Adding marker from clustering: {ctx.triggered_id}')
+                print(f'ctx.triggered: {ctx.triggered}')
+                print(f'self.current_selected samples: {self.current_selected_samples}')
+                
+                # Grabbing the bounding box coordinates for that particular sample
+                new_marker_bbox = self.feature_data['Hidden'].tolist()[self.current_selected_samples[ctx.triggered_id['index']]]['Bounding_Box']
+                print(new_marker_bbox)
+                
+                # Convert to map coordinates
+                new_marker_map_coordinates = self.wsi.convert_slide_coords(new_marker_bbox)
+                print(new_marker_map_coordinates)
+
+            raise exceptions.PreventUpdate
+
         else:
             raise exceptions.PreventUpdate
 

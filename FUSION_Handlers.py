@@ -422,7 +422,7 @@ class LayoutHandler:
             ]),
             html.Hr(),
             dbc.Row([
-                dbc.Col('Select Label',md=11),
+                dbc.Col('Select Label',md=11,style={'marginLeft':'5px'}),
                 dbc.Col(self.gen_info_button('Select a label for the plot of selected features'),md=1)
             ]),
             dbc.Row([
@@ -481,11 +481,64 @@ class LayoutHandler:
                                         ]
                                     )
                                 ]
-                            ),label='Selected Cell Data')
+                            ),label='Selected Cell Data'),
+                        dcc.Tab(
+                            dbc.Card(
+                                id = 'selected-labels-card',
+                                children = [
+                                    dbc.Row(
+                                        children = [
+                                            html.Div(id='selected-labels-div',children = []),
+                                            self.gen_info_button('Distribution of labels in selected samples')
+                                        ]
+                                    )
+                                ]
+                            ), label = 'Selected Labels'
+                        )
                     ]),
                     html.Div(id='selected-image-info')
                 ],md=6),
-            ],align='center')
+            ],align='center'),
+            html.Hr(),
+            dbc.Row([
+                dbc.Card([
+                    dbc.CardHeader([
+                        dbc.Col('Plot Report',md=11),
+                        dbc.Col(
+                            self.gen_info_button('Generate distribution summaries, simple statistics, and find cluster markers!'),
+                            md = 1
+                        )
+                    ]),
+                    dbc.CardBody([
+                        dbc.Row([
+                            dbc.Tabs([
+                                dbc.Tab(
+                                    label = 'Feature Summaries',
+                                    tab_id = 'feat-summ',
+                                    children = [
+                                        html.Div(id='feat-summ-div',children = [])
+                                    ]
+                                ),
+                                dbc.Tab(
+                                    label = 'Statistics',
+                                    tab_id = 'feat-stats',
+                                    children = [
+                                        html.Div(id = 'feat-stats-div',children = [])
+                                    ]
+                                ),
+                                dbc.Tab(
+                                    label = 'Cluster Markers',
+                                    tab_id = 'feat-markers',
+                                    children = [
+                                        html.Div(id = 'feat-mark-div',children = [])
+                                    ],
+                                    disabled = True
+                                )
+                            ])
+                        ])
+                    ])
+                ])
+            ])
         ])
 
         # Tools for selecting regions, transparency, and cells
