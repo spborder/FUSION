@@ -2620,7 +2620,7 @@ class FUSION:
                         custom_data = 'Hidden',
                         title = '<br>'.join(
                             textwrap.wrap(
-                                f'Scatter plot of {feature_names[0]} and {feature_names[1]} labeled by {label}',
+                                f'Scatter plot of {feature_columns[0]} and {feature_columns[1]} labeled by {label}',
                                 width = 30
                                 )
                             )
@@ -2713,6 +2713,8 @@ class FUSION:
             slide_names = [self.dataset_handler.gc.get(f'/item/{s_i["Slide_Id"]}')["name"] for s_i in sample_info]
             label_list = self.feature_data['label'].tolist()
             image_labels = [label_list[l] for l in sample_index]
+
+            #TODO: Make this so you can add all the markers at once, also disable if the slide is changed
             selected_image_info = html.Div([
                 dbc.Row([
                     dbc.Col(
@@ -2832,9 +2834,31 @@ class FUSION:
             # Used for normal callbacks
             triggered_id = ctx.triggered_id
 
-        if triggered_id == 'edit_control':
-            if type(new_geojson)==list:
-                new_geojson = new_geojson[0]
+        if triggered_id == 'edit_control' or triggered_id=='add-mark-cluster':
+            
+            if triggered_id=='edit_control':
+                if type(new_geojson)==list:
+                    new_geojson = new_geojson[0]
+            elif triggered_id=='add-mark-cluster':
+                if ctx.triggered[0]['value']:
+                    # Adding marker points to new_geojson list
+                    new_geojson = {'type':'FeatureCollection','features':[]}
+                
+                    new_marker_bbox = self.feature_data['Hidden'].tolist()[self.current_selected_samples[ctx.triggered_id['index']]]['Bounding_Box']
+                    new_marker_map_coordinates = self.wsi.convert_slide_coords([[new_marker_bbox[0],new_marker_bbox[1]],[new_marker_bbox[2],new_marker_bbox[3]]])
+                    # Taking the average of the bbox coordinates to find the center point (may need to update this later for funky shaped structures)
+                    #TODO: make this part more flexible for C-shaped tubules or something where the average bbox coordinates doesn't intersect with that exact object
+                    center_coords = [(new_marker_map_coordinates[0][0]+new_marker_map_coordinates[1][0])/2,(new_marker_map_coordinates[0][1]+new_marker_map_coordinates[1][1])/2]
+                    new_geojson['features'].append(
+                        {
+                            'type':'Feature',
+                            'properties':{'type':'marker'},
+                            'geometry': {'type':'Point','coordinates':center_coords}
+                        }
+                    )
+
+                else:
+                    raise exceptions.PreventUpdate        
 
             if not new_geojson is None:
                 if len(new_geojson['features'])>0:
@@ -2895,7 +2919,6 @@ class FUSION:
 
                         elif geo['properties']['type']=='marker':
                             # Separate procedure for marking regions/FTUs with a marker
-                            print(f'marker geo: {geo}')
                             new_marked = {'type':'FeatureCollection','features':[geo]}
 
                             overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
@@ -2933,9 +2956,7 @@ class FUSION:
                                         }
                                     )
 
-                    
                     # Adding the marked ftus layer if any were added
-                    print(f'len of marked_ftus: {len(self.wsi.marked_ftus)}')
                     if len(self.wsi.marked_ftus)>0:
                         
                         self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
@@ -2979,7 +3000,6 @@ class FUSION:
                     else:
                         self.update_hex_color_key(self.current_cell)
                     
-
                     return self.current_overlays, data_select_options
                 else:
 
@@ -3003,23 +3023,6 @@ class FUSION:
                     return self.current_overlays, data_select_options
             else:
                 raise exceptions.PreventUpdate
-        
-        elif triggered_id=='add-mark-cluster':
-            if ctx.triggered[0]['value']:
-                print(f'Adding marker from clustering: {ctx.triggered_id}')
-                print(f'ctx.triggered: {ctx.triggered}')
-                print(f'self.current_selected samples: {self.current_selected_samples}')
-                
-                # Grabbing the bounding box coordinates for that particular sample
-                new_marker_bbox = self.feature_data['Hidden'].tolist()[self.current_selected_samples[ctx.triggered_id['index']]]['Bounding_Box']
-                print(new_marker_bbox)
-                
-                # Convert to map coordinates
-                new_marker_map_coordinates = self.wsi.convert_slide_coords(new_marker_bbox)
-                print(new_marker_map_coordinates)
-
-            raise exceptions.PreventUpdate
-
         else:
             raise exceptions.PreventUpdate
 

@@ -290,13 +290,16 @@ class DSASlide:
 
         if ftu in self.ftu_names:
             
-            # Finding which members of a specfied ftu group intersect with the provided box_poly
-            ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
-            
-            # Returning list of dictionaries that use original keys in properties
-            intersecting_ftu_props = []
-            if len(ftu_intersect_idx)>0:
-                intersecting_ftu_props = [self.ftu_props[ftu][i] for i in ftu_intersect_idx]
+            if not ftu=='Spots':
+                # Finding which members of a specfied ftu group intersect with the provided box_poly
+                ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
+                
+                # Returning list of dictionaries that use original keys in properties
+                intersecting_ftu_props = []
+                if len(ftu_intersect_idx)>0:
+                    intersecting_ftu_props = [self.ftu_props[ftu][i] for i in ftu_intersect_idx]
+            else:
+                intersecting_ftu_props = []
 
             return intersecting_ftu_props
         elif ftu=='all':
@@ -305,12 +308,21 @@ class DSASlide:
             intersecting_ftu_props = {}
             intersecting_ftu_poly = None
             for ftu in self.ftu_names:
-                ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
+                if not ftu=='Spots':
+                    ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
 
-                if len(ftu_intersect_idx)==1:
-                    intersecting_ftu_props = self.ftu_props[ftu][ftu_intersect_idx[0]]
-                    intersecting_ftu_poly = self.ftu_polys[ftu][ftu_intersect_idx[0]]
+                    if len(ftu_intersect_idx)==1:
+                        intersecting_ftu_props = self.ftu_props[ftu][ftu_intersect_idx[0]]
+                        intersecting_ftu_poly = self.ftu_polys[ftu][ftu_intersect_idx[0]]
+                """
+                else:
+                    spot_intersect_index = [i for i in range(0,len(self.spot_polys)) if self.spot_polys[i].intersects(box_poly)]
 
+                    if len(spot_intersect_index)==1:
+                        intersecting_ftu_props = self.spot_props[spot_intersect_index[0]]
+                        intersecting_ftu_poly = self.spot_polys[spot_intersect_index[0]]
+                """
+                
             return intersecting_ftu_props, intersecting_ftu_poly
         else:
             raise ValueError
@@ -331,9 +343,8 @@ class DSASlide:
         # and converts to be map coordinates
         return_coords = []
         for i in input_coords:
-            return_coords.append([i[0]*self.x_scale,i[1]*y_scale])
+            return_coords.append([i[0]*self.x_scale,i[1]*self.y_scale])
 
         return return_coords
     
 
-    
