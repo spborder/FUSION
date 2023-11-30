@@ -23,7 +23,7 @@ import uuid
 import zipfile
 import shutil
 from PIL import Image
-from io import BytesIO
+from io import BytesIO, StringIO
 import requests
 from math import ceil
 import base64
@@ -51,6 +51,7 @@ from tqdm import tqdm
 from timeit import default_timer as timer
 import textwrap
 
+from scipy import stats
 
 
 class LayoutHandler:
@@ -501,45 +502,42 @@ class LayoutHandler:
             ],align='center'),
             html.Hr(),
             dbc.Row([
+                dbc.Col(html.H3('Plot Report'),md=11),
+                dbc.Col(
+                    self.gen_info_button('Generate distribution summaries, simple statistics, and find cluster markers!'),
+                    md = 1
+                )            
+            ]),
+            dbc.Row([
                 dbc.Card([
                     dbc.CardHeader([
-                        dbc.Col('Plot Report',md=11),
-                        dbc.Col(
-                            self.gen_info_button('Generate distribution summaries, simple statistics, and find cluster markers!'),
-                            md = 1
-                        )
-                    ]),
-                    dbc.CardBody([
-                        dbc.Row([
-                            dbc.Tabs([
+                        dbc.Tabs(
+                            id = 'plot-report-tab',
+                            active_tab='feat-summ-tab',
+                            children = [
                                 dbc.Tab(
                                     label = 'Feature Summaries',
-                                    tab_id = 'feat-summ',
-                                    children = [
-                                        html.Div(id='feat-summ-div',children = [])
-                                    ]
+                                    tab_id = 'feat-summ-tab'
                                 ),
                                 dbc.Tab(
                                     label = 'Statistics',
-                                    tab_id = 'feat-stats',
-                                    children = [
-                                        html.Div(id = 'feat-stats-div',children = [])
-                                    ]
+                                    tab_id = 'feat-stat-tab'
                                 ),
                                 dbc.Tab(
                                     label = 'Cluster Markers',
-                                    tab_id = 'feat-markers',
-                                    children = [
-                                        html.Div(id = 'feat-mark-div',children = [])
-                                    ],
-                                    disabled = True
+                                    tab_id = 'feat-cluster-tab'
                                 )
-                            ])
+                            ]
+                        )
+                    ]),
+                    dbc.CardBody([
+                        dcc.Loading(
+                            html.Div(id='plot-report-div',children = [],style={'maxHeight':'50vh','overflow':'scroll'})
+                            )
                         ])
                     ])
                 ])
             ])
-        ])
 
         # Tools for selecting regions, transparency, and cells
 
@@ -761,6 +759,285 @@ class LayoutHandler:
         self.layout_dict['vis'] = vis_content
         self.description_dict['vis'] = vis_description
 
+    def gen_report_child(self,feature_data,child_type):
+
+        # Generate new report of feature data
+        unique_labels = np.unique(feature_data['label'].tolist()).tolist()
+        feature_data = feature_data.copy()
+
+        # Generating a different report depending on the type 
+        # one of ['feat-summ-tab','feat-stat-tab','feat-cluster-tab']
+        if child_type=='feat-summ-tab':
+
+            # Find summaries for the numeric 
+            report_children = []
+            for u_l_idx,u_l in enumerate(unique_labels):
+                report_children.extend([
+                    html.H3(f'Samples labeled: {u_l}'),
+                    html.Hr()
+                ])
+
+                label_data = feature_data[feature_data['label'].str.match(u_l)]
+                data_summ = label_data.describe()
+                data_summ.reset_index(inplace=True,drop=False)
+
+                report_children.append(
+                    dash_table.DataTable(
+                        id = {'type':'feat-summ-table','index':u_l_idx},
+                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in data_summ.columns],
+                        data = data_summ.to_dict('records'),
+                        editable = False,
+                        style_cell = {
+                            'overflow':'hidden',
+                            'textOverflow':'ellipsis',
+                            'maxWidth':0
+                        },
+                        tooltip_data = [
+                            {
+                                column: {'value':str(value),'type':'markdown'}
+                                for column, value in row.items()
+                            } for row in data_summ.to_dict('records')
+                        ],
+                        tooltip_duration = None
+                    )
+                )
+
+                report_children.append(
+                    html.Hr()
+                )
+
+        elif child_type == 'feat-stat-tab':
+
+            # Generate some preliminary statistics describing data
+            # feature_data starts with ['label','Hidden','Main_Cell_Types','Cell_States'] if there's cell type data
+            feature_columns = [i for i in feature_data.columns.tolist() if i not in ['label','Hidden','Main_Cell_Types','Cell_States']]
+            
+            if len(feature_columns)==1:
+
+                # This is a violin plot with a single feature plotted amongst some groups.
+                if len(unique_labels)==1:
+
+                    report_children = dbc.Alert(f'Only one label ({unique_labels[0]}) present!', color = 'warning')
+                
+                elif len(unique_labels)==2:
+                    
+                    # This is a t-test
+                    group_a = feature_data[feature_data['label'].str.match(unique_labels[0])][feature_columns[0]].values
+                    group_b = feature_data[feature_data['label'].str.match(unique_labels[1])][feature_columns[0]].values
+
+                    stats_result = stats.ttest_ind(group_a, group_b)
+                    t_statistic = stats_result.statistic
+                    p_value = stats_result.pvalue
+                    confidence_interval = stats_result.confidence_interval(confidence_level=0.95)
+                    print(confidence_interval)
+
+                    t_df = pd.DataFrame({
+                        't Statistic':t_statistic,
+                        'p Value': p_value,
+                        '95% Confidence Interval (Lower)': confidence_interval.low,
+                        '95% Confidence Interval (Upper)':confidence_interval.high
+                    },index=[0])
+
+                    if p_value<0.05:
+                        sig_alert = dbc.Alert('Statistically significant! (p<0.05)',color='success')
+                    else:
+                        sig_alert = dbc.Alert('Not statistically significant (p>=0.05)',color = 'warning')
+
+                    report_children = [
+                        sig_alert,
+                        html.Hr(),
+                        html.Div([
+                            html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html'),
+                            html.P('Tests null hypothesis that two independent samples have identical mean values. Assumes equal variance within groups.')
+                        ]),
+                        html.Div(
+                            dash_table.DataTable(
+                                id = 'stats-table',
+                                columns = [{'name':i,'id':i} for i in t_df.columns],
+                                data = t_df.to_dict('records'),
+                                style_cell = {
+                                    'overflow':'hidden',
+                                    'textOverflow':'ellipsis',
+                                    'maxWidth':0
+                                },
+                                tooltip_data = [
+                                    {
+                                        column: {'value':str(value),'type':'markdown'}
+                                        for column, value in row.items()
+                                    } for row in t_df.to_dict('records')
+                                ],
+                                tooltip_duration = None
+                            )
+                        )
+                    ]
+
+                elif len(unique_labels)>2:
+
+                    # This is a one-way ANOVA (Analysis of Variance)
+                    group_data = []
+                    for u_l in unique_labels:
+                        group_data.append(
+                            feature_data[feature_data['label'].str.match(u_l)][feature_columns[0]].values
+                        )
+
+                    stats_result = stats.f_oneway(*group_data)
+                    f_stat = stats_result.statistic
+                    p_value = stats_result.pvalue
+
+                    anova_df = pd.DataFrame({
+                        'F Statistic': f_stat,
+                        'p Value':p_value
+                    },index = [0])
+
+                    # Now performing Tukey's honestly significant difference (HSD) test for pairwise comparisons across different labels
+                    # This returns an insane string. Usability score: >:(
+                    tukey_result = str(stats.tukey_hsd(*group_data)).split('\n')
+                    #tukey_df = pd.read_csv(StringIO(tukey_result),header=1,skiprows=[0],sep='\t')
+
+                    # Column names split with two spaces
+                    tukey_columns = tukey_result[1].split('  ')
+                    tukey_data = []
+                    for t_row in tukey_result[2:]:
+                        # Each row starts out with the Comparison which is ' (number - othernumber)' which means you can't just split on spaces
+                        # >:(
+                        split_t_row = t_row.split(' ')
+                        if len(split_t_row)>1:
+                            print(split_t_row)
+                            split_t_row = [i for i in split_t_row if not i=='']
+                            comparison = ''.join(split_t_row[0:3])
+                            comparison_idxes = [unique_labels[int(i.replace('(','').replace(')',''))] for i in comparison.split('-') if not i=='']
+
+                            row_dict = {
+                                'Comparison': ' vs. '.join(comparison_idxes),
+                                'Statistic': split_t_row[3],
+                                'p-value': split_t_row[4],
+                                'Lower CI': split_t_row[5],
+                                'Upper CI': split_t_row[6]
+                            }
+                            tukey_data.append(row_dict)
+
+                    tukey_df = pd.DataFrame(tukey_data)
+                    
+
+                    if p_value<0.05:
+                        sig_alert = dbc.Alert('Statistically significant! (p<0.05)',color='success')
+                    else:
+                        sig_alert = dbc.Alert('Not statistically significant overall (p<=0.05)',color='warning')
+                    
+                    report_children = [
+                        sig_alert,
+                        html.Hr(),
+                        html.Div([
+                            html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html'),
+                            html.P('Tests null hypothesis that two or more groups have the same population mean. Assumes independent samples from normal, homoscedastic (equal standard deviation) populations')
+                        ]),
+                        html.Div(
+                            dash_table.DataTable(
+                                id='stats-table',
+                                columns = [{'name':i,'id':i} for i in anova_df.columns],
+                                data = anova_df.to_dict('records'),
+                                style_cell = {
+                                    'overflow':'hidden',
+                                    'textOverflow':'ellipsis',
+                                    'maxWidth':0
+                                },
+                                tooltip_data = [
+                                    {
+                                        column: {'value':str(value),'type':'markdown'}
+                                        for column, value in row.items()
+                                    } for row in anova_df.to_dict('records')
+                                ],
+                                tooltip_duration = None
+                            )
+                        ),
+                        html.Hr(),
+                        html.Div([
+                            html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html'),
+                            html.P('Post hoc test for pairwise comparison of means from different groups. Assumes independent samples from normal, equal (finite) variance populations')
+                        ]),
+                        html.Div(
+                            dash_table.DataTable(
+                                id='tukey-table',
+                                columns = [{'name':i,'id':i} for i in tukey_df.columns],
+                                data = tukey_df.to_dict('records'),
+                                style_cell = {
+                                    'overflow':'hidden',
+                                    'textOverflow':'ellipsis',
+                                    'maxWidth':0
+                                },
+                                tooltip_data = [
+                                    {
+                                        column: {'value':str(value),'type':'markdown'}
+                                        for column,value in row.items()
+                                    } for row in tukey_df.to_dict('records')
+                                ],
+                                tooltip_duration = None,
+                                style_data_conditional = [
+                                    {
+                                        'if':{
+                                            'column_id':'Comparison'
+                                        },
+                                        'width':'35%'
+                                    },
+                                    {
+                                        'if': {
+                                            'filter_query': '{p-value} <0.05',
+                                            'column_id':'p-value',
+                                        },
+                                        'backgroundColor':'green',
+                                        'color':'white'
+                                    },
+                                    {
+                                        'if':{
+                                            'filter_query': '{p-value} >= 0.05',
+                                            'column_id':'p-value'
+                                        },
+                                        'backgroundColor':'tomato',
+                                        'color':'white'
+                                    }
+                                ]
+                            )
+                        )
+                    ]
+
+            elif len(feature_columns)==2:
+                
+                # This is for two dimensional scatter plots without dimensional reduction
+                # Calculating R^2 value for each label?
+                report_children = [
+                    'And then I would calculate R^2'
+                ]
+
+            elif len(feature_columns)>2:
+
+                # Clustering scores? Silhouette score/index?
+                report_children = [
+                    'And then I would calculate some silhouette or clustering score'
+                ]
+
+            else:
+
+                # This should never happen lol
+                report_children = [
+                    'What did you do >:('
+                ]
+
+        elif child_type=='feat-cluster-tab':
+
+            # Just return a button that runs cluster marker determination. Have to add this separately somewhere.
+            report_children = [
+                dbc.Button(
+                    'Find Cluster Markers!',
+                    id = {'type':'cluster-markers-butt','index':0},
+                    className = 'd-grid col-12 mx-auto'
+                ),
+                html.Div(
+                    id = {'type':'cluster-marker-div','index':0}
+                )
+            ]
+
+        return report_children
+        
     def gen_wsi_view(self, wsi):
 
         # Grabbing all the necessary properties to generate the children of the wsi viewer card
@@ -1471,7 +1748,7 @@ class LayoutHandler:
                             html.Div(
                                 dcc.Dropdown(
                                     slide_names,
-                                    slide_names[0],
+                                    placeholder = 'Current visualization session',
                                     id = 'slide-select'
                                 )
                             ), md=7

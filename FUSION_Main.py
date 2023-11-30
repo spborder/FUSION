@@ -92,9 +92,10 @@ class FUSION:
         self.morphometrics_names = self.dataset_handler.morpho_names
 
         # Load clustering data
-        self.clustering_data = self.dataset_handler.load_clustering_data()
+        self.clustering_data = pd.DataFrame()
         self.filter_labels = []
         self.umap_df = None
+        self.reports_generated = {}
 
         # Number of main cell types to include in pie-charts (currently set to all cell types)
         self.plot_cell_types_n = len(list(self.cell_names_key.keys()))
@@ -549,7 +550,8 @@ class FUSION:
              Input('label-select','value')],
             [Output('cluster-graph','figure'),
              Output('label-info','children'),
-             Output('filter-info','children')],
+             Output('filter-info','children'),
+             Output('plot-report-tab','active_tab')],
             [State('feature-select-tree','checked'),
              State('filter-select-tree','checked'),
              State('cell-states-clustering','value')],
@@ -642,6 +644,13 @@ class FUSION:
              Input({'type':'get-clustering-butt','index':ALL},'n_clicks')],
             prevent_initial_call=True
         )(self.populate_cluster_tab)
+
+        # Updating contents of plot-report tabs when switched
+        self.app.callback(
+            Output('plot-report-div','children'),
+            Input('plot-report-tab','active_tab'),
+            prevent_initial_call = True
+        )(self.update_plot_report)
 
     def builder_callbacks(self):
 
@@ -2135,6 +2144,10 @@ class FUSION:
         # Grabbing current metadata from user private folder        
         # Finding features checked:
         if ctx.triggered_id=='gen-plot-butt':
+
+            self.reports_generated = {}
+            report_active_tab = 'feat-summ-tab'
+
             if self.clustering_data.empty:
                 print(f'Getting new clustering data')
                 self.clustering_data = self.dataset_handler.load_clustering_data()
@@ -2502,10 +2515,12 @@ class FUSION:
                 label_info_children = []
                 filter_info_children = no_update
 
-            return figure, label_info_children, filter_info_children
+            return figure, label_info_children, filter_info_children, report_active_tab
         
         elif ctx.triggered_id=='label-select':
-            
+            self.reports_generated = {}
+            report_active_tab = 'feat-summ-tab'
+
             if not self.feature_data is None:
                 # Getting the label data
                 if label in self.clustering_data.columns:
@@ -2565,7 +2580,9 @@ class FUSION:
                 labels_left = self.feature_data['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
-                if self.feature_data.shape[-1]==5:
+                feature_number = len([i for i in self.feature_data.columns.tolist() if i not in ['label','Hidden','Main_Cell_Types','Cell_States']])
+
+                if feature_number==1:
                     feature_names = self.feature_data.columns.tolist()
                     figure = go.Figure(data = go.Violin(
                         x = self.feature_data['label'],
@@ -2608,7 +2625,7 @@ class FUSION:
                         margin = {'r':0,'b':25}
                     )
 
-                elif self.feature_data.shape[-1]==6:
+                elif feature_number==2:
                     
                     feature_columns = self.feature_data.columns.tolist()
 
@@ -2636,7 +2653,7 @@ class FUSION:
                         margin = {'r':0,'b':25}
                     )
 
-                elif self.feature_data.shape[-1]>6:
+                elif feature_number>2:
 
                     self.umap_df.loc[:,'label']=[label_data[i] for i in list(self.feature_data.index)]
                     
@@ -2664,7 +2681,7 @@ class FUSION:
                         margin = {'r':0,'b':25}
                     )
                 
-                return figure, label_info_children, filter_info_children
+                return figure, label_info_children, filter_info_children, report_active_tab
             else:
                 raise exceptions.PreventUpdate
         else:
@@ -4185,6 +4202,23 @@ class FUSION:
 
         return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data
 
+    def update_plot_report(self,report_tab):
+
+        # Return the contents of the plot report tab according to selection
+        print(ctx.triggered)
+        print(report_tab)
+
+        report_tab_children = dbc.Alert('Generate a plot first!',color = 'warning')
+        if not self.feature_data is None:
+            if report_tab in self.reports_generated:
+                # Report already generated, return the report
+                report_tab_children = self.reports_generated[report_tab]
+            else:
+                # Report hasn't been generated yet, generate it
+                report_tab_children = self.layout_handler.gen_report_child(self.feature_data,report_tab)
+                self.reports_generated[report_tab] = report_tab_children
+            
+        return report_tab_children
 
 def app(*args):
     
