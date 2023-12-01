@@ -536,8 +536,24 @@ class LayoutHandler:
                             )
                         ])
                     ])
-                ])
+                ]),
+            html.Hr(),
+            dbc.Row([
+                html.Div(
+                    dcc.Loading([
+                        dbc.Button(
+                            'Download Plot Data',
+                            id = 'download-plot-butt',
+                            disabled=True,
+                            className='d-grid col-12 mx-auto'
+                        ),
+                        dcc.Download(id='download-plot-data')
+                    ]),
+                    id = 'download-plot-data-div',
+                    style={'display':None}
+                )
             ])
+        ])
 
         # Tools for selecting regions, transparency, and cells
 
@@ -798,7 +814,15 @@ class LayoutHandler:
                                 for column, value in row.items()
                             } for row in data_summ.to_dict('records')
                         ],
-                        tooltip_duration = None
+                        tooltip_duration = None,
+                        style_data_conditional = [
+                            {
+                                'if':{
+                                    'column_id':'index'
+                                },
+                                'width':'35%'
+                            }
+                        ]
                     )
                 )
 
@@ -829,7 +853,6 @@ class LayoutHandler:
                     t_statistic = stats_result.statistic
                     p_value = stats_result.pvalue
                     confidence_interval = stats_result.confidence_interval(confidence_level=0.95)
-                    print(confidence_interval)
 
                     t_df = pd.DataFrame({
                         't Statistic':t_statistic,
@@ -891,30 +914,25 @@ class LayoutHandler:
 
                     # Now performing Tukey's honestly significant difference (HSD) test for pairwise comparisons across different labels
                     # This returns an insane string. Usability score: >:(
-                    tukey_result = str(stats.tukey_hsd(*group_data)).split('\n')
-                    #tukey_df = pd.read_csv(StringIO(tukey_result),header=1,skiprows=[0],sep='\t')
+                    # Honestly blown away by how idiotic it is to return a "results object" where the only methods are __str__ and updating the confidence interval.
+                    # Imagine a program that just said the answer out loud through your speakers.
+                    # THE CONFIDENCE INTERVAL DOESN'T EVEN EXIST UNTIL YOU PRINT WHAT THE HECK?? 
+                    tukey_result = stats.tukey_hsd(*group_data)
+                    _ = tukey_result.confidence_interval(confidence_level = 0.95)
 
-                    # Column names split with two spaces
-                    tukey_columns = tukey_result[1].split('  ')
+                    # tukey_result is a TukeyHSDResult object, have to assemble the outputs manually because scipy developers are experiencing a gas leak.
                     tukey_data = []
-                    for t_row in tukey_result[2:]:
-                        # Each row starts out with the Comparison which is ' (number - othernumber)' which means you can't just split on spaces
-                        # >:(
-                        split_t_row = t_row.split(' ')
-                        if len(split_t_row)>1:
-                            print(split_t_row)
-                            split_t_row = [i for i in split_t_row if not i=='']
-                            comparison = ''.join(split_t_row[0:3])
-                            comparison_idxes = [unique_labels[int(i.replace('(','').replace(')',''))] for i in comparison.split('-') if not i=='']
-
-                            row_dict = {
-                                'Comparison': ' vs. '.join(comparison_idxes),
-                                'Statistic': split_t_row[3],
-                                'p-value': split_t_row[4],
-                                'Lower CI': split_t_row[5],
-                                'Upper CI': split_t_row[6]
-                            }
-                            tukey_data.append(row_dict)
+                    for i in range(tukey_result.pvalue.shape[0]):
+                        for j in range(tukey_result.pvalue.shape[0]):
+                            if i != j:
+                                row_dict = {
+                                    'Comparison': ' vs. '.join([unique_labels[i],unique_labels[j]]),
+                                    'Statistic': f'{tukey_result.statistic[i,j]:>10.3f}',
+                                    'p-value': f'{tukey_result.pvalue[i,j]:>10.3f}',
+                                    'Lower CI': f'{tukey_result._ci.low[i,j]:>10.3f}',
+                                    'Upper CI': f'{tukey_result._ci.high[i,j]:>10.3f}'
+                                }
+                                tukey_data.append(row_dict)
 
                     tukey_df = pd.DataFrame(tukey_data)
                     

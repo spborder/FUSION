@@ -551,7 +551,8 @@ class FUSION:
             [Output('cluster-graph','figure'),
              Output('label-info','children'),
              Output('filter-info','children'),
-             Output('plot-report-tab','active_tab')],
+             Output('plot-report-tab','active_tab'),
+             Output('download-plot-butt','disabled')],
             [State('feature-select-tree','checked'),
              State('filter-select-tree','checked'),
              State('cell-states-clustering','value')],
@@ -639,7 +640,8 @@ class FUSION:
              Output('label-select','disabled'),
              Output('label-select','options'),
              Output('label-select','value'),
-             Output('filter-select-tree','data')],
+             Output('filter-select-tree','data'),
+             Output('download-plot-data-div','style')],
             [Input('tools-tabs','active_tab'),
              Input({'type':'get-clustering-butt','index':ALL},'n_clicks')],
             prevent_initial_call=True
@@ -651,6 +653,13 @@ class FUSION:
             Input('plot-report-tab','active_tab'),
             prevent_initial_call = True
         )(self.update_plot_report)
+
+        # Downloading data in the current plot
+        self.app.callback(
+            Output('download-plot-data','data'),
+            Input('download-plot-butt','n_clicks'),
+            prevent_initial_call = True
+        )(self.download_plot_data)
 
     def builder_callbacks(self):
 
@@ -2148,6 +2157,9 @@ class FUSION:
             self.reports_generated = {}
             report_active_tab = 'feat-summ-tab'
 
+            # Enabling download plot data button
+            download_plot_disable = False
+
             if self.clustering_data.empty:
                 print(f'Getting new clustering data')
                 self.clustering_data = self.dataset_handler.load_clustering_data()
@@ -2515,11 +2527,14 @@ class FUSION:
                 label_info_children = []
                 filter_info_children = no_update
 
-            return figure, label_info_children, filter_info_children, report_active_tab
+            return figure, label_info_children, filter_info_children, report_active_tab, download_plot_disable
         
         elif ctx.triggered_id=='label-select':
             self.reports_generated = {}
             report_active_tab = 'feat-summ-tab'
+
+            # Enabling download plot data button
+            download_plot_disable = False
 
             if not self.feature_data is None:
                 # Getting the label data
@@ -2681,7 +2696,7 @@ class FUSION:
                         margin = {'r':0,'b':25}
                     )
                 
-                return figure, label_info_children, filter_info_children, report_active_tab
+                return figure, label_info_children, filter_info_children, report_active_tab, download_data_disable
             else:
                 raise exceptions.PreventUpdate
         else:
@@ -4131,6 +4146,9 @@ class FUSION:
                             className='d-grid col-12 mx-auto'
                             )
                         
+                        # Setting style of download plot data button
+                        download_style = {'display':'inline-block'}
+                        
                         # Generating options
                         self.dataset_handler.generate_feature_dict(self.current_slides)
 
@@ -4149,6 +4167,9 @@ class FUSION:
                             id = {'type':'get-clustering-butt','index':0}
                         )
 
+                        # Setting style of download plot data button
+                        download_style = {'display':None}
+
                         feature_select_data = []
                         label_select_options = []
                         label_select_value = []
@@ -4161,6 +4182,9 @@ class FUSION:
                         className = 'd-grid col-12 mx-auto',
                         id = {'type':'get-clustering-butt','index':0}
                     )
+
+                    # Setting style of download plot data button
+                    download_style = {'display':None}
 
                     feature_select_data = []
                     label_select_options = []
@@ -4190,6 +4214,10 @@ class FUSION:
                     is_open = True,
                     className='d-grid col-12 mx-auto'
                 )
+
+                # Setting style of download plot data button
+                download_style = {'display':'inline-block'}
+
                 feature_select_data = self.dataset_handler.plotting_feature_dict
                 label_select_options = self.dataset_handler.label_dict
                 label_select_value = self.dataset_handler.label_dict[0]['value']
@@ -4200,14 +4228,11 @@ class FUSION:
             # If in another tab, just leave alone
             raise exceptions.PreventUpdate
 
-        return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data
+        return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style
 
     def update_plot_report(self,report_tab):
 
         # Return the contents of the plot report tab according to selection
-        print(ctx.triggered)
-        print(report_tab)
-
         report_tab_children = dbc.Alert('Generate a plot first!',color = 'warning')
         if not self.feature_data is None:
             if report_tab in self.reports_generated:
@@ -4219,6 +4244,38 @@ class FUSION:
                 self.reports_generated[report_tab] = report_tab_children
             
         return report_tab_children
+
+    def download_plot_data(self,download_button_clicked):
+
+        print(ctx.triggered)
+        if not download_button_clicked:
+            raise exceptions.PreventUpdate
+        
+        if not self.feature_data is None:
+
+            feature_columns = [i for i in self.feature_data if i not in ['label','Hidden','Main_Cell_Types','Cell_States']]
+
+            # If this is umap data then save one sheet with the raw data and another with the umap embeddings
+            if len(feature_columns)<=2:
+
+                download_data_df = {
+                    'FUSION_Plot_Features': self.feature_data.copy()
+                }
+            elif len(feature_columns)>2:
+                download_data_df = {
+                    'FUSION_Plot_Features': self.feature_data.copy(),
+                    'UMAP_Embeddings': self.umap_df[self.umap_df.columns.intersection(['UMAP1','UMAP2'])].copy()
+                }
+
+            with pd.ExcelWriter('Plot_Data.xlsx') as writer:
+                for sheet in download_data_df:
+                    download_data_df[sheet].to_excel(writer,sheet_name=sheet,engine='openpyxl')
+
+            return dcc.send_file('Plot_Data.xlsx')
+        else:
+            raise exceptions.PreventUpdate
+
+
 
 def app(*args):
     
