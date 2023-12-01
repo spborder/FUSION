@@ -2696,7 +2696,7 @@ class FUSION:
                         margin = {'r':0,'b':25}
                     )
                 
-                return figure, label_info_children, filter_info_children, report_active_tab, download_data_disable
+                return figure, label_info_children, filter_info_children, report_active_tab, download_plot_disable
             else:
                 raise exceptions.PreventUpdate
         else:
@@ -4247,7 +4247,6 @@ class FUSION:
 
     def download_plot_data(self,download_button_clicked):
 
-        print(ctx.triggered)
         if not download_button_clicked:
             raise exceptions.PreventUpdate
         
