@@ -1043,16 +1043,21 @@ class LayoutHandler:
         elif child_type=='feat-cluster-tab':
 
             # Just return a button that runs cluster marker determination. Have to add this separately somewhere.
-            report_children = [
-                dbc.Button(
-                    'Find Cluster Markers!',
-                    id = {'type':'cluster-markers-butt','index':0},
-                    className = 'd-grid col-12 mx-auto'
-                ),
-                html.Div(
-                    id = {'type':'cluster-marker-div','index':0}
-                )
-            ]
+            if len(unique_labels)>1:
+                report_children = [
+                    dbc.Button(
+                        'Find Cluster Markers!',
+                        id = {'type':'cluster-markers-butt','index':0},
+                        className = 'd-grid col-12 mx-auto'
+                    ),
+                    html.Div(
+                        id = {'type':'cluster-marker-div','index':0}
+                    )
+                ]
+            else:
+                report_children = [
+                    dbc.Alert(f'Only one label ({unique_labels[0]}) present!', color = 'warning')
+                ]
 
         return report_children
         
@@ -2548,6 +2553,58 @@ class GirderHandler:
         except girder_client.HttpError:
             # Maybe just load the default clustering data if there's an error?
             return pd.DataFrame()
+
+    def save_to_user_folder(self,save_object):
+
+        if not os.path.exists('/tmp'):
+            os.makedirs('/tmp')
+
+        output_path = f'/users/{self.username}/Public'
+        output_path_id = self.gc.get('/resource/lookup',parameters={'path':output_path})['_id']
+
+        if isinstance(save_object['content'],pd.DataFrame):
+            
+            # Saving dataframe
+            if 'csv' in save_object['filename']:
+                save_object['content'].to_csv(f'/tmp/{save_object["filename"]})
+
+            elif 'xlsx' in save_object['filename']:
+                with pd.ExcelWriter(f'/tmp/{save_object["filename"]}') as writer:
+                    save_object['content'].to_excel(writer,engine='openpyxl')
+
+            upload_file_response = self.gc.uploadFileToFolder(
+                folderId = output_path_id,
+                filepath = f'/tmp/{save_object["filename"]}'
+            )
+        
+        else:
+            upload_file_response = []
+
+        return upload_file_response
+
+    def grab_from_user_folder(self,filename):
+
+        public_folder_path = f'/users/{self.username}/Public'
+        public_folder_id = self.gc.get('/resource/lookup',parameters={'path':output_path})['_id']
+        public_folder_items = self.gc.get(f'/resource/{public_folder_id}/items?token={self.user_token}',parameters= {'type':'folder','limit':10000})
+
+        public_folder_names = [i['name'] for i in public_folder_items]
+
+        if filename in public_folder_names:
+            if 'csv' in filename:
+                user_folder_file = pd.read_csv(BytesIO(requests.get(f'{self.apiUrl}/item/{public_folder_items[public_folder_names.index(filename)]["_id"]}/download?token={self.user_token}').content))
+            elif 'json' in filename:
+                user_folder_file = json.loads(requests.get(f'{self.apiUrl}/item/{public_folder_items[public_folder_names.index(filename)]["_id"]}/download?token={self.user_token}').content)
+            else:
+                print(f'File format: {filename} not implemented yet!')
+                user_folder_file = None
+        else:
+            print(f'File: {filename} not found! :(')
+            user_folder_file = Nonele
+
+            
+        return user_folder_fi
+
 
     """
     def get_cli_input_list(self,cli_id):

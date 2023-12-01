@@ -661,6 +661,19 @@ class FUSION:
             prevent_initial_call = True
         )(self.download_plot_data)
 
+        # Find cluster markers button clicked and return dcc.Interval object
+        self.app.callback(
+            [Output({'type':'cluster-marker-div','index':ALL},'children'),
+             Output({'type':'cluster-markers-butt','index':ALL},'disabled')],
+            Input({'type':'cluster-markers-butt','index':ALL},'n_clicks'),
+            prevent_initial_call = True
+        )(self.start_cluster_markers)
+
+        # Updating logs from cluster markers job
+        self.app.callback(
+            [Output()]
+        )
+
     def builder_callbacks(self):
 
         # Initializing plot after selecting dataset(s)
@@ -4134,6 +4147,7 @@ class FUSION:
                     current_slide_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
                     unique_ids = np.unique(current_slide_ids).tolist()
                     current_ids = [i['_id'] for i in self.current_slides]
+                    print(f'')
                     # Checking if these are the same (regardless of order)
                     if set(unique_ids)==set(current_ids):
 
@@ -4274,6 +4288,91 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
+    def start_cluster_markers(self,butt_click):
+
+        # Clicked Get Cluster Markers
+        print(ctx.triggered)
+        if butt_click:
+            
+            # Saving current feature data to user public folder
+            features_for_markering = self.dataset_handler.save_to_user_folder({
+                'filename':f'marker_features_{random.randint(0,1000)}.csv',
+                'content': self.feature_data
+            })
+            print(feature_for_markering)
+
+            # Starting cluster marker job
+            cluster_marker_job = self.dataset_handler.gc.post(
+                    '/slicer_cli_web/samborder2256_clustermarkers_fusion_latest/ClusterMarkers',
+                    parameters = {
+                        'feature_address': f'{self.dataset_handler.apiUrl}/item/{feature_for_markering["_id"]}/download?token={self.dataset_handler.user_token}',
+                        'girderApiUrl': self.dataset_handler.apiUrl,
+                        'girderToken': self.dataset_handler.user_token,
+                    }
+                )
+            print(cluster_marker_job)
+            self.cluster_marker_job_id = cluster_marker_job['_id']
+
+            # Returning a dcc.Interval object and another div to store the logs
+            marker_logs_children = [
+                dcc.Interval(
+                    id = {'type':'markers-interval','index':0},
+                    interval = 2000,
+                    disabled = False,
+                    max_intervals = -1,
+                    n_intervals = 0
+                ),
+                html.Div(
+                    id = {'type':'marker-logs-div','index':0},
+                    children = []
+                )
+            ]
+
+            return [marker_logs_children]
+        else:
+            raise exceptions.PreventUpdate
+
+    def update_cluster_logs(self,new_interval):
+
+        # Checking the cluster marker job status and printing the log to the cluster_log_div
+        marker_status, marker_log = self.dataset_handler.get_job_status(self.cluster_marker_job_id)
+
+        print(marker_status)
+        if marker_status<3:
+
+            marker_interval_disable = False
+
+            cluster_log_children = [
+                html.P(marker_log)
+            ]
+
+        else:
+
+            marker_interval_disable = True
+
+            cluster_log_children = [
+                dbc.Row(
+                    dbc.Col(
+                        html.Div(
+                            dbc.Alert(
+                                'Markers Found!',
+                                color = 'success',
+                                dismissable = True
+                            ),
+                            style = {'height':'50px','display':'inline-block'}
+                        ), md = 12
+                    ), align = 'center'
+                )
+            ]
+
+            # Read the cluster markers from the user's public folder
+            cluster_log_children.extend([
+                html.Br(),
+                html.Div([
+                    html.A('Cluster Markers found using Seurat v4',href='https://satijalab.org/seurat/articles/pbmc3k_tutorial.html'),
+                    html.P('---Add a short description of how this is done---')
+                ])
+            ])
 
 
 def app(*args):
