@@ -1044,7 +1044,7 @@ class LayoutHandler:
                         dash_table.DataTable(
                             id='pearson-table',
                             columns = [{'name':i,'id':i} for i in pearson_df.columns],
-                            data = tukey_df.to_dict('records'),
+                            data = pearson_df.to_dict('records'),
                             style_cell = {
                                 'overflow':'hidden',
                                 'textOverflow':'ellipsis',
@@ -1054,7 +1054,7 @@ class LayoutHandler:
                                 {
                                     column: {'value':str(value),'type':'markdown'}
                                     for column,value in row.items()
-                                } for row in tukey_df.to_dict('records')
+                                } for row in pearson_df.to_dict('records')
                             ],
                             tooltip_duration = None,
                             style_data_conditional = [
@@ -1080,81 +1080,87 @@ class LayoutHandler:
                 )
 
             elif len(feature_columns)>2:
+                
+                if len(unique_labels)>=2:
+                    # Clustering scores? Silhouette score/index?
+                    report_children = [
+                        html.Div([
+                            html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score'),
+                            html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
+                        ])
+                    ]
 
-                # Clustering scores? Silhouette score/index?
-                report_children = [
-                    html.Div([
-                        html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score'),
-                        html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
+                    # Overall silhouette score for this set of data
+                    overall_silhouette = silhouette_score(feature_data.values[:,0:2],feature_data['label'].tolist())
+                    print(f'overall silhouette score: {overall_silhouette}')
+                    if overall_silhouette>=-1 and overall_silhouette<=-0.5:
+                        silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
+                    elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
+                        silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
+                    elif overall_silhouette>0.5 and overall_silhouette<=1:
+                        silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
+                    else:
+                        silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
+
+                    report_children.extend([
+                        html.Br(),
+                        silhouette_alert,
+                        html.Hr()
                     ])
-                ]
 
-                # Overall silhouette score for this set of data
-                overall_silhouette = silhouette_samples(feature_data.values[:,0:2],feature_data['labels'].tolist())
-                print(f'overall silhouette score: {overall_silhouette}')
-                if overall_silhouette>=-1 and overall_silhouette<=-0.5:
-                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
-                elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
-                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
-                elif overall_silhouette>0.5 and overall_silhouette<=1:
-                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
-                else:
-                    silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
+                    samples_silhouette_scores = silhouette_samples(feature_data.values[:,0:2],feature_data['label'].tolist())
+                    sil_dict = {'Label':[],'Silhouette Score':[]}
+                    for u_l in unique_labels:
+                        sil_dict['Label'].append(u_l)
+                        sil_dict['Silhouette Score'].append(np.nanmean(samples_silhouette_scores[[i==u_l for i in feature_data['label'].tolist()]]))
 
-                report_children.extend([
-                    html.Br(),
-                    silhouette_alert,
-                    html.Hr()
-                ])
+                    sil_df = pd.DataFrame(sil_dict)
 
-                samples_silhouette_scores = silhouette_samples(feature_data.values[:,0:2],feature_data['label'].tolist())
-                sil_dict = {'Label':[],'Silhouette Score':[]}
-                for u_l in unique_labels:
-                    sil_dict['Label'].append(u_l)
-                    sil_dict['Silhouette Score'].append(np.nanmean(samples_silhouette_scores[[i==u_l for i in feature_data['label'].tolist()]]))
-
-                sil_df = pd.DataFrame(sil_dict)
-
-                report_children.append(
-                    html.Div(
-                        dash_table.DataTable(
-                            id='silhouette-table',
-                            columns = [{'name':i,'id':i} for i in sil_df.columns],
-                            data = sil_df.to_dict('records'),
-                            style_cell = {
-                                'overflow':'hidden',
-                                'textOverflow':'ellipsis',
-                                'maxWidth':0
-                            },
-                            tooltip_data = [
-                                {
-                                    column: {'value':str(value),'type':'markdown'}
-                                    for column,value in row.items()
-                                } for row in tukey_df.to_dict('records')
-                            ],
-                            tooltip_duration = None,
-                            style_data_conditional = [
-                                {
-                                    'if': {
-                                        'filter_query': '{Silhouette Score}>0',
-                                        'column_id':'Silhouette Score',
-                                    },
-                                    'backgroundColor':'green',
-                                    'color':'white'
+                    report_children.append(
+                        html.Div(
+                            dash_table.DataTable(
+                                id='silhouette-table',
+                                columns = [{'name':i,'id':i} for i in sil_df.columns],
+                                data = sil_df.to_dict('records'),
+                                style_cell = {
+                                    'overflow':'hidden',
+                                    'textOverflow':'ellipsis',
+                                    'maxWidth':0
                                 },
-                                {
-                                    'if':{
-                                        'filter_query': '{Silhouette Score}<0',
-                                        'column_id':'Silhouette Score'
+                                tooltip_data = [
+                                    {
+                                        column: {'value':str(value),'type':'markdown'}
+                                        for column,value in row.items()
+                                    } for row in sil_df.to_dict('records')
+                                ],
+                                tooltip_duration = None,
+                                style_data_conditional = [
+                                    {
+                                        'if': {
+                                            'filter_query': '{Silhouette Score}>0',
+                                            'column_id':'Silhouette Score',
+                                        },
+                                        'backgroundColor':'green',
+                                        'color':'white'
                                     },
-                                    'backgroundColor':'tomato',
-                                    'color':'white'
-                                }
-                            ]
+                                    {
+                                        'if':{
+                                            'filter_query': '{Silhouette Score}<0',
+                                            'column_id':'Silhouette Score'
+                                        },
+                                        'backgroundColor':'tomato',
+                                        'color':'white'
+                                    }
+                                ]
+                            )
                         )
                     )
-                )
-                    
+                else:
+
+                    report_children = [
+                        dbc.Alert(f'Only one label: {unique_labels[0]} present!',color='warning')
+                    ]
+
             else:
 
                 # This should never happen lol

@@ -4352,7 +4352,8 @@ class FUSION:
                 marker_interval_disable = False
 
                 cluster_log_children = [
-                    html.P(marker_log)
+                    html.P(i)
+                    for i in marker_log.split('\n')
                 ]
 
             else:
