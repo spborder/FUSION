@@ -52,7 +52,7 @@ from timeit import default_timer as timer
 import textwrap
 
 from scipy import stats
-
+from sklearn.metrics import silhouette_score, silhouette_samples
 
 class LayoutHandler:
     def __init__(self,
@@ -804,9 +804,7 @@ class LayoutHandler:
                         data = data_summ.to_dict('records'),
                         editable = False,
                         style_cell = {
-                            'overflow':'hidden',
-                            'textOverflow':'ellipsis',
-                            'maxWidth':0
+                            'overflowX':'auto'
                         },
                         tooltip_data = [
                             {
@@ -1021,18 +1019,142 @@ class LayoutHandler:
             elif len(feature_columns)==2:
                 
                 # This is for two dimensional scatter plots without dimensional reduction
-                # Calculating R^2 value for each label?
+                # Calculating Pearson's correlation coefficient for each label
+                # Could also do some kind of Fisher Transformation to compare multiple Pearson r values
                 report_children = [
-                    'And then I would calculate R^2'
+                    html.Div([
+                        html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html'),
+                        html.P('Measures the linear relationship between two datasets. Assumes normally distributed data.')
+                    ])
                 ]
+                pearson_r_list = []
+                p_val_list = []
+                for u_l in unique_labels:
+                    # For each label, generate a new table with r
+                    group_data = feature_data[feature_data['label'].str.match(u_l)][feature_columns[0]].values
+                    group_r,group_p = stats.mstats.pearsonr(group_data[:,0],group_data[:,1])
+                    
+                    pearson_r_list.append(group_r)
+                    p_val_list.append(group_p)
+
+                pearson_df = pd.DataFrame(data = {'Label': unique_labels, 'Pearson r': pearson_r_list, 'p-value':p_val_list})
+
+                report_children.append(
+                    html.Div(
+                        dash_table.DataTable(
+                            id='pearson-table',
+                            columns = [{'name':i,'id':i} for i in pearson_df.columns],
+                            data = tukey_df.to_dict('records'),
+                            style_cell = {
+                                'overflow':'hidden',
+                                'textOverflow':'ellipsis',
+                                'maxWidth':0
+                            },
+                            tooltip_data = [
+                                {
+                                    column: {'value':str(value),'type':'markdown'}
+                                    for column,value in row.items()
+                                } for row in tukey_df.to_dict('records')
+                            ],
+                            tooltip_duration = None,
+                            style_data_conditional = [
+                                {
+                                    'if': {
+                                        'filter_query': '{p-value} <0.05',
+                                        'column_id':'p-value',
+                                    },
+                                    'backgroundColor':'green',
+                                    'color':'white'
+                                },
+                                {
+                                    'if':{
+                                        'filter_query': '{p-value} >= 0.05',
+                                        'column_id':'p-value'
+                                    },
+                                    'backgroundColor':'tomato',
+                                    'color':'white'
+                                }
+                            ]
+                        )
+                    )
+                )
 
             elif len(feature_columns)>2:
 
                 # Clustering scores? Silhouette score/index?
                 report_children = [
-                    'And then I would calculate some silhouette or clustering score'
+                    html.Div([
+                        html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score'),
+                        html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
+                    ])
                 ]
 
+                # Overall silhouette score for this set of data
+                overall_silhouette = silhouette_samples(feature_data.values[:,0:2],feature_data['labels'].tolist())
+                print(f'overall silhouette score: {overall_silhouette}')
+                if overall_silhouette>=-1 and overall_silhouette<=-0.5:
+                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
+                elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
+                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
+                elif overall_silhouette>0.5 and overall_silhouette<=1:
+                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
+                else:
+                    silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
+
+                report_children.extend([
+                    html.Br(),
+                    silhouette_alert,
+                    html.Hr()
+                ])
+
+                samples_silhouette_scores = silhouette_samples(feature_data.values[:,0:2],feature_data['label'].tolist())
+                sil_dict = {'Label':[],'Silhouette Score':[]}
+                for u_l in unique_labels:
+                    sil_dict['Label'].append(u_l)
+                    sil_dict['Silhouette Score'].append(np.nanmean(samples_silhouette_scores[[i==u_l for i in feature_data['label'].tolist()]]))
+
+                sil_df = pd.DataFrame(sil_dict)
+
+                report_children.append(
+                    html.Div(
+                        dash_table.DataTable(
+                            id='silhouette-table',
+                            columns = [{'name':i,'id':i} for i in sil_df.columns],
+                            data = sil_df.to_dict('records'),
+                            style_cell = {
+                                'overflow':'hidden',
+                                'textOverflow':'ellipsis',
+                                'maxWidth':0
+                            },
+                            tooltip_data = [
+                                {
+                                    column: {'value':str(value),'type':'markdown'}
+                                    for column,value in row.items()
+                                } for row in tukey_df.to_dict('records')
+                            ],
+                            tooltip_duration = None,
+                            style_data_conditional = [
+                                {
+                                    'if': {
+                                        'filter_query': '{Silhouette Score}>0',
+                                        'column_id':'Silhouette Score',
+                                    },
+                                    'backgroundColor':'green',
+                                    'color':'white'
+                                },
+                                {
+                                    'if':{
+                                        'filter_query': '{Silhouette Score}<0',
+                                        'column_id':'Silhouette Score'
+                                    },
+                                    'backgroundColor':'tomato',
+                                    'color':'white'
+                                }
+                            ]
+                        )
+                    )
+                )
+                    
             else:
 
                 # This should never happen lol
@@ -2559,14 +2681,14 @@ class GirderHandler:
         if not os.path.exists('/tmp'):
             os.makedirs('/tmp')
 
-        output_path = f'/users/{self.username}/Public'
+        output_path = f'/user/{self.username}/Public'
         output_path_id = self.gc.get('/resource/lookup',parameters={'path':output_path})['_id']
 
         if isinstance(save_object['content'],pd.DataFrame):
             
             # Saving dataframe
             if 'csv' in save_object['filename']:
-                save_object['content'].to_csv(f'/tmp/{save_object["filename"]})
+                save_object['content'].to_csv(f'/tmp/{save_object["filename"]}')
 
             elif 'xlsx' in save_object['filename']:
                 with pd.ExcelWriter(f'/tmp/{save_object["filename"]}') as writer:
@@ -2584,8 +2706,8 @@ class GirderHandler:
 
     def grab_from_user_folder(self,filename):
 
-        public_folder_path = f'/users/{self.username}/Public'
-        public_folder_id = self.gc.get('/resource/lookup',parameters={'path':output_path})['_id']
+        public_folder_path = f'/user/{self.username}/Public'
+        public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
         public_folder_items = self.gc.get(f'/resource/{public_folder_id}/items?token={self.user_token}',parameters= {'type':'folder','limit':10000})
 
         public_folder_names = [i['name'] for i in public_folder_items]
@@ -2600,10 +2722,10 @@ class GirderHandler:
                 user_folder_file = None
         else:
             print(f'File: {filename} not found! :(')
-            user_folder_file = Nonele
+            user_folder_file = None
 
-            
-        return user_folder_fi
+
+        return user_folder_file
 
 
     """

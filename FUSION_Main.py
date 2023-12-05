@@ -671,8 +671,10 @@ class FUSION:
 
         # Updating logs from cluster markers job
         self.app.callback(
-            [Output()]
-        )
+            [Output({'type':'markers-interval','index':ALL},'disabled'),
+             Output({'type':'marker-logs-div','index':ALL},'children')],
+            Input({'type':'markers-interval','index':ALL},'n_intervals')
+        )(self.update_cluster_logs)
 
     def builder_callbacks(self):
 
@@ -4147,7 +4149,8 @@ class FUSION:
                     current_slide_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
                     unique_ids = np.unique(current_slide_ids).tolist()
                     current_ids = [i['_id'] for i in self.current_slides]
-                    print(f'')
+                    print(f'in self.clustering_data: {unique_ids}')
+                    print(f'slide ids in current_slides: {current_ids}')
                     # Checking if these are the same (regardless of order)
                     if set(unique_ids)==set(current_ids):
 
@@ -4237,7 +4240,7 @@ class FUSION:
                 label_select_value = self.dataset_handler.label_dict[0]['value']
                 label_select_disabled = False
                 filter_select_data = self.dataset_handler.label_filter_dict
-
+    
         else:
             # If in another tab, just leave alone
             raise exceptions.PreventUpdate
@@ -4293,19 +4296,21 @@ class FUSION:
         # Clicked Get Cluster Markers
         print(ctx.triggered)
         if butt_click:
+
+            disable_button = True
             
             # Saving current feature data to user public folder
             features_for_markering = self.dataset_handler.save_to_user_folder({
-                'filename':f'marker_features_{random.randint(0,1000)}.csv',
+                'filename':f'marker_features.csv',
                 'content': self.feature_data
             })
-            print(feature_for_markering)
+            print(features_for_markering)
 
             # Starting cluster marker job
             cluster_marker_job = self.dataset_handler.gc.post(
-                    '/slicer_cli_web/samborder2256_clustermarkers_fusion_latest/ClusterMarkers',
+                    '/slicer_cli_web/samborder2256_clustermarkers_fusion_latest/ClusterMarkers/run',
                     parameters = {
-                        'feature_address': f'{self.dataset_handler.apiUrl}/item/{feature_for_markering["_id"]}/download?token={self.dataset_handler.user_token}',
+                        'feature_address': f'{self.dataset_handler.apiUrl}/item/{features_for_markering["itemId"]}/download?token={self.dataset_handler.user_token}',
                         'girderApiUrl': self.dataset_handler.apiUrl,
                         'girderToken': self.dataset_handler.user_token,
                     }
@@ -4328,52 +4333,98 @@ class FUSION:
                 )
             ]
 
-            return [marker_logs_children]
+            return [marker_logs_children],[disable_button]
         else:
             raise exceptions.PreventUpdate
 
     def update_cluster_logs(self,new_interval):
 
-        # Checking the cluster marker job status and printing the log to the cluster_log_div
-        marker_status, marker_log = self.dataset_handler.get_job_status(self.cluster_marker_job_id)
+        print(ctx.triggered)
+        print(new_interval)
+        if not new_interval is None:
+            # Checking the cluster marker job status and printing the log to the cluster_log_div
+            marker_status, marker_log = self.dataset_handler.get_job_status(self.cluster_marker_job_id)
 
-        print(marker_status)
-        if marker_status<3:
+            print(f'marker_status: {marker_status}')
+            print(f'marker_log: {marker_log}')
+            if marker_status<3:
+                
+                marker_interval_disable = False
 
-            marker_interval_disable = False
+                cluster_log_children = [
+                    html.P(marker_log)
+                ]
 
-            cluster_log_children = [
-                html.P(marker_log)
-            ]
+            else:
 
+                marker_interval_disable = True
+
+                # Load cluster markers from user folder
+                cluster_marker_data = pd.DataFrame(self.dataset_handler.grab_from_user_folder('FUSION_Cluster_Markers.json'))
+
+                cluster_log_children = [
+                    dbc.Row(
+                        dbc.Col(
+                            html.Div(
+                                dbc.Alert(
+                                    'Markers Found!',
+                                    color = 'success',
+                                    dismissable = True,
+                                    className = 'd-grid col-12 mx-auto'
+                                )
+                            ), md = 12
+                        ), align = 'center'
+                    ),
+                    html.Br(),
+                    html.Div([
+                        html.A('Cluster Markers found using Seurat v4',href='https://satijalab.org/seurat/articles/pbmc3k_tutorial.html'),
+                        html.P('Cluster identities determined by plot labels. Marker features determined using a Wilcoxon Rank Sum test.')
+                    ]),
+                    html.Div(
+                        dash_table.DataTable(
+                            id = 'cluster-marker-table',
+                            columns = [{'name':i,'id':i} for i in cluster_marker_data.columns],
+                            data = cluster_marker_data.to_dict('records'),
+                            style_cell = {
+                                'overflow':'hidden',
+                                'textOverflow':'ellipsis',
+                                'maxWidth':0
+                            },
+                            tooltip_data = [
+                                {
+                                    column: {'value':str(value),'type':'markdown'}
+                                    for column, value in row.items()
+                                } for row in cluster_marker_data.to_dict('records')
+                            ],
+                            tooltip_duration = None,
+                            style_data_conditional = [
+                                {
+                                    'if': {
+                                        'filter_query': '{p_val_adj} <0.05',
+                                        'column_id':'p_val_adj'
+                                    },
+                                    'backgroundColor':'green',
+                                    'color':'white'
+                                },
+                                {
+                                    'if': {
+                                        'filter_query': '{p_val_adj}>=0.05',
+                                        'column_id':'p_val_adj'
+                                    },
+                                    'backgroundColor':'tomato',
+                                    'color':'white'
+                                }
+                            ]
+                        )
+                    )
+                ]
+            
+            self.reports_generated['feat-cluster-tab'] = cluster_log_children
+
+            print(f'Disabling interval: {marker_interval_disable}')
+            return [marker_interval_disable], [cluster_log_children]
         else:
-
-            marker_interval_disable = True
-
-            cluster_log_children = [
-                dbc.Row(
-                    dbc.Col(
-                        html.Div(
-                            dbc.Alert(
-                                'Markers Found!',
-                                color = 'success',
-                                dismissable = True
-                            ),
-                            style = {'height':'50px','display':'inline-block'}
-                        ), md = 12
-                    ), align = 'center'
-                )
-            ]
-
-            # Read the cluster markers from the user's public folder
-            cluster_log_children.extend([
-                html.Br(),
-                html.Div([
-                    html.A('Cluster Markers found using Seurat v4',href='https://satijalab.org/seurat/articles/pbmc3k_tutorial.html'),
-                    html.P('---Add a short description of how this is done---')
-                ])
-            ])
-
+            raise exceptions.PreventUpdate
 
 def app(*args):
     
