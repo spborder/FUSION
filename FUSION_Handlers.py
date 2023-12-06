@@ -116,7 +116,7 @@ class LayoutHandler:
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(url=f'./assets/slide_annotations/{struct}.json', id = wsi.map_dict['FTUs'][struct]['id'], options = {'style':{'color':combined_colors_dict[struct]}},
-                            hideout = dict(color_key = {},current_cell = '',fillOpacity=0.5,ftu_color = combined_colors_dict,filter_vals = [0,1]), hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
+                            hideout = dict(color_key = {},current_cell = '',fillOpacity=0.5,ftu_colors = combined_colors_dict,filter_vals = [0,1]), hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                             zoomToBounds=True,children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
                     name = struct, checked = True, id = struct)
             for struct in wsi.map_dict['FTUs']
@@ -162,6 +162,7 @@ class LayoutHandler:
                              ),
             dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
             html.Div(id='ask-fusey-box',style={'visibility':'hidden','position':'absolute','top':'50px','right':'10px','zIndex':'1000'}),
+            html.Div(id='marker-add-div',children = [])
         ]
 
         map_layer = dl.Map(

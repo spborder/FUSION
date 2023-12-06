@@ -310,6 +310,16 @@ class FUSION:
             """
         )
 
+        self.render_marker_handle = assign("""function(feature,latlng,context){
+            const p = feature.properties;
+            if (p.type === 'marker') {
+                return L.marker(latlng);
+            } else {
+                return true;
+            }
+        }
+        """)
+
         # Adding callbacks to app
         self.vis_callbacks()
         self.all_layout_callbacks()
@@ -556,7 +566,8 @@ class FUSION:
         # Add histology marker from clustering/plot
         self.app.callback(
             Input({'type':'add-mark-cluster','index':ALL},'n_clicks'),
-            Output({'type':'edit_control','index':ALL},'geojson'),
+            [Output({'type':'edit_control','index':ALL},'geojson'),
+             Output('marker-add-div','children')],
             prevent_initial_call=True
         )(self.add_marker_from_cluster)
 
@@ -2791,6 +2802,8 @@ class FUSION:
         if click is not None:
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
                 # Custom data contains Slide_Id and BBox coordinates for pulling images
+                if 'points' not in selected:
+                    raise exceptions.PreventUpdate
                 try:
                     sample_info = [i['customdata'][0] for i in selected['points']]
                 except KeyError:
@@ -2978,6 +2991,7 @@ class FUSION:
             if triggered_id == 'edit_control':
                 
                 if triggered_id=='edit_control':
+                    print(new_geojson)
                     if type(new_geojson)==list:
                         new_geojson = new_geojson[0]    
 
@@ -3046,9 +3060,43 @@ class FUSION:
                                 if not overlap_poly is None:
                                     # Getting the intersecting ROI geojson
                                     if len(self.wsi.marked_ftus)==0:
-                                        new_marked_roi = {
-                                            'type':'FeatureCollection',
-                                            'features':[
+                                        if triggered_id=='edit_control':
+                                            new_marked_roi = {
+                                                'type':'FeatureCollection',
+                                                'features':[
+                                                    {
+                                                        'type':'Feature',
+                                                        'geometry':{
+                                                            'type':'Polygon',
+                                                            'coordinates':[list(overlap_poly.exterior.coords)],
+                                                        },
+                                                        'properties':overlap_dict
+                                                    }
+                                                ]
+                                            }
+                                        elif triggered_id=='add-marker-cluster':
+                                            new_marked_roi = {
+                                                'type':'FeatureCollection',
+                                                'features':[
+                                                    {
+                                                        'type':'Feature',
+                                                        'geometry':{
+                                                            'type':'Polygon',
+                                                            'coordinates':[list(overlap_poly.exterior.coords)]
+                                                        },
+                                                        'properties':overlap_dict
+                                                    },
+                                                    new_marked['features'][0]
+                                                ]
+                                            }
+
+                                        self.wsi.marked_ftus = [{
+                                            'geojson':new_marked_roi,
+                                        }]
+
+                                    else:
+                                        if triggered_id=='edit_control':
+                                            self.wsi.marked_ftus[0]['geojson']['features'].append(
                                                 {
                                                     'type':'Feature',
                                                     'geometry':{
@@ -3057,26 +3105,22 @@ class FUSION:
                                                     },
                                                     'properties':overlap_dict
                                                 }
-                                            ]
-                                        }
-
-                                        self.wsi.marked_ftus = [{
-                                            'geojson':new_marked_roi,
-                                        }]
-
-                                    else:
-                                        self.wsi.marked_ftus[0]['geojson']['features'].append(
-                                            {
-                                                'type':'Feature',
-                                                'geometry':{
-                                                    'type':'Polygon',
-                                                    'coordinates':[list(overlap_poly.exterior.coords)],
+                                            )
+                                        elif triggered_id=='add-marker-cluster':
+                                            self.wsi.marked_ftus[0]['geojson']['features'].extend([
+                                                {
+                                                    'type':'Feature',
+                                                    'geometry':{
+                                                        'type':'Polygon',
+                                                        'coordinates':[list(overlap_poly.exterior.coords)]
+                                                    },
+                                                    'properties':overlap_dict
                                                 },
-                                                'properties':overlap_dict
-                                            }
-                                        )
+                                                new_marked['features'][0]
+                                            ])
 
                         # Adding the marked ftus layer if any were added
+                        print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
                         if len(self.wsi.marked_ftus)>0:
                             
                             self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
@@ -3090,7 +3134,7 @@ class FUSION:
                             }
                             new_child = dl.Overlay(
                                 dl.LayerGroup(
-                                    dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle),
+                                    dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), pointToLayer = self.render_marker_handle,
                                             hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
                                             hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
                                             children = []
@@ -3161,7 +3205,6 @@ class FUSION:
         # Adding marker(s) from graph returning geojson
         # index = 0 == mark all the samples in the current slide
         # index != 0 == mark a specific sample in the current slide
-        print(ctx.triggered)
         if ctx.triggered[0]['value']:
             
             if ctx.triggered_id['index']==0:
@@ -3183,6 +3226,11 @@ class FUSION:
                     }
                     for i in marker_center_coords
                 ])
+
+                map_with_markers = [
+                    dl.Marker(position=[-i[0],i[1]])
+                    for i in marker_center_coords
+                ]
             else:
                 # Add marker for a specific sample
                 mark_geojson = {'type':'FeatureCollection','features':[]}
@@ -3200,7 +3248,10 @@ class FUSION:
                     }
                 )
 
-            return [mark_geojson]
+                map_with_markers = dl.Marker(position=[-marker_center_coords[0],marker_center_coords[1]])
+                
+
+            return [mark_geojson], map_with_markers
         else:
             raise exceptions.PreventUpdate
 
