@@ -1274,6 +1274,7 @@ class FUSION:
                 return html.P('Select a slide to get started!')
         else:
             raise exceptions.PreventUpdate
+    
     def update_state_bar(self,cell_click):
         
         if not cell_click is None:
