@@ -108,6 +108,13 @@ class DSASlide:
         # Step 5: Getting annotations for a resource
         self.annotations = self.girder_handler.get_annotations(item_id)
         print(f'Found: {len(self.annotations)} Annotations')
+        if 'Spots' in [i['annotation']['name'] for i in self.annotations if 'annotation' in i]:
+            self.slide_type = '10xVisium'
+            print(f'slide type = {self.slide_type}')
+        else:
+            self.slide_type = 'Other'
+            print(f'slide_type: {self.slide_type}')
+
         # Step 6: Getting user token and tile url
         self.user_token = self.girder_handler.get_token()
         self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token

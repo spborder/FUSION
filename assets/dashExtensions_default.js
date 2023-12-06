@@ -5,10 +5,9 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     color_key,
                     current_cell,
                     fillOpacity,
-                    ftu_color,
+                    ftu_colors,
                     filter_vals
                 } = context.hideout;
-
                 if (current_cell) {
                     if (current_cell === 'cluster') {
                         if (current_cell in feature.properties) {
@@ -80,10 +79,18 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
 
                     style.fillColor = fillColor;
                     style.fillOpacity = fillOpacity;
-                    style.color = ftu_color;
+                    if (feature.properties.name in ftu_colors) {
+                        style.color = ftu_colors[feature.properties.name];
+                    } else {
+                        style.color = 'white';
+                    }
 
                 } else {
-                    style.color = ftu_color;
+                    if (feature.properties.name in ftu_colors) {
+                        style.color = ftu_colors[feature.properties.name];
+                    } else {
+                        style.color = 'white';
+                    }
                 }
 
                 return style;
@@ -95,7 +102,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 color_key,
                 current_cell,
                 fillOpacity,
-                ftu_color,
+                ftu_colors,
                 filter_vals
             } = context.hideout;
 

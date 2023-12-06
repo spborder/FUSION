@@ -106,6 +106,8 @@ class FUSION:
         # FTU settings
         self.wsi = None
         self.current_slides = self.dataset_handler.default_slides
+        for i in self.current_slides:
+            i['included'] = True
         if not self.wsi is None:
             self.ftus = self.wsi.ftu_names
             self.ftu_colors = self.wsi.ftu_colors
@@ -129,7 +131,7 @@ class FUSION:
         ]
 
         # Initializing some parameters
-        self.current_cell = 'PT'
+        self.current_cell = None
 
         # Cell Hierarchy related properties
         self.node_cols = {
@@ -147,9 +149,9 @@ class FUSION:
         self.filter_vals = [0,1]
         self.hex_color_key = {}
 
+        # JavaScript functions for controlling annotation properties
         self.ftu_style_handle = assign("""function(feature,context){
-            const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.hideout;
-                                       
+            const {color_key,current_cell,fillOpacity,ftu_colors,filter_vals} = context.hideout;
             if (current_cell){
                 if (current_cell==='cluster'){
                     if (current_cell in feature.properties){
@@ -221,10 +223,18 @@ class FUSION:
 
                 style.fillColor = fillColor;
                 style.fillOpacity = fillOpacity;
-                style.color = ftu_color;
+                if (feature.properties.name in ftu_colors){
+                    style.color = ftu_colors[feature.properties.name];
+                } else {
+                    style.color = 'white';
+                }
 
             } else {
-                style.color = ftu_color;
+                if (feature.properties.name in ftu_colors){
+                    style.color = ftu_colors[feature.properties.name];
+                } else {
+                    style.color = 'white';
+                }
             }           
                                                                               
             return style;
@@ -233,7 +243,7 @@ class FUSION:
         )
 
         self.ftu_filter = assign("""function(feature,context){
-                const {color_key,current_cell,fillOpacity,ftu_color,filter_vals} = context.hideout;
+                const {color_key,current_cell,fillOpacity,ftu_colors,filter_vals} = context.hideout;
                 
                 if (current_cell){
                     if ("Main_Cell_Types" in feature.properties){
@@ -299,7 +309,7 @@ class FUSION:
             }
             """
         )
-        
+
         # Adding callbacks to app
         self.vis_callbacks()
         self.all_layout_callbacks()
@@ -326,6 +336,8 @@ class FUSION:
         pathname = pathname[1:]
         print(f'Navigating to {pathname}')
 
+        slide_select_value = ''
+
         # If coming from dataset-builder page, update plotting data based on current_slides
         if self.current_page == 'dataset-builder':
             print('Updating plotting metadata')
@@ -347,61 +359,17 @@ class FUSION:
                     description = self.layout_handler.description_dict[self.current_page]
 
             else:
-                # Loading the "vis" layout using the current whole slide image
-                if self.wsi is None:
-                    # If no wsi is currently loaded, load one from the current slide selection (from dataset-builder)
-                    if len(self.current_slides)==0:
-                        # Use default/original slides
-                        default_slide = self.dataset_handler.default_slides[0]
-                        self.wsi = DSASlide(default_slide['name'],default_slide['_id'],self.dataset_handler,self.ftu_colors)
-                        self.current_ftu_layers = self.wsi.ftu_names+['Spots']
-
-                    else:
-                        # Using first slide in self.current_slides
-                        current_slide = self.current_slides[0]
-                        self.wsi = DSASlide(current_slide['name'], current_slide['_id'],self.dataset_handler,self.ftu_colors)
-
-                        self.current_ftu_layers = self.wsi.ftu_names+['Spots']
-
+                self.wsi = None
                 self.filter_vals = [0,1]
                 self.layout_handler.gen_vis_layout(
-                    self.wsi,
-                    #self.dataset_handler.plotting_feature_dict,
-                    #self.dataset_handler.label_dict,
-                    #self.dataset_handler.label_filter_dict
+                    self.wsi
                     )
-                self.clustering_data = self.dataset_handler.load_clustering_data()
-                self.update_hex_color_key(self.current_cell)
+                #self.clustering_data = self.dataset_handler.load_clustering_data()
+                #self.update_hex_color_key(self.current_cell)
+                self.clustering_data = pd.DataFrame()
 
                 container_content = self.layout_handler.layout_dict[self.current_page]
                 description = self.layout_handler.description_dict[self.current_page]
-        elif 'vis/' in pathname:
-            # For specific slide visualization in FUSION
-            self.current_page = 'vis'
-
-            description = self.layout_handler.description_dict[self.current_page]
-            
-            try:
-                self.filter_vals = [0,1]
-
-                slide_name = self.dataset_handler.get_item_name(pathname.split('/')[-1])
-                self.wsi = DSASlide(slide_name,pathname.split('/')[-1],self.dataset_handler,self.ftu_colors)
-                self.layout_handler.gen_vis_layout(
-                    self.wsi,
-                    #self.dataset_handler.plotting_feature_dict,
-                    #self.dataset_handler.label_dict,
-                    #self.dataset_handler.label_filter_dict
-                    )
-                self.clustering_data = self.dataset_handler.load_clustering_data()
-
-                self.update_hex_color_key(self.current_cell)
-                #self.current_ftus = self.wsi.ftu_names+['Spots']
-                self.current_ftu_layers = self.wsi.ftu_names+['Spots']
-
-                container_content = self.layout_handler[self.current_page]
-            except:
-                print(f'Error with ID: {pathname.split("/")[-1]}')
-                container_content = self.layout_handler.layout_dict[self.current_page]
 
         else:
             self.current_page = 'welcome'
@@ -414,7 +382,7 @@ class FUSION:
         else:
             slide_style = {'display':'none'}
 
-        return container_content, description, slide_style
+        return container_content, description, slide_style, slide_select_value
 
     def open_nav_collapse(self,n,is_open):
         if n:
@@ -427,7 +395,8 @@ class FUSION:
         self.app.callback(
             [Output('container-content','children'),
              Output('descrip','children'),
-             Output('slide-select-card','style')],
+             Output('slide-select-card','style'),
+             Output('slide-select','value')],
              Input('url','pathname'),
              prevent_initial_call = True
         )(self.update_page)
@@ -472,7 +441,7 @@ class FUSION:
 
         # Updating GeoJSON fill/color/filter
         self.app.callback(
-            [Output('layer-control','children'),Output('colorbar-div','children'),
+            [Output({'type':'ftu-bounds','index':ALL},'hideout'),Output('colorbar-div','children'),
              Output('filter-slider','max'),Output('filter-slider','disabled'),
              Output('cell-sub-select-div','children')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
@@ -529,8 +498,7 @@ class FUSION:
              Output('slide-map','maxZoom'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children')],
-            [Input('slide-select','value'),
-             Input('url','pathname')],
+            Input('slide-select','value'),
             prevent_initial_call=True,
             suppress_callback_exceptions=True
         )(self.ingest_wsi)
@@ -579,12 +547,18 @@ class FUSION:
 
         # Adding manual ROIs using EditControl
         self.app.callback(
-            [Input({'type':'edit_control','index':ALL},'geojson'),
-             Input({'type':'add-mark-cluster','index':ALL},'n_clicks')],
+            Input({'type':'edit_control','index':ALL},'geojson'),
             [Output('layer-control','children'),
              Output('data-select','options')],
             prevent_initial_call=True
         )(self.add_manual_roi)
+
+        # Add histology marker from clustering/plot
+        self.app.callback(
+            Input({'type':'add-mark-cluster','index':ALL},'n_clicks'),
+            Output({'type':'edit_control','index':ALL},'geojson'),
+            prevent_initial_call=True
+        )(self.add_marker_from_cluster)
 
         # Updating options for downloads
         self.app.callback(
@@ -1181,107 +1155,110 @@ class FUSION:
     def update_roi_pie(self,bounds):
         
         # Making a box-poly from the bounds
-        if len(bounds)==2:
-            bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
-        else:
-            bounds_box = shapely.geometry.box(*bounds)
+        if not self.wsi is None:
+            if len(bounds)==2:
+                bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
+            else:
+                bounds_box = shapely.geometry.box(*bounds)
 
-        #print(f'current viewport bounds: {bounds}')
+            #print(f'current viewport bounds: {bounds}')
 
-        # Storing current slide boundaries
-        self.current_slide_bounds = bounds_box
+            # Storing current slide boundaries
+            self.current_slide_bounds = bounds_box
 
-        # Getting a dictionary containing all the intersecting spots with this current ROI
-        intersecting_ftus = {}
-        if 'Spots' in self.current_ftu_layers:
-            intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
-            intersecting_ftus['Spots'] = intersecting_spots
+            # Getting a dictionary containing all the intersecting spots with this current ROI
+            intersecting_ftus = {}
+            if 'Spots' in self.current_ftu_layers:
+                intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
+                intersecting_ftus['Spots'] = intersecting_spots
 
-        for ftu in self.current_ftu_layers:
-            if not ftu=='Spots':
-                intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+            for ftu in self.current_ftu_layers:
+                if not ftu=='Spots':
+                    intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
-        for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
-            intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
+            for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
+                intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
 
-        for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
-            intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
-                
-        self.current_ftus = intersecting_ftus
-        # Now we have main cell types, cell states, by ftu
-        included_ftus = list(intersecting_ftus.keys())
-        included_ftus = [i for i in included_ftus if len(intersecting_ftus[i])>0]
-
-        if len(included_ftus)>0:
-
-            tab_list = []
-            self.fusey_data = {}
-            #counts_data = pd.DataFrame()
-            for f_idx,f in enumerate(included_ftus):
-                counts_data = pd.DataFrame()
-
-                counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
-                if len(counts_dict_list)>0:
-                    counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
-
-                if not counts_data.empty:
-                    counts_data.columns = [f]
+            for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
+                intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
                     
-                    # Storing some data for Fusey to use :3
-                    structure_number = len(counts_dict_list)
-                    normalized_counts = counts_data[f]/counts_data[f].sum()
+            self.current_ftus = intersecting_ftus
+            # Now we have main cell types, cell states, by ftu
+            included_ftus = list(intersecting_ftus.keys())
+            included_ftus = [i for i in included_ftus if len(intersecting_ftus[i])>0]
 
-                    # Normalizing to sum to 1
-                    counts_data[f] = counts_data[f]/counts_data[f].sum()
-                    # Only getting top n
-                    counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
-                    counts_data = counts_data.reset_index()
+            if len(included_ftus)>0:
 
-                    f_pie = px.pie(counts_data,values=f,names='index')
-                    f_pie.update_traces(textposition='inside')
-                    f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
+                tab_list = []
+                self.fusey_data = {}
+                #counts_data = pd.DataFrame()
+                for f_idx,f in enumerate(included_ftus):
+                    counts_data = pd.DataFrame()
 
-                    top_cell = counts_data['index'].tolist()[0]
+                    counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
+                    if len(counts_dict_list)>0:
+                        counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
 
-                    pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
-                    
-                    pct_states = pct_states.reset_index()
-                    pct_states.columns = ['Cell State','Proportion']
-                    pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+                    if not counts_data.empty:
+                        counts_data.columns = [f]
+                        
+                        # Storing some data for Fusey to use :3
+                        structure_number = len(counts_dict_list)
+                        normalized_counts = counts_data[f]/counts_data[f].sum()
 
-                    # Fusey data
-                    self.fusey_data[f] = {
-                        'structure_number':structure_number,
-                        'normalized_counts':normalized_counts,
-                        'pct_states':pct_states,
-                        'top_cell':top_cell
-                    }
-                    state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
+                        # Normalizing to sum to 1
+                        counts_data[f] = counts_data[f]/counts_data[f].sum()
+                        # Only getting top n
+                        counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
+                        counts_data = counts_data.reset_index()
 
-                    f_tab = dbc.Tab(
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label(f'{f} Cell Type Proportions'),
-                                dcc.Graph(
-                                    id = {'type':'ftu-cell-pie','index':f_idx},
-                                    figure = go.Figure(f_pie)
-                                )
-                            ],md=6),
-                            dbc.Col([
-                                dbc.Label(f'{f} Cell State Proportions'),
-                                dcc.Graph(
-                                    id = {'type':'ftu-state-bar','index':f_idx},
-                                    figure = go.Figure(state_bar)
-                                )
-                            ],md=6)
-                        ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
-                    )
+                        f_pie = px.pie(counts_data,values=f,names='index')
+                        f_pie.update_traces(textposition='inside')
+                        f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
 
-                    tab_list.append(f_tab)
+                        top_cell = counts_data['index'].tolist()[0]
 
-            return dbc.Tabs(tab_list,active_tab = 'tab_0')
+                        pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
+                        
+                        pct_states = pct_states.reset_index()
+                        pct_states.columns = ['Cell State','Proportion']
+                        pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+
+                        # Fusey data
+                        self.fusey_data[f] = {
+                            'structure_number':structure_number,
+                            'normalized_counts':normalized_counts,
+                            'pct_states':pct_states,
+                            'top_cell':top_cell
+                        }
+                        state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
+
+                        f_tab = dbc.Tab(
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Label(f'{f} Cell Type Proportions'),
+                                    dcc.Graph(
+                                        id = {'type':'ftu-cell-pie','index':f_idx},
+                                        figure = go.Figure(f_pie)
+                                    )
+                                ],md=6),
+                                dbc.Col([
+                                    dbc.Label(f'{f} Cell State Proportions'),
+                                    dcc.Graph(
+                                        id = {'type':'ftu-state-bar','index':f_idx},
+                                        figure = go.Figure(state_bar)
+                                    )
+                                ],md=6)
+                            ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
+                        )
+
+                        tab_list.append(f_tab)
+
+                return dbc.Tabs(tab_list,active_tab = 'tab_0')
+            else:
+                return html.P('No FTUs in current view')
         else:
-            return html.P('No FTUs in current view')
+            return html.P('Select a slide to get started!')
 
     def update_state_bar(self,cell_click):
         
@@ -1613,7 +1590,21 @@ class FUSION:
             filter_max_val = 1
 
         self.cell_vis_val = vis_val/100
+        print(callback_context.outputs_list)
+        n_layers = len(callback_context.outputs_list[0])
+        print(f'n_layers to update: {n_layers}')
+        geojson_hideout = [
+            {
+                'color_key':self.hex_color_key,
+                'current_cell':self.current_cell,
+                'fillOpacity': self.cell_vis_val,
+                'ftu_colors':self.ftu_colors,
+                'filter_vals':self.filter_vals
+            }
+            for i in range(0,n_layers)
+        ]
 
+        """
         new_children = [
             dl.Overlay(
                 dl.LayerGroup(
@@ -1651,8 +1642,9 @@ class FUSION:
             )
 
         self.current_overlays = new_children
-                    
-        return new_children, color_bar, filter_max_val, filter_disable, cell_sub_select_children
+        """
+
+        return geojson_hideout, color_bar, filter_max_val, filter_disable, cell_sub_select_children
 
     def update_cell_hierarchy(self,cell_clickData):
         # Loading the cell-graphic and hierarchy image
@@ -1714,7 +1706,8 @@ class FUSION:
 
         if not ftu_click is None:
             self.clicked_ftu = ftu_click
-            ftu_idx = ftu_click['properties']['unique_index']
+            if 'unique_index' in ftu_click['properties']:
+                ftu_idx = ftu_click['properties']['unique_index']
 
             if 'Main_Cell_Types' in ftu_click['properties']:
 
@@ -1766,10 +1759,10 @@ class FUSION:
                     )
                     f_pie.update_traces(textposition='inside')
 
-                    # popup div
-                    add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
-                    popup_div = html.Div([
-                        dbc.Accordion([
+                    # popup divs
+                    if 'unique_index' in ftu_click['properties']:
+                        add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
+                        accordion_children = [
                             dbc.AccordionItem([
                                 html.Div([
                                     dbc.Row([
@@ -1842,7 +1835,71 @@ class FUSION:
                                     ])
                                 ])
                             ],title = 'Custom Properties')
-                        ])
+                        ]
+                    else:
+                        accordion_children = [
+                            dbc.AccordionItem([
+                                html.Div([
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dcc.Graph(figure = f_pie),
+                                            md='auto')
+                                        ],style={'height':'100%','width':'100%'})
+                                    ],style = {'height':'250px','width':'250px','display':'inline-block'})
+                                ], title = 'Main Cell Types'),
+                            dbc.AccordionItem([
+                                dbc.Tabs([
+                                    dbc.Tab(
+                                        html.Div(
+                                            dcc.Graph(
+                                                figure = go.Figure(
+                                                    data = [
+                                                        go.Pie(
+                                                            name = '',
+                                                            values = cs_df['Values'],
+                                                            labels = cs_df['States'],
+                                                            hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
+                                                        )
+                                                    ],
+                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
+                                                              'uniformtext_minsize':12,'uniformtext_mode':'hide'}
+                                                )
+                                            )
+                                        ), label = cs
+                                    )
+                                    for cs,cs_df in zip(non_zero_list,cs_df_list)
+                                ])
+                            ], title = 'Cell States'),
+                            dbc.AccordionItem([
+                                html.Div([
+                                    dash_table.DataTable(
+                                        id = 'popup-table',
+                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
+                                        data = all_properties_df.to_dict('records'),
+                                        editable=False,                                        sort_mode='multi',
+                                        page_current=0,
+                                        page_size=5,
+                                        style_cell = {
+                                            'overflow':'hidden',
+                                            'textOverflow':'ellipsis',
+                                            'maxWidth':0
+                                        },
+                                        tooltip_data = [
+                                            {
+                                                column: {'value':str(value),'type':'markdown'}
+                                                for column, value in row.items()
+                                            } for row in all_properties_df.to_dict('records')
+                                        ],
+                                        tooltip_duration = None
+                                    )
+                                ])
+                            ],title = 'Other Properties')
+                        ]
+                    
+                    popup_div = html.Div([
+                        dbc.Accordion(
+                            children = accordion_children
+                        )
                     ],style={'height':'300px','width':'300px','display':'inline-block'})
 
                     return popup_div
@@ -2004,105 +2061,102 @@ class FUSION:
 
         return f'Label: {label}', dcc.Link(f'ID: {id}', href = new_url), f'Notes: {notes}'
     
-    def ingest_wsi(self,slide_name,url):
+    def ingest_wsi(self,slide_name):
         
-        if ctx.triggered_id == 'url':
-            if 'vis/' in url:
-                # Pulling item id from URL
-                print(f'url: {url}')
-                slide_name = self.dataset_handler.get_item_name(url.split('/')[-1])
-            else:
-                print(f'not a slide ID: {url}')
-                raise exceptions.PreventUpdate
-        print(f'Slide selected: {slide_name}')
-        # Find folder containing this slide
-        for d in self.dataset_handler.slide_datasets:
-            d_slides = [i['name'] for i in self.dataset_handler.slide_datasets[d]['Slides']]
-            if slide_name in d_slides:
-                # Getting slide item id
-                slide_id = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]['_id']
+        if not slide_name=='':
+            print(f'Slide selected: {slide_name}')
+            # Find folder containing this slide
+            for d in self.dataset_handler.slide_datasets:
+                d_slides = [i['name'] for i in self.dataset_handler.slide_datasets[d]['Slides']]
+                if slide_name in d_slides:
+                    # Getting slide item id
+                    slide_id = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]['_id']
 
-        #TODO: Check for previous manual ROIs or marked FTUs
-        new_slide = DSASlide(slide_name,slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
-        self.wsi = new_slide
+            #TODO: Check for previous manual ROIs or marked FTUs
+            new_slide = DSASlide(slide_name,slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+            self.wsi = new_slide
 
-        # Updating in the case that an FTU isn't in the previous set of ftu_colors
-        self.ftu_colors = self.wsi.ftu_colors
+            # Updating in the case that an FTU isn't in the previous set of ftu_colors
+            self.ftu_colors = self.wsi.ftu_colors
 
-        # Updating overlays colors according to the current cell
-        self.update_hex_color_key(self.current_cell)
+            # Updating overlays colors according to the current cell
+            self.update_hex_color_key(self.current_cell)
 
-        new_children = [
-            dl.Overlay(
-                dl.LayerGroup(
-                    dl.GeoJSON(url = f'./assets/slide_annotations/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
-                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors[struct], filter_vals = self.filter_vals),
-                                hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
-                                children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
-                ), name = struct, checked = True, id = new_slide.item_id+'_'+struct
-            )
-            for struct in self.wsi.map_dict['FTUs']
-        ]
-
-        # Now iterating through manual ROIs
-        for m_idx, man in enumerate(self.wsi.manual_rois):
-            new_children.append(
+            new_children = [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = 'white',filter_vals = self.filter_vals),
-                                    hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')),
-                                    children = [dl.Popup(id=man['popup_id'])])
-                    ),
-                    name = f'Manual ROI {m_idx}', checked = True, id = new_slide.item_id+f'_manual_roi{m_idx}'
+                        dl.GeoJSON(url = f'./assets/slide_annotations/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
+                                    hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
+                                    zoomToBounds=True,children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
+                    ), name = struct, checked = True, id = new_slide.item_id+'_'+struct
                 )
-            )
+                for struct in self.wsi.map_dict['FTUs']
+            ]
 
-        print(f'length of new_children: {len(new_children)}')
+            # Now iterating through manual ROIs
+            for m_idx, man in enumerate(self.wsi.manual_rois):
+                new_children.append(
+                    dl.Overlay(
+                        dl.LayerGroup(
+                            dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
+                                        hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')),
+                                        children = [dl.Popup(id=man['popup_id'])])
+                        ),
+                        name = f'Manual ROI {m_idx}', checked = True, id = new_slide.item_id+f'_manual_roi{m_idx}'
+                    )
+                )
 
-        new_url = self.wsi.tile_url
-        center_point = [0.5*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),0.5*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
+            print(f'length of new_children: {len(new_children)}')
 
-        self.current_ftus = self.wsi.ftu_names
-        self.current_ftu_layers = self.wsi.ftu_names
+            new_url = self.wsi.tile_url
+            center_point = [0.5*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),0.5*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
 
-        # Adding the layers to be a property for the edit_control callback
-        self.current_overlays = new_children
+            self.current_ftus = self.wsi.ftu_names
+            self.current_ftu_layers = self.wsi.ftu_names
 
-        # Removes manual ROIs added via dl.EditControl
-        remove_old_edits = [{
-            'mode':'remove',
-            'n_clicks':0,
-            'action':'clear all'
-        }]
+            # Adding the layers to be a property for the edit_control callback
+            self.current_overlays = new_children
 
-        # Populating FTU boundary options:
-        combined_colors_dict = {}
-        for f in self.wsi.map_dict['FTUs']:
-            combined_colors_dict[f] = {'color':self.wsi.map_dict['FTUs'][f]['color']}
-        
-        boundary_options_children = [
-            dbc.Tab(
-                children = [
-                    dbc.Row([
-                        dbc.Col([
-                            html.Div(
-                                dmc.ColorPicker(
-                                    id = {'type':'ftu-bound-color','index':idx},
-                                    format = 'hex',
-                                    value = combined_colors_dict[struct]['color'],
-                                    fullWidth=True
-                                ),
-                                style = {'width':'30vh'}
-                            )
-                        ],md=12,align='center')
-                    ],align='center')
-                ], label = struct
-            )
-            for idx, struct in enumerate(list(combined_colors_dict.keys()))
-        ]
+            # Removes manual ROIs added via dl.EditControl
+            remove_old_edits = [{
+                'mode':'remove',
+                'n_clicks':0,
+                'action':'clear all'
+            }]
 
-        return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children
+            # Populating FTU boundary options:
+            combined_colors_dict = {}
+            for f in self.wsi.map_dict['FTUs']:
+                combined_colors_dict[f] = {'color':self.wsi.map_dict['FTUs'][f]['color']}
+            
+            boundary_options_children = [
+                dbc.Tab(
+                    children = [
+                        dbc.Row([
+                            dbc.Col([
+                                html.Div(
+                                    dmc.ColorPicker(
+                                        id = {'type':'ftu-bound-color','index':idx},
+                                        format = 'hex',
+                                        value = combined_colors_dict[struct]['color'],
+                                        fullWidth=True
+                                    ),
+                                    style = {'width':'30vh'}
+                                )
+                            ],md=12,align='center')
+                        ],align='center')
+                    ], label = struct
+                )
+                for idx, struct in enumerate(list(combined_colors_dict.keys()))
+            ]
+
+            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children
+
+        else:
+
+            raise exceptions.PreventUpdate
 
     def update_graph_label_children(self,leftover_labels):
 
@@ -2761,27 +2815,66 @@ class FUSION:
             label_list = self.feature_data['label'].tolist()
             image_labels = [label_list[l] for l in sample_index]
 
-            #TODO: Make this so you can add all the markers at once, also disable if the slide is changed
-            selected_image_info = html.Div([
-                dbc.Row([
-                    dbc.Col(
-                        html.P(f'Image: {i}, Slide: {j}, Label: {k}'),md=8
-                        ),
-                    dbc.Col(
-                        dbc.Button(
-                            'Add Marker',
-                            id = {'type':'add-mark-cluster','index':i},
-                            className='d-grid mx-auto'
-                        ),md=4
+            #TODO: Disable if the slide is changed
+            if not self.wsi is None:
+                if any([i==self.wsi.slide_name for i in slide_names]) and len(slide_names)>1:
+                    selected_image_info = [
+                        dbc.Row([
+                            dbc.Col(
+                                dbc.Button(
+                                    f'Add All Markers ({slide_names.count(self.wsi.slide_name)})',
+                                    id = {'type':'add-mark-cluster','index':0},
+                                    className='d-grid col-12 mx-auto'
+                                )
+                            )
+                        ])
+                    ]
+                else:
+                    selected_image_info = []
+            else:
+                selected_image_info = []
+
+            for i,j,k in zip(list(range(len(slide_names))),slide_names,image_labels):
+                
+                if not self.wsi is None:
+                    if j == self.wsi.slide_name:
+                        selected_image_info.append(
+                            dbc.Row([
+                                dbc.Col(
+                                    html.P(f'Image: {i}, Slide: {j}, Label: {k}'),
+                                    md = 8
+                                ),
+                                dbc.Col(
+                                    dbc.Button(
+                                        'Add Marker',
+                                        id = {'type':'add-mark-cluster','index':i+1},
+                                        className='d-grid mx-auto'
+                                    ),
+                                    md = 4
+                                )
+                            ],style={'marginBottom':'5px'})
+                        )
+                    else:
+                        selected_image_info.append(
+                            dbc.Row(
+                                dbc.Col(
+                                    html.P(f'Image: {i}, Slide: {j}, Label: {k}')
+                                )
+                            )
+                        )
+                else:
+                    selected_image_info.append(
+                        dbc.Row(
+                            dbc.Col(
+                                html.P(f'Image: {i}, Slide: {j}, Label: {k}')
+                            )
+                        )
                     )
-                ]) if j==self.wsi.slide_name else
-                dbc.Row([
-                    dbc.Col(
-                        html.P(f'Image: {i}, Slide: {j}, Label: {k}')
-                    )
-                ])
-                for i,j,k in list(zip(list(range(len(slide_names))),slide_names,image_labels))
-            ],style = {'maxHeight':'100px','overflow':'scroll'})
+            
+            selected_image_info = html.Div(
+                selected_image_info,
+                style = {'maxHeight':'100px','overflow':'scroll'}
+            )
 
             current_image = self.grab_image(sample_info)
             if len(current_image)==1:
@@ -2872,109 +2965,107 @@ class FUSION:
         else:
             return go.Figure()
 
-    def add_manual_roi(self,new_geojson,mark_click):
+    def add_manual_roi(self,new_geojson):
         
-        try:
-            # Used for pattern-matching callbacks
-            triggered_id = ctx.triggered_id['type']
-        except TypeError:
-            # Used for normal callbacks
-            triggered_id = ctx.triggered_id
+        if not self.wsi is None:
+            try:
+                # Used for pattern-matching callbacks
+                triggered_id = ctx.triggered_id['type']
+            except TypeError:
+                # Used for normal callbacks
+                triggered_id = ctx.triggered_id
 
-        if triggered_id == 'edit_control' or triggered_id=='add-mark-cluster':
-            
-            if triggered_id=='edit_control':
-                if type(new_geojson)==list:
-                    new_geojson = new_geojson[0]
-            elif triggered_id=='add-mark-cluster':
-                if ctx.triggered[0]['value']:
-                    # Adding marker points to new_geojson list
-                    new_geojson = {'type':'FeatureCollection','features':[]}
+            if triggered_id == 'edit_control':
                 
-                    new_marker_bbox = self.feature_data['Hidden'].tolist()[self.current_selected_samples[ctx.triggered_id['index']]]['Bounding_Box']
-                    new_marker_map_coordinates = self.wsi.convert_slide_coords([[new_marker_bbox[0],new_marker_bbox[1]],[new_marker_bbox[2],new_marker_bbox[3]]])
-                    # Taking the average of the bbox coordinates to find the center point (may need to update this later for funky shaped structures)
-                    #TODO: make this part more flexible for C-shaped tubules or something where the average bbox coordinates doesn't intersect with that exact object
-                    center_coords = [(new_marker_map_coordinates[0][0]+new_marker_map_coordinates[1][0])/2,(new_marker_map_coordinates[0][1]+new_marker_map_coordinates[1][1])/2]
-                    new_geojson['features'].append(
-                        {
-                            'type':'Feature',
-                            'properties':{'type':'marker'},
-                            'geometry': {'type':'Point','coordinates':center_coords}
-                        }
-                    )
+                if triggered_id=='edit_control':
+                    if type(new_geojson)==list:
+                        new_geojson = new_geojson[0]    
 
-                else:
-                    raise exceptions.PreventUpdate        
+                if not new_geojson is None:
+                    if len(new_geojson['features'])>0:
+                        
+                        # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
+                        self.wsi.manual_rois = []
+                        self.wsi.marked_ftus = []
+                        self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
+                        for geo in new_geojson['features']:
 
-            if not new_geojson is None:
-                if len(new_geojson['features'])>0:
-                    
-                    # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
-                    self.wsi.manual_rois = []
-                    self.wsi.marked_ftus = []
-                    self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
-                    for geo in new_geojson['features']:
+                            if not geo['properties']['type'] == 'marker':
 
-                        if not geo['properties']['type'] == 'marker':
+                                new_roi = {'type':'FeatureCollection','features':[geo]}
+                                
+                                # New geojson has no properties which can be used for overlays or anything so we have to add those
+                                # Step 1, find intersecting spots:
+                                overlap_spot_props = self.wsi.find_intersecting_spots(shape(new_roi['features'][0]['geometry']))
 
-                            new_roi = {'type':'FeatureCollection','features':[geo]}
-                            
-                            # New geojson has no properties which can be used for overlays or anything so we have to add those
-                            # Step 1, find intersecting spots:
-                            overlap_spot_props = self.wsi.find_intersecting_spots(shape(new_roi['features'][0]['geometry']))
+                                # Adding Main_Cell_Types from intersecting spots data
+                                main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_spot_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
+                                main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
+                                main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
+                                main_counts_dict = main_counts_data.astype(float).to_dict()[0]
 
-                            # Adding Main_Cell_Types from intersecting spots data
-                            main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_spot_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
-                            main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
-                            main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
-                            main_counts_dict = main_counts_data.astype(float).to_dict()[0]
+                                # Aggregating cell state information from intersecting spots
+                                agg_cell_states = {}
+                                for m_c in list(main_counts_dict.keys()):
 
-                            # Aggregating cell state information from intersecting spots
-                            agg_cell_states = {}
-                            for m_c in list(main_counts_dict.keys()):
+                                    cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_spot_props]).sum(axis=0).to_frame()
+                                    cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
+                                    cell_states[0] = cell_states[0].map('{:.19f}'.format)
 
-                                cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_spot_props]).sum(axis=0).to_frame()
-                                cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
-                                cell_states[0] = cell_states[0].map('{:.19f}'.format)
+                                    agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
 
-                                agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
+                                new_roi['features'][0]['properties']['Main_Cell_Types'] = main_counts_dict
+                                new_roi['features'][0]['properties']['Cell_States'] = agg_cell_states
 
-                            new_roi['features'][0]['properties']['Main_Cell_Types'] = main_counts_dict
-                            new_roi['features'][0]['properties']['Cell_States'] = agg_cell_states
+                                new_manual_roi_dict = {
+                                        'geojson':new_roi,
+                                        'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                        'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
+                                        'color':'white',
+                                        'hover_color':'#32a852'
+                                    }
+                                self.wsi.manual_rois.append(new_manual_roi_dict)
 
-                            new_manual_roi_dict = {
-                                    'geojson':new_roi,
-                                    'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                    'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
-                                    'color':'white',
-                                    'hover_color':'#32a852'
-                                }
-                            self.wsi.manual_rois.append(new_manual_roi_dict)
+                                new_child = dl.Overlay(
+                                    dl.LayerGroup(
+                                        dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle),
+                                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
+                                                hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
+                                                children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
+                                            )
+                                    ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
+                                )
 
-                            new_child = dl.Overlay(
-                                dl.LayerGroup(
-                                    dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle),
-                                               hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, filter_vals = self.filter_vals),
-                                               hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
-                                               children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
-                                        )
-                                ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
-                            )
+                                self.current_overlays.append(new_child)
 
-                            self.current_overlays.append(new_child)
+                            elif geo['properties']['type']=='marker':
+                                # Separate procedure for marking regions/FTUs with a marker
+                                new_marked = {'type':'FeatureCollection','features':[geo]}
 
-                        elif geo['properties']['type']=='marker':
-                            # Separate procedure for marking regions/FTUs with a marker
-                            new_marked = {'type':'FeatureCollection','features':[geo]}
+                                overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
+                                if not overlap_poly is None:
+                                    # Getting the intersecting ROI geojson
+                                    if len(self.wsi.marked_ftus)==0:
+                                        new_marked_roi = {
+                                            'type':'FeatureCollection',
+                                            'features':[
+                                                {
+                                                    'type':'Feature',
+                                                    'geometry':{
+                                                        'type':'Polygon',
+                                                        'coordinates':[list(overlap_poly.exterior.coords)],
+                                                    },
+                                                    'properties':overlap_dict
+                                                }
+                                            ]
+                                        }
 
-                            overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
-                            if not overlap_poly is None:
-                                # Getting the intersecting ROI geojson
-                                if len(self.wsi.marked_ftus)==0:
-                                    new_marked_roi = {
-                                        'type':'FeatureCollection',
-                                        'features':[
+                                        self.wsi.marked_ftus = [{
+                                            'geojson':new_marked_roi,
+                                        }]
+
+                                    else:
+                                        self.wsi.marked_ftus[0]['geojson']['features'].append(
                                             {
                                                 'type':'Feature',
                                                 'geometry':{
@@ -2983,93 +3074,133 @@ class FUSION:
                                                 },
                                                 'properties':overlap_dict
                                             }
-                                        ]
-                                    }
-
-                                    self.wsi.marked_ftus = [{
-                                        'geojson':new_marked_roi,
-                                    }]
-
-                                else:
-                                    self.wsi.marked_ftus[0]['geojson']['features'].append(
-                                        {
-                                            'type':'Feature',
-                                            'geometry':{
-                                                'type':'Polygon',
-                                                'coordinates':[list(overlap_poly.exterior.coords)],
-                                            },
-                                            'properties':overlap_dict
-
-                                        }
-                                    )
-
-                    # Adding the marked ftus layer if any were added
-                    if len(self.wsi.marked_ftus)>0:
-                        
-                        self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
-                        self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
-
-                        new_marked_dict = {
-                            'geojson':self.wsi.marked_ftus[0]['geojson'],
-                            'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                            'color':'white',
-                            'hover_color':'#32a852'
-                        }
-                        new_child = dl.Overlay(
-                            dl.LayerGroup(
-                                dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle),
-                                           hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white',filter_vals = self.filter_vals),
-                                           hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
-                                           children = []
                                         )
-                            ), name = f'Marked FTUs {len(self.wsi.marked_ftus)}', checked=True, id = self.wsi.item_id+f'_marked_ftu{len(self.wsi.marked_ftus)}'
-                        )
+
+                        # Adding the marked ftus layer if any were added
+                        if len(self.wsi.marked_ftus)>0:
+                            
+                            self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
+                            self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
+
+                            new_marked_dict = {
+                                'geojson':self.wsi.marked_ftus[0]['geojson'],
+                                'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                'color':'white',
+                                'hover_color':'#32a852'
+                            }
+                            new_child = dl.Overlay(
+                                dl.LayerGroup(
+                                    dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle),
+                                            hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
+                                            hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
+                                            children = []
+                                            )
+                                ), name = f'Marked FTUs', checked=True, id = self.wsi.item_id+f'_marked_ftus'
+                            )
+                            
+                            self.current_overlays.append(new_child)
+
+                        if len(self.wsi.manual_rois)>0:
+                            data_select_options = self.layout_handler.data_options
+                            data_select_options[4]['disabled'] = False
+                        else:
+                            data_select_options = self.layout_handler.data_options
+
+                        if len(self.wsi.marked_ftus)>0:
+                            data_select_options[3]['disabled'] = False
+
+                        if not self.current_cell is None:
+                            if self.current_cell in self.cell_names_key:
+                                self.update_hex_color_key('cell_value')
+                            elif '_' in self.current_cell:
+                                self.update_hex_color_key('cell_sub_value')
+                            elif self.current_cell=='max':
+                                self.update_hex_color_key('max_cell')
+                            elif self.current_cell == 'cluster':
+                                self.update_hex_color_key('cluster')
+                            else:
+                                self.update_hex_color_key(self.current_cell)
+                        else:
+                            self.update_hex_color_key(self.current_cell)
                         
-                        self.current_overlays.append(new_child)
-
-                    if len(self.wsi.manual_rois)>0:
-                        data_select_options = self.layout_handler.data_options
-                        data_select_options[4]['disabled'] = False
+                        return self.current_overlays, data_select_options
                     else:
+
+                        # Clearing manual ROIs and reverting overlays
+                        self.wsi.manual_rois = []
+                        self.wsi.marked_ftus = []
+                        self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
                         data_select_options = self.layout_handler.data_options
 
-                    if len(self.wsi.marked_ftus)>0:
-                        data_select_options[3]['disabled'] = False
+                        if not self.current_cell is None:
+                            if self.current_cell in self.cell_names_key:
+                                self.update_hex_color_key('cell_value')
+                            elif '_' in self.current_cell:
+                                self.update_hex_color_key('cell_sub_value')
+                            elif self.current_cell=='max':
+                                self.update_hex_color_key('max_cell')
+                            elif self.current_cell == 'cluster':
+                                self.update_hex_color_key('cluster')
+                            else:
+                                self.update_hex_color_key(self.current_cell)
+                        else:
+                            self.update_hex_color_key(self.current_cell)
+                        
 
-                    if self.current_cell in self.cell_names_key:
-                        self.update_hex_color_key('cell_value')
-                    elif '_' in self.current_cell:
-                        self.update_hex_color_key('cell_sub_value')
-                    elif self.current_cell=='max':
-                        self.update_hex_color_key('max_cell')
-                    elif self.current_cell == 'cluster':
-                        self.update_hex_color_key('cluster')
-                    else:
-                        self.update_hex_color_key(self.current_cell)
-                    
-                    return self.current_overlays, data_select_options
+                        return self.current_overlays, data_select_options
                 else:
-
-                    # Clearing manual ROIs and reverting overlays
-                    self.wsi.manual_rois = []
-                    self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
-                    data_select_options = self.layout_handler.data_options
-
-                    if self.current_cell in self.cell_names_key:
-                        self.update_hex_color_key('cell_value')
-                    elif '_' in self.current_cell:
-                        self.update_hex_color_key('cell_sub_value')
-                    elif self.current_cell=='max':
-                        self.update_hex_color_key('max_cell')
-                    elif self.current_cell == 'cluster':
-                        self.update_hex_color_key('cluster')
-                    else:
-                        self.update_hex_color_key(self.current_cell)
-                    
-
-                    return self.current_overlays, data_select_options
+                    raise exceptions.PreventUpdate
             else:
                 raise exceptions.PreventUpdate
+
+        else:
+            raise exceptions.PreventUpdate
+
+    def add_marker_from_cluster(self,mark_click):
+
+        # Adding marker(s) from graph returning geojson
+        # index = 0 == mark all the samples in the current slide
+        # index != 0 == mark a specific sample in the current slide
+        print(ctx.triggered)
+        if ctx.triggered[0]['value']:
+            
+            if ctx.triggered_id['index']==0:
+                # Add marker for all samples in the current slide
+                mark_geojson = {'type':'FeatureCollection','features':[]}
+
+                # Iterating through all current selected samples
+                # current_selected_samples is an index from self.feature_data
+                current_selected_hidden = [self.feature_data['Hidden'].tolist()[i] for i in self.current_selected_samples]
+                marker_bboxes = [i['Bounding_Box'] for i in current_selected_hidden if i['Slide_Id']==self.wsi.item_id]
+                marker_map_coords = [self.wsi.convert_slide_coords([[i[0],i[1]],[i[2],i[3]]]) for i in marker_bboxes]
+                marker_center_coords = [[(i[0][0]+i[1][0])/2,(i[0][1]+i[1][1])/2] for i in marker_map_coords]
+                
+                mark_geojson['features'].extend([
+                    {
+                        'type':'Feature',
+                        'properties':{'type':'marker'},
+                        'geometry': {'type':'Point','coordinates': i}
+                    }
+                    for i in marker_center_coords
+                ])
+            else:
+                # Add marker for a specific sample
+                mark_geojson = {'type':'FeatureCollection','features':[]}
+
+                # Pulling out one specific sample
+                selected_bbox = self.feature_data['Hidden'].tolist()[self.current_selected_samples[ctx.triggered_id['index']-1]]['Bounding_Box']
+                marker_map_coords = self.wsi.convert_slide_coords([[selected_bbox[0],selected_bbox[1]],[selected_bbox[2],selected_bbox[3]]])
+                marker_center_coords = [(marker_map_coords[0][0]+marker_map_coords[1][0])/2,(marker_map_coords[0][1]+marker_map_coords[1][1])/2]
+                
+                mark_geojson['features'].append(
+                    {
+                        'type':'Feature',
+                        'properties':{'type':'marker'},
+                        'geometry':{'type':'Point','coordinates':marker_center_coords}
+                    }
+                )
+
+            return [mark_geojson]
         else:
             raise exceptions.PreventUpdate
 
@@ -4140,8 +4271,6 @@ class FUSION:
 
         if active_tab == 'clustering-tab':
             if ctx.triggered_id=='tools-tabs':
-                self.feature_data = None
-                self.umap_df = None
 
                 # Checking current clustering data (either a full or empty pandas dataframe)
                 if not self.clustering_data.empty:
@@ -4186,6 +4315,8 @@ class FUSION:
 
                         # Setting style of download plot data button
                         download_style = {'display':None}
+                        self.feature_data = None
+                        self.umap_df = None
 
                         feature_select_data = []
                         label_select_options = []
@@ -4202,6 +4333,8 @@ class FUSION:
 
                     # Setting style of download plot data button
                     download_style = {'display':None}
+                    self.feature_data = None
+                    self.umap_df = None
 
                     feature_select_data = []
                     label_select_options = []
@@ -4234,6 +4367,8 @@ class FUSION:
 
                 # Setting style of download plot data button
                 download_style = {'display':'inline-block'}
+                self.feature_data = None
+                self.umap_df = None
 
                 feature_select_data = self.dataset_handler.plotting_feature_dict
                 label_select_options = self.dataset_handler.label_dict
@@ -4339,18 +4474,13 @@ class FUSION:
 
     def update_cluster_logs(self,new_interval):
 
-        print(ctx.triggered)
-        print(new_interval)
         if not new_interval is None:
             # Checking the cluster marker job status and printing the log to the cluster_log_div
             marker_status, marker_log = self.dataset_handler.get_job_status(self.cluster_marker_job_id)
 
-            print(f'marker_status: {marker_status}')
-            print(f'marker_log: {marker_log}')
             if marker_status<3:
                 
                 marker_interval_disable = False
-
                 cluster_log_children = [
                     html.P(i)
                     for i in marker_log.split('\n')
@@ -4422,10 +4552,10 @@ class FUSION:
             
             self.reports_generated['feat-cluster-tab'] = cluster_log_children
 
-            print(f'Disabling interval: {marker_interval_disable}')
             return [marker_interval_disable], [cluster_log_children]
         else:
             raise exceptions.PreventUpdate
+
 
 def app(*args):
     
@@ -4505,9 +4635,6 @@ def app(*args):
     layout_handler.gen_initial_layout(slide_names,username)
     layout_handler.gen_vis_layout(
         wsi,
-        #dataset_handler.plotting_feature_dict,
-        #dataset_handler.label_dict,
-        #dataset_handler.label_filter_dict,
         cli_list
         )
     layout_handler.gen_builder_layout(dataset_handler)
@@ -4517,10 +4644,10 @@ def app(*args):
 
     prep_handler = PrepHandler(dataset_handler)
     
+    print('Ready to rumble!')
     main_app = DashProxy(__name__,
                          external_stylesheets=external_stylesheets,
                          transforms = [MultiplexerTransform()],
-                         #background_callback_manager = background_callback_manager
                          )
     
     vis_app = FUSION(
@@ -4530,6 +4657,7 @@ def app(*args):
         download_handler,
         prep_handler
         )
+
 
 # Comment this portion out for web running
 if __name__=='__main__':

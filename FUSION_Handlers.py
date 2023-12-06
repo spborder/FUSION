@@ -132,8 +132,8 @@ class LayoutHandler:
             self.initial_overlays = []
 
             # This is just to populate these components. This part should never be visible
-            map_url = 'placekitten.com/256/256?image={z}'
-            tile_size = 256
+            map_url = 'https://placekitten.com/240/240?image={z}'
+            tile_size = 240
             slide_properties = []
             combined_colors_dict = {}
             zoom_levels = 8
@@ -143,8 +143,8 @@ class LayoutHandler:
 
         map_children = [
             dl.TileLayer(id = 'slide-tile',
-                         url = map_url,
-                         tileSize = tile_size
+                        url = map_url,
+                        tileSize = tile_size
                         ),
             dl.FullScreenControl(position='topleft'),
             dl.FeatureGroup(id='feature-group',
@@ -499,7 +499,7 @@ class LayoutHandler:
                     ]),
                     html.Div(id='selected-image-info')
                 ],md=6),
-            ],align='center'),
+            ],align='start'),
             html.Hr(),
             dbc.Row([
                 dbc.Col(html.H3('Plot Report'),md=11),
@@ -1507,6 +1507,11 @@ class LayoutHandler:
                             dbc.Button('Start Segmenting!',id='segment-butt'),
                             dcc.Markdown('**Please note**, this process may take some time as the segmentation models and cell deconvolution pipelines run in the backend')
                         ]),md=12
+                    )
+                ]),
+                dbc.Row([
+                    dbc.Col(
+                        html.Div('Placeholder, this is where the upload annotations thing will go')
                     )
                 ]),
                 dbc.Row([
