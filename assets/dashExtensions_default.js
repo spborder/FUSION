@@ -98,26 +98,57 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
 
             ,
         function1: function(feature, context) {
-            const {
-                color_key,
-                current_cell,
-                fillOpacity,
-                ftu_colors,
-                filter_vals
-            } = context.hideout;
+                const {
+                    color_key,
+                    current_cell,
+                    fillOpacity,
+                    ftu_colors,
+                    filter_vals
+                } = context.hideout;
 
-            if (current_cell) {
-                if ("Main_Cell_Types" in feature.properties) {
-                    if (current_cell in feature.properties.Main_Cell_Types) {
-                        var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                        if (cell_value >= filter_vals[0]) {
-                            if (cell_value <= filter_vals[1]) {
-                                return true;
+                if (current_cell) {
+                    if ("Main_Cell_Types" in feature.properties) {
+                        if (current_cell in feature.properties.Main_Cell_Types) {
+                            var cell_value = feature.properties.Main_Cell_Types[current_cell];
+                            if (cell_value >= filter_vals[0]) {
+                                if (cell_value <= filter_vals[1]) {
+                                    return true;
+                                } else {
+                                    return false;
+                                }
                             } else {
                                 return false;
                             }
+                        } else if (current_cell in feature.properties) {
+                            var cell_value = feature.properties[current_cell];
+                            if (cell_value >= filter_vals[0]) {
+                                if (cell_value <= filter_vals[1]) {
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                        } else if (current_cell.includes('_')) {
+                            var split_cell_value = current_cell.split("_");
+                            var main_cell_value = split_cell_value[0];
+                            var sub_cell_value = split_cell_value[1];
+
+                            var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
+                            cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
+                            if (cell_value >= filter_vals[0]) {
+                                if (cell_value <= filter_vals[1]) {
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+
                         } else {
-                            return false;
+                            return true;
                         }
                     } else if (current_cell in feature.properties) {
                         var cell_value = feature.properties[current_cell];
@@ -130,40 +161,19 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                         } else {
                             return false;
                         }
-                    } else if (current_cell.includes('_')) {
-                        var split_cell_value = current_cell.split("_");
-                        var main_cell_value = split_cell_value[0];
-                        var sub_cell_value = split_cell_value[1];
-
-                        var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
-                        cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
-                        if (cell_value >= filter_vals[0]) {
-                            if (cell_value <= filter_vals[1]) {
-                                return true;
-                            } else {
-                                return false;
-                            }
-                        } else {
-                            return false;
-                        }
-
                     } else {
                         return true;
-                    }
-                } else if (current_cell in feature.properties) {
-                    var cell_value = feature.properties[current_cell];
-                    if (cell_value >= filter_vals[0]) {
-                        if (cell_value <= filter_vals[1]) {
-                            return true;
-                        } else {
-                            return false;
-                        }
-                    } else {
-                        return false;
                     }
                 } else {
                     return true;
                 }
+            }
+
+            ,
+        function2: function(feature, latlng, context) {
+            const p = feature.properties;
+            if (p.type === 'marker') {
+                return L.marker(latlng);
             } else {
                 return true;
             }

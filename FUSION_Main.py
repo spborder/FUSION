@@ -464,6 +464,7 @@ class FUSION:
         self.app.callback(
             Output('roi-pie-holder','children'),
             Input('slide-map','bounds'),
+            State('tools-tabs','active_tab')
         )(self.update_roi_pie)      
 
         # Updating cell hierarchy data
@@ -1163,114 +1164,116 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
-    def update_roi_pie(self,bounds):
+    def update_roi_pie(self,bounds,current_tab):
         
         # Making a box-poly from the bounds
-        if not self.wsi is None:
-            if len(bounds)==2:
-                bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
-            else:
-                bounds_box = shapely.geometry.box(*bounds)
+        if current_tab=='cell-compositions-tab':
+            if not self.wsi is None:
+                if len(bounds)==2:
+                    bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
+                else:
+                    bounds_box = shapely.geometry.box(*bounds)
 
-            #print(f'current viewport bounds: {bounds}')
+                #print(f'current viewport bounds: {bounds}')
 
-            # Storing current slide boundaries
-            self.current_slide_bounds = bounds_box
+                # Storing current slide boundaries
+                self.current_slide_bounds = bounds_box
 
-            # Getting a dictionary containing all the intersecting spots with this current ROI
-            intersecting_ftus = {}
-            if 'Spots' in self.current_ftu_layers:
-                intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
-                intersecting_ftus['Spots'] = intersecting_spots
+                # Getting a dictionary containing all the intersecting spots with this current ROI
+                intersecting_ftus = {}
+                if 'Spots' in self.current_ftu_layers:
+                    intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
+                    intersecting_ftus['Spots'] = intersecting_spots
 
-            for ftu in self.current_ftu_layers:
-                if not ftu=='Spots':
-                    intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                for ftu in self.current_ftu_layers:
+                    if not ftu=='Spots':
+                        intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
-            for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
-                intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
+                for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
+                    intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
 
-            for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
-                intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
-                    
-            self.current_ftus = intersecting_ftus
-            # Now we have main cell types, cell states, by ftu
-            included_ftus = list(intersecting_ftus.keys())
-            included_ftus = [i for i in included_ftus if len(intersecting_ftus[i])>0]
-
-            if len(included_ftus)>0:
-
-                tab_list = []
-                self.fusey_data = {}
-                #counts_data = pd.DataFrame()
-                for f_idx,f in enumerate(included_ftus):
-                    counts_data = pd.DataFrame()
-
-                    counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
-                    if len(counts_dict_list)>0:
-                        counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
-
-                    if not counts_data.empty:
-                        counts_data.columns = [f]
+                for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
+                    intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
                         
-                        # Storing some data for Fusey to use :3
-                        structure_number = len(counts_dict_list)
-                        normalized_counts = counts_data[f]/counts_data[f].sum()
+                self.current_ftus = intersecting_ftus
+                # Now we have main cell types, cell states, by ftu
+                included_ftus = list(intersecting_ftus.keys())
+                included_ftus = [i for i in included_ftus if len(intersecting_ftus[i])>0]
 
-                        # Normalizing to sum to 1
-                        counts_data[f] = counts_data[f]/counts_data[f].sum()
-                        # Only getting top n
-                        counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
-                        counts_data = counts_data.reset_index()
+                if len(included_ftus)>0:
 
-                        f_pie = px.pie(counts_data,values=f,names='index')
-                        f_pie.update_traces(textposition='inside')
-                        f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
+                    tab_list = []
+                    self.fusey_data = {}
+                    #counts_data = pd.DataFrame()
+                    for f_idx,f in enumerate(included_ftus):
+                        counts_data = pd.DataFrame()
 
-                        top_cell = counts_data['index'].tolist()[0]
+                        counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
+                        if len(counts_dict_list)>0:
+                            counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
 
-                        pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
-                        
-                        pct_states = pct_states.reset_index()
-                        pct_states.columns = ['Cell State','Proportion']
-                        pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+                        if not counts_data.empty:
+                            counts_data.columns = [f]
+                            
+                            # Storing some data for Fusey to use :3
+                            structure_number = len(counts_dict_list)
+                            normalized_counts = counts_data[f]/counts_data[f].sum()
 
-                        # Fusey data
-                        self.fusey_data[f] = {
-                            'structure_number':structure_number,
-                            'normalized_counts':normalized_counts,
-                            'pct_states':pct_states,
-                            'top_cell':top_cell
-                        }
-                        state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
+                            # Normalizing to sum to 1
+                            counts_data[f] = counts_data[f]/counts_data[f].sum()
+                            # Only getting top n
+                            counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
+                            counts_data = counts_data.reset_index()
 
-                        f_tab = dbc.Tab(
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Label(f'{f} Cell Type Proportions'),
-                                    dcc.Graph(
-                                        id = {'type':'ftu-cell-pie','index':f_idx},
-                                        figure = go.Figure(f_pie)
-                                    )
-                                ],md=6),
-                                dbc.Col([
-                                    dbc.Label(f'{f} Cell State Proportions'),
-                                    dcc.Graph(
-                                        id = {'type':'ftu-state-bar','index':f_idx},
-                                        figure = go.Figure(state_bar)
-                                    )
-                                ],md=6)
-                            ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
-                        )
+                            f_pie = px.pie(counts_data,values=f,names='index')
+                            f_pie.update_traces(textposition='inside')
+                            f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
 
-                        tab_list.append(f_tab)
+                            top_cell = counts_data['index'].tolist()[0]
 
-                return dbc.Tabs(tab_list,active_tab = 'tab_0')
+                            pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
+                            
+                            pct_states = pct_states.reset_index()
+                            pct_states.columns = ['Cell State','Proportion']
+                            pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+
+                            # Fusey data
+                            self.fusey_data[f] = {
+                                'structure_number':structure_number,
+                                'normalized_counts':normalized_counts,
+                                'pct_states':pct_states,
+                                'top_cell':top_cell
+                            }
+                            state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
+
+                            f_tab = dbc.Tab(
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Label(f'{f} Cell Type Proportions'),
+                                        dcc.Graph(
+                                            id = {'type':'ftu-cell-pie','index':f_idx},
+                                            figure = go.Figure(f_pie)
+                                        )
+                                    ],md=6),
+                                    dbc.Col([
+                                        dbc.Label(f'{f} Cell State Proportions'),
+                                        dcc.Graph(
+                                            id = {'type':'ftu-state-bar','index':f_idx},
+                                            figure = go.Figure(state_bar)
+                                        )
+                                    ],md=6)
+                                ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
+                            )
+
+                            tab_list.append(f_tab)
+
+                    return dbc.Tabs(tab_list,active_tab = 'tab_0')
+                else:
+                    return html.P('No FTUs in current view')
             else:
-                return html.P('No FTUs in current view')
+                return html.P('Select a slide to get started!')
         else:
-            return html.P('Select a slide to get started!')
-
+            raise exceptions.PreventUpdate
     def update_state_bar(self,cell_click):
         
         if not cell_click is None:
@@ -3086,7 +3089,7 @@ class FUSION:
                                                         },
                                                         'properties':overlap_dict
                                                     },
-                                                    new_marked['features'][0]
+                                                    #new_marked['features'][0]
                                                 ]
                                             }
 
@@ -3116,7 +3119,7 @@ class FUSION:
                                                     },
                                                     'properties':overlap_dict
                                                 },
-                                                new_marked['features'][0]
+                                                #new_marked['features'][0]
                                             ])
 
                         # Adding the marked ftus layer if any were added
@@ -3228,7 +3231,7 @@ class FUSION:
                 ])
 
                 map_with_markers = [
-                    dl.Marker(position=[-i[0],i[1]])
+                    dl.Marker(position=[i[1],i[0]])
                     for i in marker_center_coords
                 ]
             else:
@@ -3248,7 +3251,7 @@ class FUSION:
                     }
                 )
 
-                map_with_markers = dl.Marker(position=[-marker_center_coords[0],marker_center_coords[1]])
+                map_with_markers = dl.Marker(position=[marker_center_coords[1],marker_center_coords[0]])
                 
 
             return [mark_geojson], map_with_markers
