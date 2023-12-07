@@ -1869,6 +1869,7 @@ class LayoutHandler:
                     dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px'}),
                     dbc.Button('Registered User Login',id={'type':'login-butt','index':0},className='mb-3',style = {'marginLeft':'5px'}),
                     login_popover,
+                    dbc.Button('Usability Study',id = {'type':'usability-butt','index':0},className='mb-3',color = 'primary',n_clicks=0,style={'marginLeft':'5px'},disabled=True),
                     html.Div(id='logged-in-user',children = [f'Welcome, {initial_user}!']),
                     dbc.Collapse(
                         dbc.Row(

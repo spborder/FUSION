@@ -2905,6 +2905,7 @@ class FUSION:
                     layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
                     )
             else:
+                selected_image = go.Figure()
                 print(f'No images found')
                 print(f'hover: {click}')
                 print(f'selected:{selected}')
