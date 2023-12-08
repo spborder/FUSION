@@ -317,7 +317,7 @@ class LayoutHandler:
                 dbc.Row([
                     dbc.Col([
                         html.Div([
-                            dcc.Link('Derived from ASCT+B Kidney v1.2',href='https://docs.google.com/spreadsheets/d/1NMfu1bEGNFcTYTFT-jCao_lSbFD8n0ti630iIpRj-hw/edit#gid=949267305')
+                            dcc.Link('Derived from ASCT+B Kidney v1.2',href='https://docs.google.com/spreadsheets/d/1NMfu1bEGNFcTYTFT-jCao_lSbFD8n0ti630iIpRj-hw/edit#gid=949267305',target = '_blank')
                         ])
                     ])
                 ])
@@ -870,7 +870,7 @@ class LayoutHandler:
                         sig_alert,
                         html.Hr(),
                         html.Div([
-                            html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html'),
+                            html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html',target='_blank'),
                             html.P('Tests null hypothesis that two independent samples have identical mean values. Assumes equal variance within groups.')
                         ]),
                         html.Div(
@@ -946,7 +946,7 @@ class LayoutHandler:
                         sig_alert,
                         html.Hr(),
                         html.Div([
-                            html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html'),
+                            html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html',target='_blank'),
                             html.P('Tests null hypothesis that two or more groups have the same population mean. Assumes independent samples from normal, homoscedastic (equal standard deviation) populations')
                         ]),
                         html.Div(
@@ -970,7 +970,7 @@ class LayoutHandler:
                         ),
                         html.Hr(),
                         html.Div([
-                            html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html'),
+                            html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html',target='_blank'),
                             html.P('Post hoc test for pairwise comparison of means from different groups. Assumes independent samples from normal, equal (finite) variance populations')
                         ]),
                         html.Div(
@@ -1025,7 +1025,7 @@ class LayoutHandler:
                 # Could also do some kind of Fisher Transformation to compare multiple Pearson r values
                 report_children = [
                     html.Div([
-                        html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html'),
+                        html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html',target='_blank'),
                         html.P('Measures the linear relationship between two datasets. Assumes normally distributed data.')
                     ])
                 ]
@@ -1087,7 +1087,7 @@ class LayoutHandler:
                     # Clustering scores? Silhouette score/index?
                     report_children = [
                         html.Div([
-                            html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score'),
+                            html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score',target='_blank'),
                             html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
                         ])
                     ]
@@ -1173,20 +1173,26 @@ class LayoutHandler:
         elif child_type=='feat-cluster-tab':
 
             # Just return a button that runs cluster marker determination. Have to add this separately somewhere.
-            if len(unique_labels)>1:
-                report_children = [
-                    dbc.Button(
-                        'Find Cluster Markers!',
-                        id = {'type':'cluster-markers-butt','index':0},
-                        className = 'd-grid col-12 mx-auto'
-                    ),
-                    html.Div(
-                        id = {'type':'cluster-marker-div','index':0}
-                    )
-                ]
+            feature_columns = [i for i in feature_data.columns.tolist() if i not in ['label','Hidden','Main_Cell_Types','Cell_States']]
+            if len(feature_columns)>2:
+                if len(unique_labels)>1:
+                    report_children = [
+                        dbc.Button(
+                            'Find Cluster Markers!',
+                            id = {'type':'cluster-markers-butt','index':0},
+                            className = 'd-grid col-12 mx-auto'
+                        ),
+                        html.Div(
+                            id = {'type':'cluster-marker-div','index':0}
+                        )
+                    ]
+                else:
+                    report_children = [
+                        dbc.Alert(f'Only one label ({unique_labels[0]}) present!', color = 'warning')
+                    ]
             else:
                 report_children = [
-                    dbc.Alert(f'Only one label ({unique_labels[0]}) present!', color = 'warning')
+                    dbc.Alert(f'Less than 2 features in view! Add more to view cluster markers',color='warning')
                 ]
 
         return report_children

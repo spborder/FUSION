@@ -748,6 +748,8 @@ class FUSION:
             prevent_initial_call = True
         )(self.start_segmentation)
 
+        #TODO: Add callback here for uploading annotations
+
         # Updating log output for segmentation
         self.app.callback(
             output = [
@@ -3011,6 +3013,7 @@ class FUSION:
             if triggered_id == 'edit_control':
                 
                 if triggered_id=='edit_control':
+                    print(f'len of new_geojson: {len(new_geojson)}')
                     print(new_geojson)
                     if type(new_geojson)==list:
                         new_geojson = new_geojson[0]    
@@ -3021,7 +3024,7 @@ class FUSION:
                         # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
                         self.wsi.manual_rois = []
                         self.wsi.marked_ftus = []
-                        self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
+                        self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
                         for geo in new_geojson['features']:
 
                             if not geo['properties']['type'] == 'marker':
@@ -3115,29 +3118,16 @@ class FUSION:
                                         }]
 
                                     else:
-                                        if triggered_id=='edit_control':
-                                            self.wsi.marked_ftus[0]['geojson']['features'].append(
-                                                {
-                                                    'type':'Feature',
-                                                    'geometry':{
-                                                        'type':'Polygon',
-                                                        'coordinates':[list(overlap_poly.exterior.coords)],
-                                                    },
-                                                    'properties':overlap_dict
-                                                }
-                                            )
-                                        elif triggered_id=='add-marker-cluster':
-                                            self.wsi.marked_ftus[0]['geojson']['features'].extend([
-                                                {
-                                                    'type':'Feature',
-                                                    'geometry':{
-                                                        'type':'Polygon',
-                                                        'coordinates':[list(overlap_poly.exterior.coords)]
-                                                    },
-                                                    'properties':overlap_dict
+                                        self.wsi.marked_ftus[0]['geojson']['features'].append(
+                                            {
+                                                'type':'Feature',
+                                                'geometry':{
+                                                    'type':'Polygon',
+                                                    'coordinates':[list(overlap_poly.exterior.coords)],
                                                 },
-                                                #new_marked['features'][0]
-                                            ])
+                                                'properties':overlap_dict
+                                            }
+                                        )
 
                         # Adding the marked ftus layer if any were added
                         if len(self.wsi.marked_ftus)>0:
@@ -3210,13 +3200,11 @@ class FUSION:
                         else:
                             self.update_hex_color_key(self.current_cell)
                         
-
                         return self.current_overlays, data_select_options
                 else:
                     raise exceptions.PreventUpdate
             else:
                 raise exceptions.PreventUpdate
-
         else:
             raise exceptions.PreventUpdate
 
