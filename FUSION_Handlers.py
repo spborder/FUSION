@@ -132,7 +132,8 @@ class LayoutHandler:
             self.initial_overlays = []
 
             # This is just to populate these components. This part should never be visible
-            map_url = 'https://placekitten.com/240/240?image={z}'
+            #map_url = 'https://placekitten.com/240/240?image={z}'
+            map_url = './assets/Initial tiletest.png'
             tile_size = 240
             slide_properties = []
             combined_colors_dict = {}
@@ -176,8 +177,8 @@ class LayoutHandler:
         wsi_view = dbc.Card([
             dbc.CardHeader(
                 children = [
-                    'Whole Slide Image Viewer',
-                    self.gen_info_button('Use the mouse to pan and zoom around the slide!')
+                    dbc.Col('Whole Slide Image Viewer',md=11),
+                    dbc.Col(self.gen_info_button('Use the mouse to pan and zoom around the slide!'),md=1)
             ]),
             dbc.Row([
                 html.Div(
@@ -2107,7 +2108,13 @@ class GirderHandler:
         self.apiUrl = apiUrl
         self.gc = girder_client.GirderClient(apiUrl = self.apiUrl)
 
-        self.authenticate(username, password)
+        # Initializing usability study users/admins list
+        self.usability_users = {
+            'usability_study_users':{},
+            'usability_study_admins':[]
+        }
+
+        user_info = self.authenticate(username, password)
         self.get_token()
 
         # Name of plugin used for fetching clustering/plotting metadata
@@ -2126,6 +2133,9 @@ class GirderHandler:
         self.password = password
         
         self.gc.authenticate(username,password)
+        user_info = self.check_usability(self.username)
+
+        return user_info
 
     def create_user(self,username,password,email,firstName,lastName):
 
@@ -2141,6 +2151,10 @@ class GirderHandler:
                          'firstName':firstName,
                          'lastName':lastName
                      })
+        
+        user_info = self.check_usability(self.username)
+
+        return user_info
 
     def get_token(self):
         # Getting session token for accessing private collections
@@ -2457,6 +2471,10 @@ class GirderHandler:
         # cell_graphics_key
         # morphometrics_reference
         # asct+b table
+        # usability study usernames
+
+        self.fusion_assets = assets_path
+        self.usability_users = self.update_usability()
 
         # Downloading JSON resource
         cell_graphics_resource = self.gc.get('resource/lookup',parameters={'path':assets_path+'cell_graphics/graphic_reference.json'})
@@ -2488,6 +2506,30 @@ class GirderHandler:
 
         # Generating plot feature selection dictionary
         self.generate_feature_dict(self.default_slides)
+
+    def update_usability(self):
+
+        # Checking usability study usernames in FUSION Assets folder
+        # Running at startup and then when pages change so we can update this file without restarting FUSION
+        usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
+        usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
+
+        print(usability_info)
+
+        return usability_info
+
+    def check_usability(self,username):
+
+        # Checking if a given username is involved in the usability study. Returning info.
+        user_info = None
+        if username in self.usability_users['usability_study_admins']:
+            user_info = {
+                'type':'admin'
+            }
+        elif username in list(self.usability_users['usability_study_users'].keys()):
+            user_info = self.usability_users['usability_study_users'][username]
+        
+        return user_info
 
     def generate_feature_dict(self,slide_list):
         

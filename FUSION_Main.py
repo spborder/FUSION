@@ -331,10 +331,19 @@ class FUSION:
         #self.app.run_server(host = '0.0.0.0',debug=False,use_reloader=False,port=8000)
         serve(self.app.server,host='0.0.0.0',port=8000)
 
-    def view_instructions(self,n,is_open):
-        if n:
-            return not is_open
-        return is_open
+    def view_instructions(self,n,n2,is_open):
+        # Opening collapse and populating internal div 
+        if ctx.triggered_id['type']=='collapse-descrip':
+            collapse_children = self.layout_handler.description_dict[self.current_page]
+        elif ctx.triggered_id['type']=='usability-butt':
+            user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
+            collapse_children = [
+                html.P(f'Your user type is: {user_info["type"]}')
+            ]
+
+        if n or n2:
+            return [not i for i in is_open], collapse_children
+        return [i for i in is_open], collapse_children
     
     def view_sidebar(self,n,is_open):
         if n:
@@ -349,9 +358,12 @@ class FUSION:
         slide_select_value = ''
 
         # If coming from dataset-builder page, update plotting data based on current_slides
+        """
         if self.current_page == 'dataset-builder':
             print('Updating plotting metadata')
             self.update_plotting_metadata()
+        """
+        self.dataset_handler.update_usability()
 
         if pathname in self.layout_handler.layout_dict:
             self.current_page = pathname
@@ -359,14 +371,14 @@ class FUSION:
             if not pathname=='vis':
                 if not pathname=='dataset-builder':
                     container_content = self.layout_handler.layout_dict[self.current_page]
-                    description = self.layout_handler.description_dict[self.current_page]
+                    #description = self.layout_handler.description_dict[self.current_page]
                 else:
                     # Checking if there was any new slides added via uploader (or just added externally)
                     self.dataset_handler.update_folder_structure()
                     self.layout_handler.gen_builder_layout(self.dataset_handler)
 
                     container_content = self.layout_handler.layout_dict[self.current_page]
-                    description = self.layout_handler.description_dict[self.current_page]
+                    #description = self.layout_handler.description_dict[self.current_page]
 
             else:
                 self.wsi = None
@@ -374,25 +386,23 @@ class FUSION:
                 self.layout_handler.gen_vis_layout(
                     self.wsi
                     )
-                #self.clustering_data = self.dataset_handler.load_clustering_data()
-                #self.update_hex_color_key(self.current_cell)
                 self.clustering_data = pd.DataFrame()
 
                 container_content = self.layout_handler.layout_dict[self.current_page]
-                description = self.layout_handler.description_dict[self.current_page]
+                #description = self.layout_handler.description_dict[self.current_page]
 
         else:
             self.current_page = 'welcome'
                 
             container_content = self.layout_handler.layout_dict[self.current_page]
-            description = self.layout_handler.description_dict[self.current_page]
+            #description = self.layout_handler.description_dict[self.current_page]
 
         if self.current_page == 'vis':
             slide_style = {'marginBottom':'20px','display':'inline-block'}
         else:
             slide_style = {'display':'none'}
 
-        return container_content, description, slide_style, slide_select_value
+        return container_content, slide_style, slide_select_value
 
     def open_nav_collapse(self,n,is_open):
         if n:
@@ -404,7 +414,6 @@ class FUSION:
         # Adding callbacks for items in every page
         self.app.callback(
             [Output('container-content','children'),
-             Output('descrip','children'),
              Output('slide-select-card','style'),
              Output('slide-select','value')],
              Input('url','pathname'),
@@ -412,9 +421,11 @@ class FUSION:
         )(self.update_page)
 
         self.app.callback(
-            Output({'type':'collapse-content','index':MATCH},'is_open'),
-            Input({'type':'collapse-descrip','index':MATCH},'n_clicks'),
-            [State({'type':'collapse-content','index':MATCH},'is_open')],
+            [Output({'type':'collapse-content','index':ALL},'is_open'),
+             Output('descrip','children')],
+            [Input({'type':'collapse-descrip','index':ALL},'n_clicks'),
+             Input({'type':'usability-butt','index':ALL},'n_clicks')],
+            [State({'type':'collapse-content','index':ALL},'is_open')],
             prevent_initial_call=True
         )(self.view_instructions)
 
@@ -436,14 +447,15 @@ class FUSION:
              Output('login-submit','children'),
              Output('logged-in-user','children'),
              Output('upload-sidebar','disabled'),
-             Output('create-user-extras','children')],
-            [Input('username-input','value'),
-             Input('pword-input','value'),
-             Input({'type':'email-input','index':ALL},'value'),
-             Input({'type':'first-name-input','index':ALL},'value'),
-             Input({'type':'last-name-input','index':ALL},'value'),
-             Input('login-submit','n_clicks'),
+             Output('create-user-extras','children'),
+             Output({'type':'usability-butt','index':ALL},'disabled')],
+            [Input('login-submit','n_clicks'),
              Input('create-user-submit','n_clicks')],
+            [State('username-input','value'),
+             State('pword-input','value'),
+             State({'type':'email-input','index':ALL},'value'),
+             State({'type':'first-name-input','index':ALL},'value'),
+             State({'type':'last-name-input','index':ALL},'value')],
              prevent_initial_call=True
         )(self.girder_login)
 
@@ -2167,6 +2179,7 @@ class FUSION:
                 for idx, struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
+
             return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children
 
         else:
@@ -2806,6 +2819,8 @@ class FUSION:
         if click is not None:
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
                 # Custom data contains Slide_Id and BBox coordinates for pulling images
+                if selected is None:
+                    raise exceptions.PreventUpdate
                 if 'points' not in selected:
                     raise exceptions.PreventUpdate
                 try:
@@ -3125,8 +3140,8 @@ class FUSION:
                                             ])
 
                         # Adding the marked ftus layer if any were added
-                        print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
                         if len(self.wsi.marked_ftus)>0:
+                            print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
                             
                             self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
                             self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
@@ -3599,19 +3614,23 @@ class FUSION:
 
         return upload_reqs, input_disabled
 
-    def girder_login(self,username,pword,email,firstname,lastname,p_butt,create_butt):
+    def girder_login(self,p_butt,create_butt,username,pword,email,firstname,lastname):
 
         create_user_children = []
         print(f'login ctx.triggered_id: {ctx.triggered_id}')
+        usability_disabled = no_update
         if ctx.triggered_id=='login-submit':
 
             try:
-                self.dataset_handler.authenticate(username,pword)
+                user_info = self.dataset_handler.authenticate(username,pword)
 
                 button_color = 'success'
                 button_text = 'Success!'
                 logged_in_user = f'Welcome: {username}'
                 upload_disabled = False
+
+                if not user_info is None:
+                    usability_disabled = False
 
             except girder_client.AuthenticationError:
 
@@ -3620,7 +3639,7 @@ class FUSION:
                 logged_in_user = ''
                 upload_disabled = True
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_disabled]
         
         elif ctx.triggered_id=='create-user-submit':
             print(f'email:{email}')
@@ -3650,12 +3669,16 @@ class FUSION:
             else:
                 create_user_children = no_update
                 try:
-                    self.dataset_handler.create_user(username,pword,email,firstname,lastname)
+                    user_info = self.dataset_handler.create_user(username,pword,email,firstname,lastname)
 
                     button_color = 'success',
                     button_text = 'Success!',
                     logged_in_user = f'Welcome: {username}'
                     upload_disabled = False
+
+                    if not user_info is None:
+                        usability_disabled = False
+
                 except girder_client.AuthenticationError:
 
                     button_color = 'warning'
@@ -3663,7 +3686,7 @@ class FUSION:
                     logged_in_user = ''
                     upload_disabled = True
             
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_disabled]
 
         else:
             raise exceptions.PreventUpdate
