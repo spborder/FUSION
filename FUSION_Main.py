@@ -3949,16 +3949,28 @@ class FUSION:
             # Processing newly uploaded annotations
             processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,self.upload_wsi_id)
 
-            return_items = current_up_anns[0]
-            return_items.append(
-                dbc.AccordionItem(
-                    title = new_filename,
-                    children = [
-                        html.P(f'{a}: {processed_anns[a]}')
-                        for a in processed_anns
-                    ]
+            if not processed_anns is None:
+                return_items = current_up_anns[0]
+                return_items.append(
+                    dbc.AccordionItem(
+                        title = new_filename,
+                        children = [
+                            html.P(f'{a}: {processed_anns[a]}')
+                            for a in processed_anns
+                        ]
+                    )
                 )
-            )
+            else:
+                return_items = current_up_anns[0]
+                return_items.append(
+                    dbc.AccordionItem(
+                        title = new_filename,
+                        children = [
+                            dbc.Alert('Invalid file type! Vali',color='danger'),
+                            'Valid file types: Aperio XML (.xml), JSON (.json), GeoJSON (.geojson)'
+                        ]
+                    )
+                )
 
             return [return_items]
         else:

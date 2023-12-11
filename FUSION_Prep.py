@@ -464,7 +464,6 @@ class PrepHandler:
                 else:
                     ann_dict[f'Layer_{s_idx+1}'] = s_idx+1
 
-
         elif 'json' in filename:
             ann = json.loads(annotation_str)
             ann_dict = {}
@@ -473,31 +472,35 @@ class PrepHandler:
                 json.dump(ann,f)
                 f.close()
 
-        converter_object = wak.Converter(
-            starting_file = f'./assets/conversion/{filename}',
-            ann_dict = ann_dict,
-            verbose = False
-        )
+        if filename in os.listdir('./assets/conversion/'):
+            converter_object = wak.Converter(
+                starting_file = f'./assets/conversion/{filename}',
+                ann_dict = ann_dict,
+                verbose = False
+            )
+            
+            annotation_names = converter_object.annotation.structure_names
+            annotation_info = {}
+            for a in annotation_names:
+                annotation_info[a] = len(converter_object.objects[a])
+
+            print(f'annotation_names: {annotation_names}')
+            converted_annotations = wak.Histomics(converter_object.annotation)
+
+            # Posting annotations to uploaded object
+            self.girder_handler.gc.post(
+                f'/annotation/item/{item_id}',
+                data = json.dumps(converted_annotations.json),
+                headers = {
+                    'X-HTTP-Method':'POST',
+                    'Content-Type':'application/json'
+                }
+            )
+
+            # Removing temporary directory
+            shutil.rmtree('./assets/conversion/')
         
-        annotation_names = converter_object.annotation.structure_names
-        annotation_info = {}
-        for a in annotation_names:
-            annotation_info[a] = len(converter_object.objects[a])
-
-        print(f'annotation_names: {annotation_names}')
-        converted_annotations = wak.Histomics(converter_object.annotation)
-
-        # Posting annotations to uploaded object
-        self.girder_handler.gc.post(
-            f'/annotation/item/{item_id}',
-            data = json.dumps(converted_annotations.json),
-            headers = {
-                'X-HTTP-Method':'POST',
-                'Content-Type':'application/json'
-            }
-        )
-
-        # Removing temporary directory
-        shutil.rmtree('./assets/conversion/')
+        else:
+            annotation_info = None
 
         return annotation_info
