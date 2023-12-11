@@ -733,7 +733,8 @@ class FUSION:
             output = [
                 Output('seg-woodshed','children'),
                 Output('structure-type','disabled'),
-                Output('segment-butt','disabled')
+                Output('segment-butt','disabled'),
+                Output({'type':'seg-continue-butt','index':ALL},'disabled')
             ],
             inputs = [
                 Input('structure-type','value'),
@@ -742,7 +743,6 @@ class FUSION:
             prevent_initial_call = True
         )(self.start_segmentation)
 
-        #TODO: Add callback here for uploading annotations
         # Uploading annotations from text file
         self.app.callback(
             Output('upload-anns-div','children'),
@@ -763,7 +763,8 @@ class FUSION:
         self.app.callback(
             output = [
                 Output({'type':'seg-logs','index':ALL},'children'),
-                Output({'type':'seg-log-interval','index':ALL},'disabled')
+                Output({'type':'seg-log-interval','index':ALL},'disabled'),
+                Output({'type':'seg-continue-butt','index':ALL},'disabled')
             ],
             inputs = [
                 Input({'type':'seg-log-interval','index':ALL},'n_intervals')
@@ -782,7 +783,8 @@ class FUSION:
                 Output('ex-ftu-img','figure')
             ],
             inputs = [
-                Input({'type':'seg-log-interval','index':ALL},'disabled')
+                Input({'type':'seg-log-interval','index':ALL},'disabled'),
+                Input({'type':'seg-continue-butt','index':ALL},'n_clicks')
             ],
             prevent_initial_call = True
         )(self.post_segmentation)
@@ -3865,6 +3867,7 @@ class FUSION:
                 if len(structure_selection)>0:
                     disable_structure = True
                     disable_seg_butt = True
+                    disable_continue_butt = True
 
                     print(f'Running segmentation!')
                     self.segmentation_job_info = self.prep_handler.segment_image(self.upload_wsi_id,structure_selection)
@@ -3885,7 +3888,7 @@ class FUSION:
                         )
                     ]
 
-                    return seg_woodshed, disable_structure, disable_seg_butt
+                    return seg_woodshed, disable_structure, disable_seg_butt, disable_continue_butt
                 else:
                     raise exceptions.PreventUpdate
             else:
@@ -3949,7 +3952,11 @@ class FUSION:
             return_items = current_up_anns[0]
             return_items.append(
                 dbc.AccordionItem(
-                    title = new_filename
+                    title = new_filename,
+                    children = [
+                        html.P(f'{a}: {processed_anns[a]}')
+                        for a in processed_anns
+                    ]
                 )
             )
 
@@ -4015,10 +4022,12 @@ class FUSION:
 
             # disabling interval object
             seg_log_disable = True
+            continue_disable = False
 
         else:
             # For during segmentation/cell-deconvolution
             seg_log_disable = False
+            continue_disable = True
 
             if not self.upload_omics_id is None:
                 if seg_status==3:
@@ -4065,12 +4074,12 @@ class FUSION:
                 )
 
         print(f'disabling interval: {seg_log_disable}')
-        return [seg_logs_div], [seg_log_disable]
+        return [seg_logs_div], [seg_log_disable], [continue_disable]
 
-    def post_segmentation(self, seg_log_disable):
+    def post_segmentation(self, seg_log_disable, continue_butt):
 
         print(f'seg_log_disable: {seg_log_disable}')
-        if seg_log_disable[0] is not None:
+        if seg_log_disable[0] is not None or continue_butt[0] is not None:
             if seg_log_disable[0]:
                 # post-segment-row stuff
                 sub_comp_style = {'display':'flex'}
@@ -4114,25 +4123,32 @@ class FUSION:
                                 })
 
                 sub_comp_method = 'Manual'
-                # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
-                self.layer_ann = {
-                    'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
-                    'current_annotation':0,
-                    'previous_annotation':0,
-                    'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
-                }
 
-                self.feature_extract_ftus = ftu_names
-                ftu_value = ftu_names[self.layer_ann['current_layer']]
-                image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                if not all([not i['disabled'] for i in ftu_names]):
+                    # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+                    self.layer_ann = {
+                        'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
+                        'current_annotation':0,
+                        'previous_annotation':0,
+                        'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
+                    }
 
-                self.layer_ann['current_image'] = image
-                self.layer_ann['current_mask'] = mask
+                    self.feature_extract_ftus = ftu_names
+                    ftu_value = ftu_names[self.layer_ann['current_layer']]
+                    image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
-                image_figure = go.Figure(
-                    data = px.imshow(image)['data'],
-                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-                )                
+                    self.layer_ann['current_image'] = image
+                    self.layer_ann['current_mask'] = mask
+
+                    image_figure = go.Figure(
+                        data = px.imshow(image)['data'],
+                        layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                    )           
+                else:
+                    self.layer_ann = None
+                    self.feature_extract_ftus = ['No FTUs for Feature Extraction']
+                    image_figure = go.Figure()
+                     
 
                 return sub_comp_style, disable_organ, ftu_names, ftu_value, sub_comp_method, image_figure
             else:

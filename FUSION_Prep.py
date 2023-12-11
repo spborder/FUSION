@@ -31,8 +31,8 @@ from shapely.geometry import Polygon, Point
 import pandas as pd
 import json
 import lxml.etree as ET
-from io import StringIO
 import base64
+import shutil
 
 class PrepHandler:
     def __init__(self,
@@ -459,7 +459,10 @@ class PrepHandler:
             structures_in_xml = ET.parse(f'./assets/conversion/{filename}').getroot().findall('Annotation')
             ann_dict = {}
             for s_idx,s in enumerate(structures_in_xml):
-                ann_dict[s.attrib['Name']] = s_idx+1
+                if not s.attrib['Name']=='':
+                    ann_dict[s.attrib['Name']] = s_idx+1
+                else:
+                    ann_dict[f'Layer_{s_idx+1}'] = s_idx+1
 
 
         elif 'json' in filename:
@@ -477,6 +480,10 @@ class PrepHandler:
         )
         
         annotation_names = converter_object.annotation.structure_names
+        annotation_info = {}
+        for a in annotation_names:
+            annotation_info[a] = len(converter_object.objects[a])
+
         print(f'annotation_names: {annotation_names}')
         converted_annotations = wak.Histomics(converter_object.annotation)
 
@@ -490,4 +497,7 @@ class PrepHandler:
             }
         )
 
-        return annotation_names
+        # Removing temporary directory
+        shutil.rmtree('./assets/conversion/')
+
+        return annotation_info
