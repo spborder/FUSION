@@ -482,7 +482,7 @@ class PrepHandler:
             annotation_names = converter_object.annotation.structure_names
             annotation_info = {}
             for a in annotation_names:
-                annotation_info[a] = len(converter_object.objects[a])
+                annotation_info[a] = len(converter_object.annotation.objects[a])
 
             print(f'annotation_names: {annotation_names}')
             converted_annotations = wak.Histomics(converter_object.annotation)

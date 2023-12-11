@@ -4091,80 +4091,83 @@ class FUSION:
     def post_segmentation(self, seg_log_disable, continue_butt):
 
         print(f'seg_log_disable: {seg_log_disable}')
-        if seg_log_disable[0] is not None or continue_butt[0] is not None:
-            if seg_log_disable[0]:
-                # post-segment-row stuff
-                sub_comp_style = {'display':'flex'}
-                disable_organ = True
+        print(ctx.triggered_id)
+        print(ctx.triggered)
+        if ctx.triggered[0]['value']:
+            #if seg_log_disable[0]:
+            # post-segment-row stuff
+            sub_comp_style = {'display':'flex'}
+            disable_organ = True
 
-                if not self.upload_omics_id is None:
-                    # Generating spot annotations based on cell types
-                    spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
-                    # Aggregating spot-level cell composition information to intersecting FTUs
-                    spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
+            if not self.upload_omics_id is None:
+                # Generating spot annotations based on cell types
+                spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
+                # Aggregating spot-level cell composition information to intersecting FTUs
+                spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
 
-                # Extracting annotations and initial sub-compartment mask
-                self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
+            # Extracting annotations and initial sub-compartment mask
+            self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
 
-                # Populate with default sub-compartment parameters
-                self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
+            # Populate with default sub-compartment parameters
+            self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
 
-                # Adding options to FTU options dropdown menu
-                ftu_names = []
-                for idx,i in enumerate(self.upload_annotations):
-                    if 'annotation' in i:
-                        if 'elements' in i['annotation']:
-                            if not 'interstitium' in i['annotation']['name']:
-                                if len(i['annotation']['elements'])>0:
-                                    ftu_names.append({
-                                        'label':i['annotation']['name'],
-                                        'value':idx,
-                                        'disabled':False
-                                    })
-                                else:
-                                    ftu_names.append({
-                                        'label':i['annotation']['name']+' (None detected in slide)',
-                                        'value':idx,
-                                        'disabled':True
-                                    })
+            # Adding options to FTU options dropdown menu
+            ftu_names = []
+            for idx,i in enumerate(self.upload_annotations):
+                if 'annotation' in i:
+                    if 'elements' in i['annotation']:
+                        if not 'interstitium' in i['annotation']['name']:
+                            if len(i['annotation']['elements'])>0:
+                                ftu_names.append({
+                                    'label':i['annotation']['name'],
+                                    'value':idx,
+                                    'disabled':False
+                                })
                             else:
                                 ftu_names.append({
-                                    'label':i['annotation']['name']+' (Not implemented for interstitium)',
+                                    'label':i['annotation']['name']+' (None detected in slide)',
                                     'value':idx,
                                     'disabled':True
                                 })
+                        else:
+                            ftu_names.append({
+                                'label':i['annotation']['name']+' (Not implemented for interstitium)',
+                                'value':idx,
+                                'disabled':True
+                            })
 
-                sub_comp_method = 'Manual'
+            sub_comp_method = 'Manual'
 
-                if not all([not i['disabled'] for i in ftu_names]):
-                    # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
-                    self.layer_ann = {
-                        'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
-                        'current_annotation':0,
-                        'previous_annotation':0,
-                        'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
-                    }
+            if not all([i['disabled'] for i in ftu_names]):
+                # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+                self.layer_ann = {
+                    'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
+                    'current_annotation':0,
+                    'previous_annotation':0,
+                    'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
+                }
 
-                    self.feature_extract_ftus = ftu_names
-                    ftu_value = ftu_names[self.layer_ann['current_layer']]
-                    image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                self.feature_extract_ftus = ftu_names
+                ftu_value = ftu_names[self.layer_ann['current_layer']]
+                image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
-                    self.layer_ann['current_image'] = image
-                    self.layer_ann['current_mask'] = mask
+                self.layer_ann['current_image'] = image
+                self.layer_ann['current_mask'] = mask
 
-                    image_figure = go.Figure(
-                        data = px.imshow(image)['data'],
-                        layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-                    )           
-                else:
-                    self.layer_ann = None
-                    self.feature_extract_ftus = ['No FTUs for Feature Extraction']
-                    image_figure = go.Figure()
-                     
-
-                return sub_comp_style, disable_organ, ftu_names, ftu_value, sub_comp_method, image_figure
+                image_figure = go.Figure(
+                    data = px.imshow(image)['data'],
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                )           
             else:
-                return no_update, no_update, no_update, no_update,no_update, no_update
+                self.layer_ann = None
+                self.feature_extract_ftus = [{'label':'No FTUs for Feature Extraction','value':1,'disabled':False}]
+                image_figure = go.Figure()
+                ftu_value = ''
+                    
+
+            return sub_comp_style, disable_organ, ftu_names, ftu_value, sub_comp_method, image_figure
+            #else:
+            #return no_update, no_update, no_update, no_update,no_update, no_update
         else:
             
             return no_update, no_update, no_update, no_update, no_update, no_update
@@ -4177,72 +4180,87 @@ class FUSION:
         disable_slider = go_to_feat_state
         disable_method = go_to_feat_state
 
-        slider_marks = {
-            val:{'label':f'{sub_comp["name"]}: {val}','style':{'color':sub_comp["marks_color"]}}
-            for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
-        }
+        if not self.layer_ann is None:
 
-        for idx,ftu,thresh in zip(list(range(len(self.sub_compartment_params))),self.sub_compartment_params,thresh_slider[::-1]):
-            ftu['threshold'] = thresh
-            self.sub_compartment_params[idx] = ftu
+            slider_marks = {
+                val:{'label':f'{sub_comp["name"]}: {val}','style':{'color':sub_comp["marks_color"]}}
+                for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
+            }
 
-        if ctx.triggered_id=='next-butt':
-            # Moving to next annotation in current layer
-            self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+            for idx,ftu,thresh in zip(list(range(len(self.sub_compartment_params))),self.sub_compartment_params,thresh_slider[::-1]):
+                ftu['threshold'] = thresh
+                self.sub_compartment_params[idx] = ftu
 
-            if self.layer_ann['current_annotation']+1>=self.layer_ann['max_layers'][self.layer_ann['current_layer']]:
+            if ctx.triggered_id=='next-butt':
+                # Moving to next annotation in current layer
+                self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+
+                if self.layer_ann['current_annotation']+1>=self.layer_ann['max_layers'][self.layer_ann['current_layer']]:
+                    self.layer_ann['current_annotation'] = 0
+                else:
+                    self.layer_ann['current_annotation'] += 1
+
+            elif ctx.triggered_id=='prev-butt':
+                # Moving back to previous annotation in current layer
+                self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+
+                if self.layer_ann['current_annotation']==0:
+                    self.layer_ann['current_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]-1
+                else:
+                    self.layer_ann['current_annotation'] -= 1
+            
+            elif ctx.triggered_id=='ftu-select':
+                # Moving to next annotation layer, restarting annotation count
+                if type(select_ftu)==dict:
+                    self.layer_ann['current_layer']=select_ftu['value']
+                elif type(select_ftu)==int:
+                    self.layer_ann['current_layer'] = select_ftu
+
                 self.layer_ann['current_annotation'] = 0
+                self.layer_ann['previous_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]
+
+            if ctx.triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
+                
+                new_image, new_mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                self.layer_ann['current_image'] = new_image
+                self.layer_ann['current_mask'] = new_mask
+
+            if ctx.triggered_id not in ['go-to-feat']:
+                
+                sub_compartment_image = self.prep_handler.sub_segment_image(self.layer_ann['current_image'],self.layer_ann['current_mask'],self.sub_compartment_params,ex_ftu_view,ftu_slider)
+
+                new_ex_ftu = go.Figure(
+                    data = px.imshow(sub_compartment_image)['data'],
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                )
             else:
-                self.layer_ann['current_annotation'] += 1
+                go_to_feat_disabled = True
+                disable_slider = True
+                disable_method = True
 
-        elif ctx.triggered_id=='prev-butt':
-            # Moving back to previous annotation in current layer
-            self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+                new_ex_ftu = go.Figure(
+                    data = px.imshow(self.prep_handler.current_sub_comp_image)['data'],
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                )
 
-            if self.layer_ann['current_annotation']==0:
-                self.layer_ann['current_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]-1
+                feature_extract_children = self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)
+
+            if go_to_feat_state:
+                return new_ex_ftu, slider_marks, no_update, disable_slider, disable_method, go_to_feat_disabled
             else:
-                self.layer_ann['current_annotation'] -= 1
-        
-        elif ctx.triggered_id=='ftu-select':
-            # Moving to next annotation layer, restarting annotation count
-            if type(select_ftu)==dict:
-                self.layer_ann['current_layer']=select_ftu['value']
-            elif type(select_ftu)==int:
-                self.layer_ann['current_layer'] = select_ftu
-
-            self.layer_ann['current_annotation'] = 0
-            self.layer_ann['previous_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]
-
-        if ctx.triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
-            
-            new_image, new_mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
-            self.layer_ann['current_image'] = new_image
-            self.layer_ann['current_mask'] = new_mask
-
-        if ctx.triggered_id not in ['go-to-feat']:
-            
-            sub_compartment_image = self.prep_handler.sub_segment_image(self.layer_ann['current_image'],self.layer_ann['current_mask'],self.sub_compartment_params,ex_ftu_view,ftu_slider)
-
-            new_ex_ftu = go.Figure(
-                data = px.imshow(sub_compartment_image)['data'],
-                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-            )
+                return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
         else:
+            slider_marks = {
+                val:{'label':f'{sub_comp["name"]}: {val}','style':{'color':sub_comp["marks_color"]}}
+                for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
+            }
+            
             go_to_feat_disabled = True
             disable_slider = True
             disable_method = True
-
-            new_ex_ftu = go.Figure(
-                data = px.imshow(self.prep_handler.current_sub_comp_image)['data'],
-                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-            )
-
+            new_ex_ftu = go.Figure()
             feature_extract_children = self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)
 
-        if go_to_feat_state:
-            return new_ex_ftu, slider_marks, no_update, disable_slider, disable_method, go_to_feat_disabled
-        else:
             return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
 
     def run_feature_extraction(self,feat_butt):
