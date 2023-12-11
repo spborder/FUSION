@@ -357,12 +357,6 @@ class FUSION:
 
         slide_select_value = ''
 
-        # If coming from dataset-builder page, update plotting data based on current_slides
-        """
-        if self.current_page == 'dataset-builder':
-            print('Updating plotting metadata')
-            self.update_plotting_metadata()
-        """
         self.dataset_handler.update_usability()
 
         if pathname in self.layout_handler.layout_dict:
@@ -370,15 +364,17 @@ class FUSION:
 
             if not pathname=='vis':
                 if not pathname=='dataset-builder':
+                    if pathname=='dataset-uploader':
+                        # Double-checking that a user is logged in before giving access to dataset-uploader
+                        if self.dataset_handler.username=='fusionguest':
+                            self.current_page = 'welcome'
                     container_content = self.layout_handler.layout_dict[self.current_page]
-                    #description = self.layout_handler.description_dict[self.current_page]
                 else:
                     # Checking if there was any new slides added via uploader (or just added externally)
                     self.dataset_handler.update_folder_structure()
                     self.layout_handler.gen_builder_layout(self.dataset_handler)
 
                     container_content = self.layout_handler.layout_dict[self.current_page]
-                    #description = self.layout_handler.description_dict[self.current_page]
 
             else:
                 self.wsi = None
@@ -389,13 +385,11 @@ class FUSION:
                 self.clustering_data = pd.DataFrame()
 
                 container_content = self.layout_handler.layout_dict[self.current_page]
-                #description = self.layout_handler.description_dict[self.current_page]
 
         else:
             self.current_page = 'welcome'
                 
             container_content = self.layout_handler.layout_dict[self.current_page]
-            #description = self.layout_handler.description_dict[self.current_page]
 
         if self.current_page == 'vis':
             slide_style = {'marginBottom':'20px','display':'inline-block'}

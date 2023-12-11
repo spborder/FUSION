@@ -1519,12 +1519,22 @@ class LayoutHandler:
                 ]),
                 dbc.Row([
                     dbc.Col(
-                        html.Div('Placeholder, this is where the upload annotations thing will go')
+                        html.Div('Do you already have annotations? If so, click here to add them:'),
+                        md = 8
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            'Upload Annotation File(s)',
+                            id = {'type':'create-ann-upload','index':0},
+                            className = 'd-grid mx-auto'
+                        )
                     )
                 ]),
                 dbc.Row([
+                    html.Div(id = 'upload-anns-div',children = [])
+                ]),
+                dbc.Row([
                     html.Div(id = 'seg-woodshed',children = [],style={'maxHeight':'200px','overflow':'scroll'}),
-                    #html.Progress(id='seg-progress',value="0")
                 ])
             ])
         ])
