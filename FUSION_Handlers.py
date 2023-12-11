@@ -1526,7 +1526,8 @@ class LayoutHandler:
                         dbc.Button(
                             'Upload Annotation File(s)',
                             id = {'type':'create-ann-upload','index':0},
-                            className = 'd-grid mx-auto'
+                            className = 'd-grid mx-auto',
+                            disabled=False
                         )
                     )
                 ]),
@@ -1535,6 +1536,16 @@ class LayoutHandler:
                 ]),
                 dbc.Row([
                     html.Div(id = 'seg-woodshed',children = [],style={'maxHeight':'200px','overflow':'scroll'}),
+                ]),
+                dbc.Row([
+                    dbc.Button(
+                        'Continue',
+                        id = {'type':'seg-continue-butt','index':0},
+                        className = 'd-grid col-12 mx-auto',
+                        color = 'success',
+                        style = {'marginTop':'10px'},
+                        disabled=False
+                    )
                 ])
             ])
         ])

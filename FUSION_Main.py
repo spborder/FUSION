@@ -743,6 +743,21 @@ class FUSION:
         )(self.start_segmentation)
 
         #TODO: Add callback here for uploading annotations
+        # Uploading annotations from text file
+        self.app.callback(
+            Output('upload-anns-div','children'),
+            Input({'type':'create-ann-upload','index':ALL},'n_clicks'),
+            prevent_initial_call=True
+        )(self.create_seg_upload)
+
+        # Adding new upload to item annotations
+        self.app.callback(
+            Output({'type':'seg-file-accordion','index':ALL},'children'),
+            Input({'type':'seg-file-upload','index':ALL},'contents'),
+            [State({'type':'seg-file-accordion','index':ALL},'children'),
+             State({'type':'seg-file-upload','index':ALL},'filename')],
+            prevent_initial_call = True
+        )(self.new_seg_upload)
 
         # Updating log output for segmentation
         self.app.callback(
@@ -3878,6 +3893,70 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
     
+    def create_seg_upload(self,up_click):
+
+        if up_click:
+            
+            upload_style = {
+                'width': '100%',
+                #'height': '60px',
+                #'lineHeight': '60px',
+                'borderWidth': '1px',
+                'borderStyle': 'dashed',
+                'borderRadius': '5px',
+                'textAlign': 'center'
+            }
+            # Creating the upload component for separate annotation files
+            seg_up_children = [
+                dbc.Row([
+                    dbc.Col(
+                        dcc.Upload(
+                            id = {'type':'seg-file-upload','index':0},
+                            children = [
+                                'Drag and Drop or ',
+                                html.A('Select Annotation File(s)')
+                            ],
+                            style = upload_style
+                        ),
+                        md = 6
+                    ),
+                    dbc.Col(
+                        dbc.Accordion(
+                            id = {'type':'seg-file-accordion','index':0},
+                            children = []
+                        ),
+                        md = 6
+                    )
+                ])
+            ]
+
+            return seg_up_children
+        
+        else:
+            raise exceptions.PreventUpdate
+
+    def new_seg_upload(self,seg_upload,current_up_anns,seg_upload_filename):
+
+        if seg_upload:
+            # Processing new uploaded file
+            current_len = len(current_up_anns)
+            new_filename = seg_upload_filename[0]
+            new_upload = seg_upload[0]
+            
+            # Processing newly uploaded annotations
+            processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,self.upload_wsi_id)
+
+            return_items = current_up_anns[0]
+            return_items.append(
+                dbc.AccordionItem(
+                    title = new_filename
+                )
+            )
+
+            return [return_items]
+        else:
+            raise exceptions.PreventUpdate
+
     def update_logs(self,new_interval):
 
         # Callback to update the segmentation logs div with more data

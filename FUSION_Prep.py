@@ -30,6 +30,9 @@ from wsi_annotations_kit import wsi_annotations_kit as wak
 from shapely.geometry import Polygon, Point
 import pandas as pd
 import json
+import lxml.etree as ET
+from io import StringIO
+import base64
 
 class PrepHandler:
     def __init__(self,
@@ -419,7 +422,7 @@ class PrepHandler:
         return job_response
     
     def run_spot_aggregation(self,image_id):
-
+        
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
         fileId = image_item['largeImage']['fileId']
@@ -434,3 +437,57 @@ class PrepHandler:
                                                    })
 
         return job_response
+    
+    def process_uploaded_anns(self, filename, annotation_str,item_id):
+
+        annotation_names = []
+        annotation_str = base64.b64decode(annotation_str.split(',')[-1])
+        
+        if not os.path.exists('./assets/conversion/'):
+            os.makedirs('./assets/conversion/')
+        
+        if 'xml' in filename:
+            ann = ET.fromstring(annotation_str)
+
+            # Saving annotations locally and converting them to Histomics format
+            xml_string = ET.tostring(ann,encoding='unicode',pretty_print=True)
+            with open(f'./assets/conversion/{filename}','w') as f:
+                f.write(xml_string)
+                f.close()
+
+            # Checking for annotation names
+            structures_in_xml = ET.parse(f'./assets/conversion/{filename}').getroot().findall('Annotation')
+            ann_dict = {}
+            for s_idx,s in enumerate(structures_in_xml):
+                ann_dict[s.attrib['Name']] = s_idx+1
+
+
+        elif 'json' in filename:
+            ann = json.loads(annotation_str)
+            ann_dict = {}
+
+            with open(f'./assets/conversion/{filename}','w') as f:
+                json.dump(ann,f)
+                f.close()
+
+        converter_object = wak.Converter(
+            starting_file = f'./assets/conversion/{filename}',
+            ann_dict = ann_dict,
+            verbose = False
+        )
+        
+        annotation_names = converter_object.annotation.structure_names
+        print(f'annotation_names: {annotation_names}')
+        converted_annotations = wak.Histomics(converter_object.annotation)
+
+        # Posting annotations to uploaded object
+        self.girder_handler.gc.post(
+            f'/annotation/item/{item_id}',
+            data = json.dumps(converted_annotations.json),
+            headers = {
+                'X-HTTP-Method':'POST',
+                'Content-Type':'application/json'
+            }
+        )
+
+        return annotation_names
