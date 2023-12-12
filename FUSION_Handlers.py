@@ -1033,7 +1033,7 @@ class LayoutHandler:
                 p_val_list = []
                 for u_l in unique_labels:
                     # For each label, generate a new table with r
-                    group_data = feature_data[feature_data['label'].str.match(u_l)][feature_columns[0]].values
+                    group_data = feature_data[feature_data['label'].str.match(u_l)].values
                     group_r,group_p = stats.mstats.pearsonr(group_data[:,0],group_data[:,1])
                     
                     pearson_r_list.append(group_r)
@@ -1197,6 +1197,90 @@ class LayoutHandler:
 
         return report_children
         
+    def gen_usability_report(self,dataset_handler):
+
+        # Generate a usability report/questionnaire based on the user type
+        # If the user is able to click the usability button they are already in the 
+        # usability study, it's just a question of whether they are an admin or a 
+        # user and then if they are a user, what type of user are they?
+
+        user_info = dataset_handler.check_usability(dataset_handler.username)
+        usability_info = dataset_handler.usability_users
+
+        usability_children = []
+        if user_info['type']=='admin':
+            # Get a report of user responses and also separate by user type
+            all_users = usability_info['usability_study_users']
+
+            user_type_color = {
+                'pathologist':'rgb(3,252,194)',
+                'student':'rgb(252,244,3)',
+                'biologist':'rgb(219,3,252)'
+            }
+
+            user_data = []
+            for u in all_users:
+                user_data.append({
+                    'Username':u,
+                    'User Type':all_users[u]['type'],
+                    'Responded?':'Yes' if len(list(all_users[u]['responses'].keys()))>0 else 'No',
+                    'Total Responded': 1 if len(list(all_users[u]['responses'].keys()))>0 else 0,
+                    'Task Responses':all_users[u]['responses']
+                })
+            
+            user_df = pd.DataFrame.from_records(user_data)
+            
+            # Response chart (sunburst with inner part being total response and outer part being each user type)
+            response_burst = px.sunburst(
+                data_frame = user_df,
+                path = ['User Type','Responded?','Username'],
+                values = 'Total Responded'
+            )
+
+            usability_children.extend([
+                dbc.Row([
+                    dbc.Col([
+                        html.Div(html.H3(f'Admin View: {dataset_handler.username}')),
+                        html.Div(
+                            dcc.Graph(
+                                figure = go.Figure(response_burst)
+                            )
+                        )
+                    ],md=8),
+                    dbc.Col([
+                        html.Div(html.H3('Individual User Responses')),
+                        html.Div(
+                            dbc.Accordion([
+                                dbc.AccordionItem(
+                                    title = f'{all_users[user]["type"]}: {user}',
+                                    children = json.dumps(all_users[user]['responses']),
+                                    #className = f'{all_users[user]["type"]}-accordion-button'
+                                )
+                                for user in all_users
+                            ])
+                        )
+                    ])
+                ])
+            ])
+
+        elif user_info['type']=='pathologist':
+            usability_children = [
+                'Placeholder for pathologist tasks and tutorials'
+            ]
+
+        elif user_info['type']=='student':
+            usability_children = [
+                'Placeholder for student tasks and tutorials'
+            ]
+
+        elif user_info['type']=='biologist':
+            usability_children = [
+                'Placeholder for biologist tasks and tutorials'
+            ]
+
+
+        return usability_children
+
     def gen_wsi_view(self, wsi):
 
         # Grabbing all the necessary properties to generate the children of the wsi viewer card
@@ -1379,9 +1463,7 @@ class LayoutHandler:
                 page_current=0,
                 page_size=10,
                 style_cell = {
-                    'overflow':'hidden',
-                    'textOverflow':'ellipsis',
-                    'maxWidth':0
+                    'overflowX':'auto'
                 },
                 tooltip_data = [
                     {

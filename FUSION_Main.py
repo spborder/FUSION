@@ -337,9 +337,7 @@ class FUSION:
             collapse_children = self.layout_handler.description_dict[self.current_page]
         elif ctx.triggered_id['type']=='usability-butt':
             user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
-            collapse_children = [
-                html.P(f'Your user type is: {user_info["type"]}')
-            ]
+            collapse_children = self.layout_handler.gen_usability_report(self.dataset_handler)
 
         if n or n2:
             return [not i for i in is_open], collapse_children
@@ -4703,9 +4701,7 @@ class FUSION:
                             columns = [{'name':i,'id':i} for i in cluster_marker_data.columns],
                             data = cluster_marker_data.to_dict('records'),
                             style_cell = {
-                                'overflow':'hidden',
-                                'textOverflow':'ellipsis',
-                                'maxWidth':0
+                                'overflowX':'auto'
                             },
                             tooltip_data = [
                                 {
