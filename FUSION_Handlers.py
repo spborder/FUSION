@@ -1212,6 +1212,7 @@ class LayoutHandler:
             # Get a report of user responses and also separate by user type
             all_users = usability_info['usability_study_users']
 
+            # Ideally the accordion items would be color-coded, can't get the CSS to stick though
             user_type_color = {
                 'pathologist':'rgb(3,252,194)',
                 'student':'rgb(252,244,3)',
@@ -1263,20 +1264,179 @@ class LayoutHandler:
                 ])
             ])
 
-        elif user_info['type']=='pathologist':
-            usability_children = [
-                'Placeholder for pathologist tasks and tutorials'
-            ]
+        else:
 
-        elif user_info['type']=='student':
-            usability_children = [
-                'Placeholder for student tasks and tutorials'
-            ]
+            # Creating the tutorials and stuff
+            tutorials_col = dbc.Col([
+                html.H3('Level Tutorials'),
+                dbc.Card([
+                    dbc.CardHeader(
+                        dbc.Tabs(
+                            id = 'tutorial-tabs',
+                            active_tab = 'start-tab',
+                            children = [
+                                dbc.Tab(
+                                    tab_id = 'start-tab',
+                                    label = 'Start'
+                                ),
+                                dbc.Tab(
+                                    tab_id = 'histo-tab',
+                                    label = 'Histology'
+                                ),
+                                dbc.Tab(
+                                    tab_id = 'omics-tab',
+                                    label = 'Spatial -Omics'
+                                ),
+                                dbc.Tab(
+                                    tab_id = 'answer-tab',
+                                    label = 'Answer Hypothesis'
+                                ),
+                                dbc.Tab(
+                                    tab_id = 'generate-tab',
+                                    label = 'Generate Hypothesis'
+                                )
+                            ]
+                        )
+                    ),
+                    dbc.CardBody(
+                        html.Div(id = 'tutorial-content',children = [])
+                    )
+                ])
+            ],md=6)
 
-        elif user_info['type']=='biologist':
-            usability_children = [
-                'Placeholder for biologist tasks and tutorials'
-            ]
+            if user_info['type']=='pathologist':
+
+                questions_col = dbc.Col([
+                    html.H3('User Responses'),
+                    dbc.Card([
+                        dbc.CardHeader(
+                            dbc.Tabs(
+                                id = {'type':'questions-tabs','index':0},
+                                active_tab = 'start-q-tab',
+                                children = [
+                                    dbc.Tab(
+                                        tab_id = {'type':'start-q-tab','index':0},
+                                        label = 'Start Questions'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'histo-q-tab','index':0},
+                                        label = 'Level 1: Histology'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'spatial-q-tab','index':0},
+                                        label = 'Level 2: Spatial -Omics'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'answer-q-tab','index':0},
+                                        label = 'Level 3: Answer Hypothesis'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'generate-q-tab','index':0},
+                                        label = 'Level 4: Generate Hypothesis'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'comments-q-tab','index':0},
+                                        label = 'Comments'
+                                    )
+                                ]
+                            )
+                        ),
+                        dbc.CardBody(
+                            html.Div(id = {'type':'question-div','index':0})
+                        )
+                    ])
+                ],md=6)
+            
+            elif user_info['type']=='biologist':
+
+                questions_col = dbc.Col([
+                    html.H3('User Responses'),
+                    dbc.Card([
+                        dbc.CardHeader(
+                            dbc.Tabs(
+                                id = {'type':'questions-tabs','index':0},
+                                active_tab = 'start-q-tab',
+                                children = [
+                                    dbc.Tab(
+                                        tab_id = {'type':'start-q-tab','index':1},
+                                        label = 'Start Questions'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'spatial-q-tab','index':1},
+                                        label = 'Level 1: Spatial -Omics'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'histo-q-tab','index':1},
+                                        label = 'Level 2: Histology'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'answer-q-tab','index':1},
+                                        label = 'Level 3: Answer Hypothesis'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'generate-q-tab','index':1},
+                                        label = 'Level 4: Generate Hypothesis'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'comments-q-tab','index':1},
+                                        label = 'Comments'
+                                    )
+                                ]
+                            )
+                        ),
+                        dbc.CardBody(
+                            html.Div(id = {'type':'question-div','index':0})
+                        )
+                    ])
+                ],md=6)
+
+            elif user_info['type']=='student':
+
+                questions_col = dbc.Col([
+                    html.H3('User Responses'),
+                    dbc.Card([
+                        dbc.CardHeader(
+                            dbc.Tabs(
+                                id = {'type':'questions-tabs','index':0},
+                                active_tab = 'start-q-tab',
+                                children = [
+                                    dbc.Tab(
+                                        tab_id = {'type':'start-q-tab','index':2},
+                                        label = 'Start Questions'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'histo-q-tab','index':2},
+                                        label = 'Level 1: Histology'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'spatial-q-tab','index':2},
+                                        label = 'Level 2: Spatial -Omics'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'answer-q-tab','index':2},
+                                        label = 'Level 3: Answer Hypothesis'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'generate-q-tab','index':2},
+                                        label = 'Level 4: Generate Hypothesis'
+                                    ),
+                                    dbc.Tab(
+                                        tab_id = {'type':'comments-q-tab','index':2},
+                                        label = 'Comments'
+                                    )
+                                ]
+                            )
+                        ),
+                        dbc.CardBody(
+                            html.Div(id = {'type':'question-div','index':0})
+                        )
+                    ])
+                ],md=6)
+
+            usability_children.extend([
+                tutorials_col,
+                questions_col
+            ])
 
 
         return usability_children
