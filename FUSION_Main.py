@@ -3886,7 +3886,7 @@ class FUSION:
                         )
                     ]
 
-                    return seg_woodshed, disable_structure, disable_seg_butt, disable_continue_butt
+                    return seg_woodshed, disable_structure, disable_seg_butt, [disable_continue_butt]
                 else:
                     raise exceptions.PreventUpdate
             else:

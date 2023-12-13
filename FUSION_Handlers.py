@@ -3009,6 +3009,9 @@ class GirderHandler:
         output_path = f'/user/{self.username}/Public'
         output_path_id = self.gc.get('/resource/lookup',parameters={'path':output_path})['_id']
 
+        # Removing file if there's a duplicate
+        current_items = self.gc.get(f'/resource/')
+
         if isinstance(save_object['content'],pd.DataFrame):
             
             # Saving dataframe
