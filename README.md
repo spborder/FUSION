@@ -7,10 +7,10 @@
 <br />
 <div align="center">
   <a href="https://github.com/spborder/FUSION">
-    <img src="assets/FUSION-LAB-FINAL.png" alt="Logo" width="25%">
+    <img src="https://github.com/spborder/FUSION/assets/FUSION-LAB-FINAL.png" alt="Logo" width="25%">
   </a>
 
-<h3 align="center">HistoLens</h3>
+<h3 align="center">FUSION (Functional Unit State Identification in WSIs)</h3>
 
   <p align="center">
     AI-driven visualization and quantification of spatial OMICS
@@ -101,6 +101,6 @@ Pinaki Sarder (PI) - pinaki.sarder@ufl.edu
 [license-url]: https://github.com/spborder/FUSION/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/sam-border-341826a4
-[lablogo-shield]: https://github.com/spborder/FUSION/assets/favicon.ico
+[lablogo-shield]: https://github.com/spborder/FUSION/assets/CMIL-Logo.png
 [lablogo-url]: https://cmilab.nephrology.medicine.ufl.edu/
 [product-screenshot]: https://github.com/spborder/FUSION/assets/Example_Pic.jpg
