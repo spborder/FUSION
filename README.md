@@ -7,7 +7,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/spborder/FUSION">
-    <img src="https://github.com/spborder/FUSION/assets/FUSION-LAB-FINAL.png" alt="Logo" width="25%">
+    <img src="https://github.com/spborder/FUSION/tree/main/assets/FUSION-LAB-FINAL.png" alt="Logo" width="25%">
   </a>
 
 <h3 align="center">FUSION (Functional Unit State Identification in WSIs)</h3>
@@ -42,7 +42,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/spborder/FUSION">
-    <img src="assets/Example_Pic.jpg" alt="Logo" width="100%">
+    <img src="https://github.com/spborder/FUSION/tree/main/assets/Example_Pic.jpg" alt="Screenshot" width="100%">
   </a>
 
 <h3 align="center">FUSION</h3>
