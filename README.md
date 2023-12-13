@@ -1,13 +1,16 @@
 <div id="top"></div>
 
-[![LinkedIn][linkedin-shield]][linkedin-url] [![CMILab][lablogo-shield][lablogo-url]]
+[![LinkedIn][linkedin-shield]][linkedin-url]
 
 
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
   <a href="https://github.com/spborder/FUSION">
-    <img src="https://github.com/spborder/FUSION/tree/main/assets/FUSION-LAB-FINAL.png" alt="Logo" width="25%">
+    <img src="assets/FUSION-LAB-FINAL.png" alt="Logo" width="25%">
+  </a>
+  <a href="https://cmilab.nephrology.medicine.ufl.edu/">
+    <img src="assets/CMIL-Logo.png" alt="Lab-Logo" width="25%">
   </a>
 
 <h3 align="center">FUSION (Functional Unit State Identification in WSIs)</h3>
@@ -42,7 +45,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/spborder/FUSION">
-    <img src="https://github.com/spborder/FUSION/tree/main/assets/Example_Pic.jpg" alt="Screenshot" width="100%">
+    <img src="assets/Example_Pic.jpeg" alt="Screenshot" width="100%">
   </a>
 
 <h3 align="center">FUSION</h3>
