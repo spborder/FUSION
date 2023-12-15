@@ -375,12 +375,22 @@ class FUSION:
                     container_content = self.layout_handler.layout_dict[self.current_page]
 
             else:
+
+                # Generating visualization layout with empty clustering data, default filter vals, and no WSI
                 self.wsi = None
                 self.filter_vals = [0,1]
                 self.layout_handler.gen_vis_layout(
                     self.wsi
                     )
                 self.clustering_data = pd.DataFrame()
+
+                # Checking self.current_slides for any slides, if there aren't any 'included'==True then revert to default set
+                included_slides = [i['included'] for i in self.current_slides if 'included' in i]
+                if len(included_slides)==0:
+                    self.current_slides = []
+                    for s in self.dataset_handler.default_slides:
+                        s['included'] = True
+                        self.current_slides.append(s)
 
                 container_content = self.layout_handler.layout_dict[self.current_page]
 
@@ -942,7 +952,7 @@ class FUSION:
                     children = [
                         dbc.Col(dcc.Dropdown(['By Dataset','By Slide'],'By Dataset',id={'type':'agg-meta-drop','index':0})),
                         dbc.Col(
-                            dbc.Button('Go to Visualization!',id={'type':'go-to-vis-butt','index':0},color='success',href='/vis')
+                            dbc.Button('Go to Visualization!',className='d-grid mx-auto',id={'type':'go-to-vis-butt','index':0},color='success',href='/vis')
                         )
                     ]
                 )
@@ -1011,22 +1021,12 @@ class FUSION:
             if len(group_type)>0:
                 group_type = group_type[0]
 
-        # ctx.triggered_id here is type <dash._utils.AttributeDict> not dict
-        #try:
-        #    if ctx.triggered_id['type']=='slide-dataset-table':
-        #        #self.metadata = self.update_plotting_metadata()
-        #        #self.update_plotting_metadata()
-        #except:
-        #    pass
-
-        #print(f'length of updated metadata: {len(self.metadata)}')
         # For DSA-backend deployment
         if not new_meta is None:
             if not len(new_meta)==0:
                 # Filtering out de-selected slides
                 present_slides = [s['name'] for s in self.current_slides]
                 included_slides = [t for t in present_slides if self.current_slides[present_slides.index(t)]['included']]                    
-                #print(f'included_slides: {included_slides}')
 
                 dataset_metadata = []
                 for d_id in self.dataset_handler.slide_datasets:
@@ -1116,7 +1116,7 @@ class FUSION:
                     elif group_type=='By Slide':
                         group_bar = 'Slide Name'
 
-                    # Checking if new_meta is a number or a string
+                    # Checking if new_meta is a number or a string. If not then it's a nested metadata feature.
                     # This is dumb, c'mon pandas
                     if plot_data[new_meta].dtype.kind in 'biufc':
                         if group_bar == 'Dataset':
@@ -1179,11 +1179,61 @@ class FUSION:
                 else:
                     self.current_slides[s]['included'] = False
                     
-            slide_options = [{'label':i['name'],'value':i['name']} for i in self.current_slides if i['included']]
+            #slide_options = [{'label':i['name'],'value':i['name']} for i in self.current_slides if i['included']]
+            slide_options = []
+            unique_folders = np.unique([s['folderId'] for s in self.current_slides if s['included']])
+            for f in unique_folders:
+
+                # Adding all the slides in the same folder under the same disabled folder label option (not selectable)
+                folder_name = self.dataset_handler.slide_datasets[f]['name']
+
+                slide_options.append({
+                    'label': html.Span([
+                        html.Img(src='/assets/fusey_clean.svg',height=20),
+                        html.Span(folder_name,style={'font-size':25,'padding-left':10})
+                    ], style = {'align-items':'center','justify-content':'center'}),
+                    'value':'folder',
+                    'disabled':False
+                })
+
+                slide_options.extend([
+                    {
+                        'label':i['name'],
+                        'value':i['name'],
+                        'disabled':False
+                    }
+                    for i in self.current_slides if i['included'] and i['folderId']==f
+                ])
 
         if slide_options == []:
-            slide_options = [{'label':'blah','value':'blah'}]
+            # Old bit, just change this to be the default slides
+            #slide_options = [{'label':'blah','value':'blah'}]
+            slide_options = []
+            unique_folders = np.unique([s['folderId'] for s in self.dataset_handler.default_slides])
+            for f in unique_folders:
+                
+                # Getting the folder names for the slides
+                folder_name = self.dataset_handler.slide_datasets[f]['name']
 
+                slide_options.append(
+                    {
+                        'label': html.Span([
+                            html.Img(src='/assets/fusey_clean.svg',height=20),
+                            html.Span(folder_name,style={'font-size':25,'padding-left':10})
+                        ], style = {'align-items':'center','justify-content':'center'}),
+                        'value':'folder',
+                        'disabled':True
+                    }
+                )
+
+                slide_options.extend([
+                    {
+                        'label':i['name'],
+                        'value':i['name'],
+                        'disabled':False
+                    }
+                    for i in self.dataset_handler.default_slides if i['folderId']==f
+                ])
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 

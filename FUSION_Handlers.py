@@ -1623,7 +1623,9 @@ class LayoutHandler:
                 page_current=0,
                 page_size=10,
                 style_cell = {
-                    'overflowX':'auto'
+                    'overflow':'hidden',
+                    'textOverflow':'ellipsis',
+                    'maxWidth':0                
                 },
                 tooltip_data = [
                     {
