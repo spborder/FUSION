@@ -1193,7 +1193,7 @@ class FUSION:
                         html.Span(folder_name,style={'font-size':25,'padding-left':10})
                     ], style = {'align-items':'center','justify-content':'center'}),
                     'value':'folder',
-                    'disabled':False
+                    'disabled':True
                 })
 
                 slide_options.extend([

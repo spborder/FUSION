@@ -1342,7 +1342,9 @@ class LayoutHandler:
                             )
                         ),
                         dbc.CardBody(
-                            html.Div(id = {'type':'question-div','index':0})
+                            html.Div(id = {'type':'question-div','index':0},
+                                children = []
+                            )
                         )
                     ])
                 ],md=6)
@@ -1358,34 +1360,36 @@ class LayoutHandler:
                                 active_tab = 'start-q-tab',
                                 children = [
                                     dbc.Tab(
-                                        tab_id = {'type':'start-q-tab','index':1},
+                                        tab_id = {'type':'start-q-tab','index':0},
                                         label = 'Start Questions'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'spatial-q-tab','index':1},
+                                        tab_id = {'type':'spatial-q-tab','index':0},
                                         label = 'Level 1: Spatial -Omics'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'histo-q-tab','index':1},
+                                        tab_id = {'type':'histo-q-tab','index':0},
                                         label = 'Level 2: Histology'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'answer-q-tab','index':1},
+                                        tab_id = {'type':'answer-q-tab','index':0},
                                         label = 'Level 3: Answer Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'generate-q-tab','index':1},
+                                        tab_id = {'type':'generate-q-tab','index':0},
                                         label = 'Level 4: Generate Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'comments-q-tab','index':1},
+                                        tab_id = {'type':'comments-q-tab','index':0},
                                         label = 'Comments'
                                     )
                                 ]
                             )
                         ),
                         dbc.CardBody(
-                            html.Div(id = {'type':'question-div','index':0})
+                            html.Div(id = {'type':'question-div','index':0},
+                                children = []
+                            )
                         )
                     ])
                 ],md=6)
@@ -1401,34 +1405,36 @@ class LayoutHandler:
                                 active_tab = 'start-q-tab',
                                 children = [
                                     dbc.Tab(
-                                        tab_id = {'type':'start-q-tab','index':2},
+                                        tab_id = {'type':'start-q-tab','index':0},
                                         label = 'Start Questions'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'histo-q-tab','index':2},
+                                        tab_id = {'type':'histo-q-tab','index':0},
                                         label = 'Level 1: Histology'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'spatial-q-tab','index':2},
+                                        tab_id = {'type':'spatial-q-tab','index':0},
                                         label = 'Level 2: Spatial -Omics'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'answer-q-tab','index':2},
+                                        tab_id = {'type':'answer-q-tab','index':0},
                                         label = 'Level 3: Answer Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'generate-q-tab','index':2},
+                                        tab_id = {'type':'generate-q-tab','index':0},
                                         label = 'Level 4: Generate Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'comments-q-tab','index':2},
+                                        tab_id = {'type':'comments-q-tab','index':0},
                                         label = 'Comments'
                                     )
                                 ]
                             )
                         ),
                         dbc.CardBody(
-                            html.Div(id = {'type':'question-div','index':0})
+                            html.Div(id = {'type':'question-div','index':0},
+                                children = []
+                            )
                         )
                     ])
                 ],md=6)
@@ -2041,6 +2047,7 @@ class LayoutHandler:
                                         outline = True,
                                         color = 'primary',
                                         href = ' https://ufl.qualtrics.com/jfe/form/SV_1A0CcKNLhTnFCHI',
+                                        target='_blank',
                                         style = {'textTransform':'none'}
                                     )
                                 ),
@@ -2051,6 +2058,7 @@ class LayoutHandler:
                                         outline=True,
                                         color="primary",
                                         href="https://cellcards.org/index.php",
+                                        target='_blank',
                                         style={"textTransform":"none"}
                                     )
                                 ),
@@ -2061,7 +2069,19 @@ class LayoutHandler:
                                         outline=True,
                                         color='primary',
                                         href='https://cmilab.nephrology.medicine.ufl.edu',
+                                        target='_blank',
                                         style={"textTransform":"none"}
+                                    )
+                                ),
+                                dbc.NavItem(
+                                    dbc.Button(
+                                        "User Feedback",
+                                        id = 'user-feedback-button',
+                                        outline=True,
+                                        color='primary',
+                                        href='https://github.com/SarderLab/FUSION/issues',
+                                        target='_blank',
+                                        style = {'textTransform':'none'}
                                     )
                                 )
                             ],navbar=True),
