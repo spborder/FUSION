@@ -4861,7 +4861,7 @@ class FUSION:
 
                     # Checking if the user has already responded to this question
                     if f'Level {level_index}' in user_info['responses']:
-                        q_val = [user_info['responses'][f'Level {level_index+1}'][q_idx]]
+                        q_val = user_info['responses'][f'Level {level_index}'][q_idx]
                     else:
                         q_val = []
                     

@@ -2797,17 +2797,26 @@ class GirderHandler:
         # Running at startup and then when pages change so we can update this file without restarting FUSION
 
         usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
-        print(usability_usernames_id)
         if updated_info is None:
             usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
 
             return usability_info
         else:
-
-            put_response = self.gc.put(f'/item/{usability_usernames_id["_id"]}',
-                json = json.dumps(updated_info)
+            
+            item_files = self.gc.get(f'/item/{usability_usernames_id["_id"]}/files',parameters={'limit':1000})
+            put_response = self.gc.put(f'/file/{item_files[0]["_id"]}/contents',
+                parameters={'size':len(json.dumps(updated_info).encode('utf-8'))},
+                data = json.dumps(updated_info)
             )
-            print(put_response)
+
+            post_response = self.gc.post(f'/file/chunk',
+                parameters={
+                    'size':len(json.dumps(updated_info).encode('utf-8')),
+                    'offset':0,
+                    'uploadId':put_response['_id']
+                    },
+                data = json.dumps(updated_info)
+            )
 
     def check_usability(self,username):
 
