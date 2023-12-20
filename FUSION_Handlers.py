@@ -1273,8 +1273,12 @@ class LayoutHandler:
                     dbc.CardHeader(
                         dbc.Tabs(
                             id = {'type':'tutorial-tabs','index':0},
-                            active_tab = 'start-tab',
+                            active_tab = 'background-tab',
                             children = [
+                                dbc.Tab(
+                                    tab_id = 'background-tab',
+                                    label = 'Background'
+                                ),
                                 dbc.Tab(
                                     tab_id = 'start-tab',
                                     label = 'Start'
@@ -2793,7 +2797,7 @@ class GirderHandler:
         # Running at startup and then when pages change so we can update this file without restarting FUSION
 
         usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
-
+        print(usability_usernames_id)
         if updated_info is None:
             usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
 
@@ -2801,7 +2805,7 @@ class GirderHandler:
         else:
 
             put_response = self.gc.put(f'/item/{usability_usernames_id["_id"]}',
-                data = updated_info
+                json = json.dumps(updated_info)
             )
             print(put_response)
 

@@ -4898,6 +4898,7 @@ class FUSION:
             
             else:
                 # Comments tab
+                level_index = 4
                 question_list.append(
                     html.Div([
                         dbc.Row(dbc.Label('Add any comments here!')),
@@ -4916,7 +4917,7 @@ class FUSION:
                 dbc.Button(
                     'Submit Responses',
                     className = 'd-grid mx-auto',
-                    id = {'type':'questions-submit','index':0}
+                    id = {'type':'questions-submit','index':level_index}
                 ),
                 html.Div(id = {'type':'questions-submit-alert','index':0})
                 ])
@@ -4934,7 +4935,9 @@ class FUSION:
         # Updating usability info file in DSA after user clicks "Submit" button
         print(questions_inputs)
         print(len(questions_inputs))
-        if ctx.triggered['value']:
+        print(ctx.triggered)
+        print(ctx.triggered_id)
+        if butt_click:
             # Checking if all of the responses are not empty
             responses_check = [True if not i==[] else False for i in questions_inputs]
             print(responses_check)
@@ -4945,8 +4948,14 @@ class FUSION:
                 usability_info = self.dataset_handler.update_usability()
 
                 # Updating responses for the current user
-                usability_info['usability_study_users'][self.dataset_handler.username]['responses'][f'Level {ctx.triggered["index"]+1}'] = questions_inputs
+                level_idx = ctx.triggered_id['index']
+                if level_idx<=3:
+                    level_name = f'Level {level_idx}'
+                else:
+                    level_name = 'Comments'
+                usability_info['usability_study_users'][self.dataset_handler.username]['responses'][f'{level_name}'] = questions_inputs
 
+                print(usability_info)
                 # Posting to DSA
                 self.dataset_handler.update_usability(usability_info)
                 
