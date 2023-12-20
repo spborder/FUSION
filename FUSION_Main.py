@@ -414,6 +414,8 @@ class FUSION:
     def all_layout_callbacks(self):
 
         # Adding callbacks for items in every page
+
+        # Updating items in page
         self.app.callback(
             [Output('container-content','children'),
              Output('slide-select-card','style'),
@@ -422,6 +424,7 @@ class FUSION:
              prevent_initial_call = True
         )(self.update_page)
 
+        # Opening the description/usability collapse content
         self.app.callback(
             [Output({'type':'collapse-content','index':ALL},'is_open'),
              Output('descrip','children')],
@@ -431,12 +434,14 @@ class FUSION:
             prevent_initial_call=True
         )(self.view_instructions)
 
+        # Open/close nav bar when screen/window is too small
         self.app.callback(
             Output('navbar-collapse','is_open'),
             Input('navbar-toggler','n_clicks'),
             State('navbar-collapse','is_open')
         )(self.open_nav_collapse)
 
+        # Opening the sidebar to access other pages
         self.app.callback(
             Output({'type':'sidebar-offcanvas','index':MATCH},'is_open'),
             Input({'type':'sidebar-button','index':MATCH},'n_clicks'),
@@ -444,6 +449,7 @@ class FUSION:
             prevent_initial_call=True
         )(self.view_sidebar)
 
+        # Logging in to DSA instance
         self.app.callback(
             [Output('login-submit','color'),
              Output('login-submit','children'),
@@ -460,6 +466,25 @@ class FUSION:
              State({'type':'last-name-input','index':ALL},'value')],
              prevent_initial_call=True
         )(self.girder_login)
+
+        # Loading new tutorial slides
+        self.app.callback(
+            Input({'type':'tutorial-tabs','index':ALL},'active_tab'),
+            Output('tutorial-content','children'),
+        )(self.update_tutorial_slide)
+        
+        self.app.callback(
+            Input({'type':'questions-tabs','index':ALL},'active_tab'),
+            Output({'type':'question-div','index':ALL},'children'),
+        )(self.update_question_div)
+
+        # Posting question responses to usability info file
+        self.app.callback(
+            Input({'type':'questions-submit','index':ALL},'n_clicks'),
+            Output({'type':'questions-submit-alert','index':ALL},'children'),
+            State({'type':'question-input','index':ALL},'value'),
+            prevent_initial_call = True
+        )(self.post_usability_response)
 
     def vis_callbacks(self):
 
@@ -1193,7 +1218,7 @@ class FUSION:
                         html.Span(folder_name,style={'font-size':25,'padding-left':10})
                     ], style = {'align-items':'center','justify-content':'center'}),
                     'value':'folder',
-                    'disabled':False
+                    'disabled':True
                 })
 
                 slide_options.extend([
@@ -4787,6 +4812,158 @@ class FUSION:
             return [marker_interval_disable], [cluster_log_children]
         else:
             raise exceptions.PreventUpdate
+
+    def update_tutorial_slide(self,tutorial_tab):
+
+        tab_key = {
+            'background-tab':'Background',
+            'start-tab':'Start',
+            'histo-tab':'Histology',
+            'omics-tab':'Spatial -Omics',
+            'answer-tab':'Answer Hypothesis',
+            'generate-tab':'Generate Hypothesis'
+        }
+
+        # Getting tutorial content from FUSION Assets folder in DSA instance
+        tutorial_slides = os.listdir(f'./static/{tab_key[tutorial_tab[0]]}/')
+        tutorial_children = [
+            dbc.Carousel(
+                id = 'tutorial-carousel',
+                items = [
+                    {'key':f'{i+1}','src':f'./static/{tab_key[tutorial_tab[0]]}/slide_{i}.svg'}
+                    for i in range(len(tutorial_slides))
+                ],
+                controls = True,
+                indicators = True
+            )
+        ]
+
+        return tutorial_children
+
+    def update_question_div(self,question_tab):
+
+        # Updating the questions that the user sees in the usability questions tab
+        user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
+        user_type = user_info['type']
+        usability_info = self.dataset_handler.update_usability()
+
+        # Getting questions for that type
+        if not user_type=='admin':
+            usability_questions = usability_info['usability_study_questions'][user_type]
+            
+            question_list = []
+            # Narrowing down level by the index that the tab is on.
+            if 'level' in question_tab[0]:
+                level_index = int(question_tab[0].split('-')[1])
+                level_questions = usability_questions[f'Level {level_index}']["questions"]
+
+                for q_idx,l_q in enumerate(level_questions):
+
+                    # Checking if the user has already responded to this question
+                    if f'Level {level_index}' in user_info['responses']:
+                        q_val = user_info['responses'][f'Level {level_index}'][q_idx]
+                    else:
+                        q_val = []
+                    
+                    if not l_q['input_type']=='bool':
+                        question_list.append(
+                            html.Div([
+                                dbc.Label(l_q['text']),
+                                dbc.Input(
+                                    placeholder="Input response",
+                                    type=l_q['input_type'],
+                                    id={'type':'question-input','index':q_idx},
+                                    value = q_val
+                                ),
+                                html.Hr()
+                            ])
+                        )
+                    else:
+                        question_list.append(
+                            html.Div([
+                                dbc.Label(l_q['text']),
+                                dbc.RadioItems(
+                                    options = [
+                                        {'label':'No','value':'No'},
+                                        {'label':'Yes','value':'Yes'}
+                                    ],
+                                    value = q_val,
+                                    id = {'type':'question-input','index':q_idx},
+                                    inline=True,
+                                    labelCheckedClassName="text-success",
+                                    inputCheckedClassName='border border-success bg-success'
+                                )
+                            ])
+                        )
+            
+            else:
+                # Comments tab
+                level_index = 4
+                question_list.append(
+                    html.Div([
+                        dbc.Row(dbc.Label('Add any comments here!')),
+                        dbc.Row(
+                            dcc.Textarea(
+                                id = {'type':'question-input','index':0},
+                                placeholder = 'Comments',
+                                style = {'width':'100%'},
+                                maxLength = 10000
+                            )
+                        )
+                    ])
+                )
+
+            question_list.append(html.Div([
+                dbc.Button(
+                    'Submit Responses',
+                    className = 'd-grid mx-auto',
+                    id = {'type':'questions-submit','index':level_index}
+                ),
+                html.Div(id = {'type':'questions-submit-alert','index':0})
+                ])
+            )
+
+        else:
+            question_list = ['What did you do fool?']
+
+        question_return = dbc.Form(question_list)
+
+        return [question_return]
+
+    def post_usability_response(self,butt_click,questions_inputs):
+
+        # Updating usability info file in DSA after user clicks "Submit" button
+        print(questions_inputs)
+        print(len(questions_inputs))
+        print(ctx.triggered)
+        print(ctx.triggered_id)
+        if butt_click:
+            # Checking if all of the responses are not empty
+            responses_check = [True if not i==[] else False for i in questions_inputs]
+            print(responses_check)
+            if all(responses_check):
+                submit_alert = dbc.Alert('Submitted!',color='success')
+
+                # Getting the most recent usability info to update
+                usability_info = self.dataset_handler.update_usability()
+
+                # Updating responses for the current user
+                level_idx = ctx.triggered_id['index']
+                if level_idx<=3:
+                    level_name = f'Level {level_idx}'
+                else:
+                    level_name = 'Comments'
+                usability_info['usability_study_users'][self.dataset_handler.username]['responses'][f'{level_name}'] = questions_inputs
+
+                print(usability_info)
+                # Posting to DSA
+                self.dataset_handler.update_usability(usability_info)
+                
+            return [submit_alert]
+        else:
+            raise exceptions.PreventUpdate
+
+
 
 
 def app(*args):

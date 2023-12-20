@@ -1272,9 +1272,13 @@ class LayoutHandler:
                 dbc.Card([
                     dbc.CardHeader(
                         dbc.Tabs(
-                            id = 'tutorial-tabs',
-                            active_tab = 'start-tab',
+                            id = {'type':'tutorial-tabs','index':0},
+                            active_tab = 'background-tab',
                             children = [
+                                dbc.Tab(
+                                    tab_id = 'background-tab',
+                                    label = 'Background'
+                                ),
                                 dbc.Tab(
                                     tab_id = 'start-tab',
                                     label = 'Start'
@@ -1312,37 +1316,35 @@ class LayoutHandler:
                         dbc.CardHeader(
                             dbc.Tabs(
                                 id = {'type':'questions-tabs','index':0},
-                                active_tab = 'start-q-tab',
+                                active_tab = 'level-1-tab',
                                 children = [
                                     dbc.Tab(
-                                        tab_id = {'type':'start-q-tab','index':0},
-                                        label = 'Start Questions'
-                                    ),
-                                    dbc.Tab(
-                                        tab_id = {'type':'histo-q-tab','index':0},
+                                        tab_id = 'level-1-tab',
                                         label = 'Level 1: Histology'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'spatial-q-tab','index':0},
+                                        tab_id = 'level-2-tab',
                                         label = 'Level 2: Spatial -Omics'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'answer-q-tab','index':0},
+                                        tab_id = 'level-3-tab',
                                         label = 'Level 3: Answer Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'generate-q-tab','index':0},
+                                        tab_id = 'level-4-tab',
                                         label = 'Level 4: Generate Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'comments-q-tab','index':0},
+                                        tab_id = 'comments-tab',
                                         label = 'Comments'
                                     )
                                 ]
                             )
                         ),
                         dbc.CardBody(
-                            html.Div(id = {'type':'question-div','index':0})
+                            html.Div(id = {'type':'question-div','index':0},
+                                children = []
+                            )
                         )
                     ])
                 ],md=6)
@@ -1355,37 +1357,35 @@ class LayoutHandler:
                         dbc.CardHeader(
                             dbc.Tabs(
                                 id = {'type':'questions-tabs','index':0},
-                                active_tab = 'start-q-tab',
+                                active_tab = 'level-1-tab',
                                 children = [
                                     dbc.Tab(
-                                        tab_id = {'type':'start-q-tab','index':1},
-                                        label = 'Start Questions'
-                                    ),
-                                    dbc.Tab(
-                                        tab_id = {'type':'spatial-q-tab','index':1},
+                                        tab_id = 'level-1-tab',
                                         label = 'Level 1: Spatial -Omics'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'histo-q-tab','index':1},
+                                        tab_id = 'level-2-tab',
                                         label = 'Level 2: Histology'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'answer-q-tab','index':1},
+                                        tab_id = 'level-3-tab',
                                         label = 'Level 3: Answer Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'generate-q-tab','index':1},
+                                        tab_id = 'level-4-tab',
                                         label = 'Level 4: Generate Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'comments-q-tab','index':1},
+                                        tab_id = 'comments-tab',
                                         label = 'Comments'
                                     )
                                 ]
                             )
                         ),
                         dbc.CardBody(
-                            html.Div(id = {'type':'question-div','index':0})
+                            html.Div(id = {'type':'question-div','index':0},
+                                children = []
+                            )
                         )
                     ])
                 ],md=6)
@@ -1398,37 +1398,35 @@ class LayoutHandler:
                         dbc.CardHeader(
                             dbc.Tabs(
                                 id = {'type':'questions-tabs','index':0},
-                                active_tab = 'start-q-tab',
+                                active_tab = 'level-1-tab',
                                 children = [
                                     dbc.Tab(
-                                        tab_id = {'type':'start-q-tab','index':2},
-                                        label = 'Start Questions'
-                                    ),
-                                    dbc.Tab(
-                                        tab_id = {'type':'histo-q-tab','index':2},
+                                        tab_id = 'level-1-tab',
                                         label = 'Level 1: Histology'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'spatial-q-tab','index':2},
+                                        tab_id = 'level-2-tab',
                                         label = 'Level 2: Spatial -Omics'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'answer-q-tab','index':2},
+                                        tab_id = 'level-3-tab',
                                         label = 'Level 3: Answer Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'generate-q-tab','index':2},
+                                        tab_id = 'level-4-tab',
                                         label = 'Level 4: Generate Hypothesis'
                                     ),
                                     dbc.Tab(
-                                        tab_id = {'type':'comments-q-tab','index':2},
+                                        tab_id = 'comments-tab',
                                         label = 'Comments'
                                     )
                                 ]
                             )
                         ),
                         dbc.CardBody(
-                            html.Div(id = {'type':'question-div','index':0})
+                            html.Div(id = {'type':'question-div','index':0},
+                                children = []
+                            )
                         )
                     ])
                 ],md=6)
@@ -1439,7 +1437,7 @@ class LayoutHandler:
             ])
 
 
-        return usability_children
+        return dbc.Row(usability_children)
 
     def gen_wsi_view(self, wsi):
 
@@ -2041,6 +2039,7 @@ class LayoutHandler:
                                         outline = True,
                                         color = 'primary',
                                         href = ' https://ufl.qualtrics.com/jfe/form/SV_1A0CcKNLhTnFCHI',
+                                        target='_blank',
                                         style = {'textTransform':'none'}
                                     )
                                 ),
@@ -2051,6 +2050,7 @@ class LayoutHandler:
                                         outline=True,
                                         color="primary",
                                         href="https://cellcards.org/index.php",
+                                        target='_blank',
                                         style={"textTransform":"none"}
                                     )
                                 ),
@@ -2061,7 +2061,19 @@ class LayoutHandler:
                                         outline=True,
                                         color='primary',
                                         href='https://cmilab.nephrology.medicine.ufl.edu',
+                                        target='_blank',
                                         style={"textTransform":"none"}
+                                    )
+                                ),
+                                dbc.NavItem(
+                                    dbc.Button(
+                                        "User Feedback",
+                                        id = 'user-feedback-button',
+                                        outline=True,
+                                        color='primary',
+                                        href='https://github.com/SarderLab/FUSION/issues',
+                                        target='_blank',
+                                        style = {'textTransform':'none'}
                                     )
                                 )
                             ],navbar=True),
@@ -2779,16 +2791,32 @@ class GirderHandler:
         # Generating plot feature selection dictionary
         self.generate_feature_dict(self.default_slides)
 
-    def update_usability(self):
-
+    def update_usability(self, updated_info = None):
+        
         # Checking usability study usernames in FUSION Assets folder
         # Running at startup and then when pages change so we can update this file without restarting FUSION
+
         usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
-        usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
+        if updated_info is None:
+            usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
 
-        print(usability_info)
+            return usability_info
+        else:
+            
+            item_files = self.gc.get(f'/item/{usability_usernames_id["_id"]}/files',parameters={'limit':1000})
+            put_response = self.gc.put(f'/file/{item_files[0]["_id"]}/contents',
+                parameters={'size':len(json.dumps(updated_info).encode('utf-8'))},
+                data = json.dumps(updated_info)
+            )
 
-        return usability_info
+            post_response = self.gc.post(f'/file/chunk',
+                parameters={
+                    'size':len(json.dumps(updated_info).encode('utf-8')),
+                    'offset':0,
+                    'uploadId':put_response['_id']
+                    },
+                data = json.dumps(updated_info)
+            )
 
     def check_usability(self,username):
 
