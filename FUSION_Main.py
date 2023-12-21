@@ -4997,7 +4997,6 @@ class FUSION:
         user_types = np.unique(user_df['User Type'].tolist()).tolist()
         user_type_dict = {}
         for u_t in user_types:
-            print(u_t)
             user_type_data = user_df[user_df['User Type'].str.match(u_t)]
 
             final_user_type_list = []
@@ -5029,7 +5028,6 @@ class FUSION:
 
             if len(final_user_type_list)>0:
                 user_type_lvl_df = pd.DataFrame.from_records(final_user_type_list)
-                print(user_type_lvl_df)
                 user_type_dict[u_t] = user_type_lvl_df
 
         # Creating excel file writer with different sheets for each user type
