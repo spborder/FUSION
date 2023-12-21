@@ -1225,8 +1225,8 @@ class LayoutHandler:
                     'Username':u,
                     'User Type':all_users[u]['type'],
                     'Responded?':'Yes' if len(list(all_users[u]['responses'].keys()))>0 else 'No',
-                    'Total Responded': 1 if len(list(all_users[u]['responses'].keys()))>0 else 0,
-                    'Task Responses':all_users[u]['responses']
+                    'Total Participants': 1,
+                    'Task Responses':all_users[u]['responses'] if len(list(all_users[u]['responses'].keys()))>0 else 'No Responses'
                 })
             
             user_df = pd.DataFrame.from_records(user_data)
@@ -1235,7 +1235,7 @@ class LayoutHandler:
             response_burst = px.sunburst(
                 data_frame = user_df,
                 path = ['User Type','Responded?','Username'],
-                values = 'Total Responded'
+                values = 'Total Participants'
             )
 
             usability_children.extend([
@@ -1259,7 +1259,16 @@ class LayoutHandler:
                                 )
                                 for user in all_users
                             ])
-                        )
+                        ),
+                        html.Hr(),
+                        html.Div([
+                            dbc.Button(
+                                'Download User Responses',
+                                id = 'download-usability-butt',
+                                className = 'd-grid mx-auto'
+                            ),
+                            dcc.Download(id = 'usability-download')
+                        ])
                     ])
                 ])
             ])
