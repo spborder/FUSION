@@ -4997,45 +4997,35 @@ class FUSION:
         user_types = np.unique(user_df['User Type'].tolist()).tolist()
         user_type_dict = {}
         for u_t in user_types:
-
+            print(u_t)
             user_type_data = user_df[user_df['User Type'].str.match(u_t)]
 
-            # Dividing level responses
-            # Task Responses contains dictionaries divided like this:
-            # task_responses = {
-            #   "Level #": [],
-            #   ...
-            #}
-            user_type_responses = pd.DataFrame.from_records(user_type_data['Task Responses'].tolist())
-            print(user_type_responses)
-            # Converting this list of dicts to a dataframe should make the Level # the columns with the responses for each question in the data for each user
             final_user_type_list = []
-            for u in np.unique(user_type_data['Username'].tolist()).tolist():
-                
-                # Getting that user's other data (dictionary)
-                user_specific_data = user_type_data[user_type_data['Username'].str.match(u)]
-                # Concatenating level responses and filling empty with user data
-                for lvl in user_type_responses.columns:
-                    lvl_response_data = user_type_responses[lvl].tolist()
-                    # Number of questions within that level based on current response data
-                    q_number = [len(i) for i in lvl_response_data if type(i)==list]
-                    print(q_number)
-                    if len(q_number)>0:
-                        # if there are any responses to this level
-                        max_q = max(q_number)
-
-                        for q_idx in range(max_q):
-                            lvl_data = [
+            users = np.unique(user_type_data['Username'].tolist()).tolist()
+            for u in users:
+                u_list = []
+                u_responses = user_type_data[user_type_data['Username'].str.match(u)]['Task Responses'].tolist()[0]
+                if type(u_responses)==dict:
+                    for lvl in list(u_responses.keys()):
+                        for q_idx,q in enumerate(u_responses[lvl]):
+                            u_list.append(
                                 {
                                     'Username':u,
                                     'Level': lvl,
                                     'Question':f'Question {q_idx+1}',
-                                    'Response': i[q_idx] if type(i)==list else 'Not Responded'
+                                    'Response': q
                                 }
-                                for i in lvl_response_data
-                            ]
-
-                        final_user_type_list.extend(lvl_data)
+                            )
+                    final_user_type_list.extend(u_list)
+                else:
+                    final_user_type_list.append(
+                        {
+                            'Username':u,
+                            'Level':'No Responses',
+                            'Question':'No Responses',
+                            'Response':'No Responses'
+                        }
+                    )
 
             if len(final_user_type_list)>0:
                 user_type_lvl_df = pd.DataFrame.from_records(final_user_type_list)
