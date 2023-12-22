@@ -336,8 +336,9 @@ class FUSION:
         if ctx.triggered_id['type']=='collapse-descrip':
             collapse_children = self.layout_handler.description_dict[self.current_page]
         elif ctx.triggered_id['type']=='usability-butt':
-            user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
-            collapse_children = self.layout_handler.gen_usability_report(self.dataset_handler)
+            if n2:
+                user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
+                collapse_children = self.layout_handler.gen_usability_report(self.dataset_handler)
 
         if n or n2:
             return [not i for i in is_open], collapse_children
@@ -456,7 +457,8 @@ class FUSION:
              Output('logged-in-user','children'),
              Output('upload-sidebar','disabled'),
              Output('create-user-extras','children'),
-             Output({'type':'usability-butt','index':ALL},'disabled')],
+             Output({'type':'usability-sign-up','index':ALL},'style'),
+             Output({'type':'usability-butt','index':ALL},'style')],
             [Input('login-submit','n_clicks'),
              Input('create-user-submit','n_clicks')],
             [State('username-input','value'),
@@ -3697,7 +3699,8 @@ class FUSION:
 
         create_user_children = []
         print(f'login ctx.triggered_id: {ctx.triggered_id}')
-        usability_disabled = no_update
+        usability_signup_style = no_update
+        usability_butt_style = no_update
         if ctx.triggered_id=='login-submit':
 
             try:
@@ -3709,7 +3712,9 @@ class FUSION:
                 upload_disabled = False
 
                 if not user_info is None:
-                    usability_disabled = False
+                    usability_signup_style = {'display':'none'}
+                    usability_butt_style = {'marginLeft':'5px','display':'inline-block'}
+
 
             except girder_client.AuthenticationError:
 
@@ -3718,7 +3723,7 @@ class FUSION:
                 logged_in_user = ''
                 upload_disabled = True
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_disabled]
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_signup_style],[usability_butt_style]
         
         elif ctx.triggered_id=='create-user-submit':
             print(f'email:{email}')
@@ -3756,7 +3761,9 @@ class FUSION:
                     upload_disabled = False
 
                     if not user_info is None:
-                        usability_disabled = False
+                        usability_signup_style = {'display':'none'}
+                        usability_butt_style = {'marginLeft':'5px','display':'inline-block'}
+
 
                 except girder_client.AuthenticationError:
 
@@ -3765,7 +3772,7 @@ class FUSION:
                     logged_in_user = ''
                     upload_disabled = True
             
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_disabled]
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_signup_style],[usability_butt_style]
 
         else:
             raise exceptions.PreventUpdate

@@ -2158,11 +2158,28 @@ class LayoutHandler:
             children = [
                 #dbc.CardHeader("Description and Instructions"),
                 dbc.CardBody([
-                    dbc.Button('Open Sidebar',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginRight':'5px'}),
+                    dbc.Button('Open Sidebar',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0),
                     dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px'}),
                     dbc.Button('Registered User Login',id={'type':'login-butt','index':0},className='mb-3',style = {'marginLeft':'5px'}),
                     login_popover,
-                    dbc.Button('Usability Study',id = {'type':'usability-butt','index':0},className='mb-3',color = 'primary',n_clicks=0,style={'marginLeft':'5px'},disabled=True),
+                    dbc.Button('Sign up for Usability Study',
+                        id = {'type':'usability-sign-up','index':0},
+                        className='mb-3',
+                        color = 'primary',
+                        target = '_blank',
+                        n_clicks = 0,
+                        href = 'https://ufl.qualtrics.com/jfe/form/SV_ag9QzBmvG5qEce2',
+                        style = {'marginLeft':'5px','display':'inline-block'}
+                    ),
+                    dbc.Button(
+                        'Usability Study',
+                        id = {'type':'usability-butt','index':0},
+                        className='mb-3',
+                        color = 'primary',
+                        n_clicks=0,
+                        style={'marginLeft':'5px','display':'none'},
+                        disabled=False
+                    ),
                     html.Div(id='logged-in-user',children = [f'Welcome, {initial_user}!']),
                     dbc.Collapse(
                         dbc.Row(
