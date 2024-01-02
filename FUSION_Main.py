@@ -2900,13 +2900,16 @@ class FUSION:
             sample_info = sample_info[0:100]
 
         img_list = []
+        img_dims = np.zeros((len(sample_info),2))
         for idx,s in enumerate(sample_info):
-            #print(f's: {s}')
-            image_region = self.dataset_handler.get_annotation_image(s['Slide_Id'],s['Bounding_Box'])
+            image_region = np.array(self.dataset_handler.get_annotation_image(s['Slide_Id'],s['Bounding_Box']))
             
-            img_list.append(resize(np.array(image_region),output_shape=(512,512,3)))
-
-
+            # Resizing images so that each one is the same size
+            img_list.append(resize(np.array(image_region),output_shape=(512,512,3),anti_aliasing=True))
+            #TODO: Find some efficient way to pad images equally up to the max size and then resize to 512x512x3
+            #img_list.append(image_region)
+            #img_dims[idx,:] += np.shape(image_region).tolist()[0:2]
+        
         return img_list        
 
     def update_selected(self,click,selected):
