@@ -3712,7 +3712,6 @@ class FUSION:
 
             try:
                 user_info, user_details = self.dataset_handler.authenticate(username,pword)
-                print(user_details)
 
                 user_id = user_details['_id']
 
@@ -3720,9 +3719,6 @@ class FUSION:
                 button_text = 'Success!'
                 logged_in_user = f'Welcome: {username}'
                 upload_disabled = False
-
-                print(user_info)
-                print(username)
 
                 if not user_info is None:
                     usability_disabled = False

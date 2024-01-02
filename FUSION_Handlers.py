@@ -2408,7 +2408,6 @@ class GirderHandler:
         self.password = password
         
         user_details = self.gc.authenticate(username,password)
-        print(user_details)
 
         user_info = self.check_usability(self.username)
         self.get_token()
