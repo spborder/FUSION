@@ -91,6 +91,9 @@ class FUSION:
                 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
                 })(window,document,'script','dataLayer','GTM-WWS4Q54M');</script>
             <!-- End Google Tag Manager -->
+            <title>{%title%}</title>
+            {%favicon%}
+            {%css%}
         </head>
         <body>
             <!-- Google Tag Manager (noscript) -->
