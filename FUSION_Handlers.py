@@ -2231,6 +2231,7 @@ class LayoutHandler:
         
         welcome_layout = html.Div([
             dcc.Location(id='url'),
+            html.Div(id='ga-invisible-div', style={'display': 'none'}),
             header,
             html.B(),
             dbc.Row(dbc.Col(html.Div(sider))),
@@ -2249,6 +2250,8 @@ class LayoutHandler:
                 ],fluid=True,id='container-content',style = {'height':'100vh'}
             ),
             html.Hr(),
+            html.Div(id='user-id-div', style={'display': 'none'}),
+            html.Div(id='dummy-div-for-userId', style={'display': 'none'}),
             html.P('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
         ])
 
@@ -2389,6 +2392,7 @@ class LayoutHandler:
 
         single_page_layout = html.Div([
             dcc.Location(id='url'),
+            html.Div(id='ga-invisible-div', style={'display': 'none'}),
             header,
             html.B(),
             dbc.Row(dbc.Col(html.Div(sider))),
@@ -2398,6 +2402,7 @@ class LayoutHandler:
                 children = description,
                 align='center'
             ),
+            html.Div(id='user-id-div', style={'display': 'none'}),
             dbc.Container(
                 children = container_children,
                 fluid=True,id='container-content')
@@ -2423,8 +2428,7 @@ class GirderHandler:
             'usability_study_admins':[]
         }
 
-        user_info = self.authenticate(username, password)
-        self.get_token()
+        user_info, user_details = self.authenticate(username, password)
 
         # Name of plugin used for fetching clustering/plotting metadata
         self.get_cluster_data_plugin = 'samborder2256_get_cluster_data_latest/clustering_data'
@@ -2441,11 +2445,12 @@ class GirderHandler:
         self.username = username
         self.password = password
         
-        self.gc.authenticate(username,password)
+        user_details = self.gc.authenticate(username,password)
+
         user_info = self.check_usability(self.username)
         self.get_token()
 
-        return user_info
+        return user_info, user_details
 
     def create_user(self,username,password,email,firstName,lastName):
 
@@ -2463,6 +2468,7 @@ class GirderHandler:
                      })
         
         user_info = self.check_usability(self.username)
+        print(user_info)
 
         return user_info
 

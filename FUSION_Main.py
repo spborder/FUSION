@@ -21,7 +21,7 @@ from shapely.geometry import Point, shape, box
 from skimage.transform import resize
 import random
 
-from umap import UMAP
+from umap.umap_ import UMAP
 
 from uuid import uuid4
 import textwrap
@@ -78,6 +78,37 @@ class FUSION:
         self.app.layout = self.layout_handler.current_initial_layout
         self.app._favicon = './assets/favicon.ico'
         self.app.validation_layout = html.Div(self.layout_handler.validation_layout)
+        
+        # Setup GoogleTag for event tracking
+        self.app.index_string = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <!-- Google Tag Manager -->
+                <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+                new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+                j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+                'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+                })(window,document,'script','dataLayer','GTM-WWS4Q54M');</script>
+            <!-- End Google Tag Manager -->
+            <title>{%title%}</title>
+            {%favicon%}
+            {%css%}
+        </head>
+        <body>
+            <!-- Google Tag Manager (noscript) -->
+                <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WWS4Q54M"
+                height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+                <!-- End Google Tag Manager (noscript) -->
+            <!-- End Google Tag Manager (noscript) -->
+            {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+        </body>
+        </html>"""
 
         # clustering related properties (and also cell types, cell states, image_ids, etc.)
         self.cell_graphics_key = self.dataset_handler.cell_graphics_key
@@ -425,6 +456,13 @@ class FUSION:
              prevent_initial_call = True
         )(self.update_page)
 
+        # GTM tracking setup for every page
+        self.app.clientside_callback(
+            "dash_clientside.clientside.trackPageView",
+            Output('ga-invisible-div', 'children'),
+            [Input('url', 'pathname')]
+        )
+
         # Opening the description/usability collapse content
         self.app.callback(
             [Output({'type':'collapse-content','index':ALL},'is_open'),
@@ -453,22 +491,28 @@ class FUSION:
         # Logging in to DSA instance
         self.app.callback(
             [Output('login-submit','color'),
-             Output('login-submit','children'),
-             Output('logged-in-user','children'),
-             Output('upload-sidebar','disabled'),
-             Output('create-user-extras','children'),
-             Output({'type':'usability-sign-up','index':ALL},'style'),
-             Output({'type':'usability-butt','index':ALL},'style')],
+                Output('login-submit','children'),
+                Output('logged-in-user','children'),
+                Output('upload-sidebar','disabled'),
+                Output('create-user-extras','children'),
+                Output('user-id-div', 'children'),
+                Output({'type':'usability-sign-up','index':ALL},'style'),
+                Output({'type':'usability-butt','index':ALL},'style')],
             [Input('login-submit','n_clicks'),
-             Input('create-user-submit','n_clicks')],
+                Input('create-user-submit','n_clicks')],
             [State('username-input','value'),
-             State('pword-input','value'),
-             State({'type':'email-input','index':ALL},'value'),
-             State({'type':'first-name-input','index':ALL},'value'),
-             State({'type':'last-name-input','index':ALL},'value')],
-             prevent_initial_call=True
+                State('pword-input','value'),
+                State({'type':'email-input','index':ALL},'value'),
+                State({'type':'first-name-input','index':ALL},'value'),
+                State({'type':'last-name-input','index':ALL},'value')],
+                prevent_initial_call=True
         )(self.girder_login)
 
+        self.app.clientside_callback(
+            "window.dash_clientside.clientside.updateDataLayerWithUserId",
+            Output('dummy-div-for-userId', 'children'),
+            [Input('user-id-div', 'children')]
+        )
         # Loading new tutorial slides
         self.app.callback(
             Input({'type':'tutorial-tabs','index':ALL},'active_tab'),
@@ -3707,7 +3751,9 @@ class FUSION:
         if ctx.triggered_id=='login-submit':
 
             try:
-                user_info = self.dataset_handler.authenticate(username,pword)
+                user_info, user_details = self.dataset_handler.authenticate(username,pword)
+
+                user_id = user_details['_id']
 
                 button_color = 'success'
                 button_text = 'Success!'
@@ -3726,7 +3772,7 @@ class FUSION:
                 logged_in_user = ''
                 upload_disabled = True
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_signup_style],[usability_butt_style]
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_signup_style],[usability_butt_style], json.dumps({'user_id': user_id})
         
         elif ctx.triggered_id=='create-user-submit':
             print(f'email:{email}')
