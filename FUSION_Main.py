@@ -3778,7 +3778,7 @@ class FUSION:
                 logged_in_user = ''
                 upload_disabled = True
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_signup_style],[usability_butt_style], json.dumps({'user_id': user_id})
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': user_id}), [usability_signup_style],[usability_butt_style]
         
         elif ctx.triggered_id=='create-user-submit':
             print(f'email:{email}')
@@ -3827,7 +3827,7 @@ class FUSION:
                     logged_in_user = ''
                     upload_disabled = True
             
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, [usability_signup_style],[usability_butt_style]
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': user_id}), [usability_signup_style],[usability_butt_style]
 
         else:
             raise exceptions.PreventUpdate
@@ -4819,7 +4819,7 @@ class FUSION:
                 marker_interval_disable = True
 
                 # Load cluster markers from user folder
-                cluster_marker_data = pd.DataFrame(self.dataset_handler.grab_from_user_folder('FUSION_Cluster_Markers.json'))
+                cluster_marker_data = pd.DataFrame(self.dataset_handler.grab_from_user_folder('FUSION_Cluster_Markers.json')).round(decimals=4)
 
                 cluster_log_children = [
                     dbc.Row(

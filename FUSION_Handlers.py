@@ -796,7 +796,7 @@ class LayoutHandler:
                 ])
 
                 label_data = feature_data[feature_data['label'].str.match(u_l)]
-                data_summ = label_data.describe()
+                data_summ = label_data.describe().round(decimals=4)
                 data_summ.reset_index(inplace=True,drop=False)
 
                 report_children.append(
@@ -859,7 +859,7 @@ class LayoutHandler:
                         'p Value': p_value,
                         '95% Confidence Interval (Lower)': confidence_interval.low,
                         '95% Confidence Interval (Upper)':confidence_interval.high
-                    },index=[0])
+                    },index=[0]).round(decimals=4)
 
                     if p_value<0.05:
                         sig_alert = dbc.Alert('Statistically significant! (p<0.05)',color='success')
@@ -910,7 +910,7 @@ class LayoutHandler:
                     anova_df = pd.DataFrame({
                         'F Statistic': f_stat,
                         'p Value':p_value
-                    },index = [0])
+                    },index = [0]).round(decimals=4)
 
                     # Now performing Tukey's honestly significant difference (HSD) test for pairwise comparisons across different labels
                     # This returns an insane string. Usability score: >:(
@@ -934,7 +934,7 @@ class LayoutHandler:
                                 }
                                 tukey_data.append(row_dict)
 
-                    tukey_df = pd.DataFrame(tukey_data)
+                    tukey_df = pd.DataFrame(tukey_data).round(decimals=4)
                     
 
                     if p_value<0.05:
@@ -1039,7 +1039,7 @@ class LayoutHandler:
                     pearson_r_list.append(group_r)
                     p_val_list.append(group_p)
 
-                pearson_df = pd.DataFrame(data = {'Label': unique_labels, 'Pearson r': pearson_r_list, 'p-value':p_val_list})
+                pearson_df = pd.DataFrame(data = {'Label': unique_labels, 'Pearson r': pearson_r_list, 'p-value':p_val_list}).round(decimals=4)
 
                 report_children.append(
                     html.Div(
@@ -1116,7 +1116,7 @@ class LayoutHandler:
                         sil_dict['Label'].append(u_l)
                         sil_dict['Silhouette Score'].append(np.nanmean(samples_silhouette_scores[[i==u_l for i in feature_data['label'].tolist()]]))
 
-                    sil_df = pd.DataFrame(sil_dict)
+                    sil_df = pd.DataFrame(sil_dict).round(decimals=4)
 
                     report_children.append(
                         html.Div(

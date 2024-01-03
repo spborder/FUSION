@@ -472,13 +472,14 @@ def main():
 
     dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
 
-    dataset_path = '/collection/10X_Visium/FFPE Cohort/Histology/Diabetic'
+    dataset_path = '/user/sam123/Public/Reprocessing'
     path_type = 'folder'
 
     dataset_handler.initialize_folder_structure(dataset_path,path_type)
 
     external_stylesheets = [
         dbc.themes.LUX,
+        dbc.themes.BOOTSTRAP,
         dbc.icons.BOOTSTRAP,
         dbc.icons.FONT_AWESOME
     ]
