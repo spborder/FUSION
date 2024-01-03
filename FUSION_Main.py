@@ -352,6 +352,7 @@ class FUSION:
         """)
 
         # Adding callbacks to app
+        self.ga_callbacks()
         self.vis_callbacks()
         self.all_layout_callbacks()
         self.builder_callbacks()
@@ -443,6 +444,23 @@ class FUSION:
             return not is_open
         return is_open
 
+    def ga_callbacks(self):
+
+        # Callbacks with recorded user data for Google Analytics
+        # GTM tracking setup for every page
+        self.app.clientside_callback(
+            "dash_clientside.clientside.trackPageView",
+            Output('ga-invisible-div', 'children'),
+            [Input('url', 'pathname')]
+        )
+
+        # Tracking user login
+        self.app.clientside_callback(
+            "window.dash_clientside.clientside.updateDataLayerWithUserId",
+            Output('dummy-div-for-userId', 'children'),
+            [Input('user-id-div', 'children')]
+        )
+
     def all_layout_callbacks(self):
 
         # Adding callbacks for items in every page
@@ -455,13 +473,6 @@ class FUSION:
              Input('url','pathname'),
              prevent_initial_call = True
         )(self.update_page)
-
-        # GTM tracking setup for every page
-        self.app.clientside_callback(
-            "dash_clientside.clientside.trackPageView",
-            Output('ga-invisible-div', 'children'),
-            [Input('url', 'pathname')]
-        )
 
         # Opening the description/usability collapse content
         self.app.callback(
@@ -508,11 +519,6 @@ class FUSION:
                 prevent_initial_call=True
         )(self.girder_login)
 
-        self.app.clientside_callback(
-            "window.dash_clientside.clientside.updateDataLayerWithUserId",
-            Output('dummy-div-for-userId', 'children'),
-            [Input('user-id-div', 'children')]
-        )
         # Loading new tutorial slides
         self.app.callback(
             Input({'type':'tutorial-tabs','index':ALL},'active_tab'),
