@@ -3075,7 +3075,7 @@ class FUSION:
             return go.Figure(), go.Figure(), go.Figure(),[]
     
     def update_selected_state_bar(self, selected_cell_click):
-        print(f'Selected cell click: {selected_cell_click}')
+        print(f'Selected cell click: {selected_cell_click}, is None: {selected_cell_click is None}')
         if not selected_cell_click is None:
             cell_type = selected_cell_click['points'][0]['label']
 
