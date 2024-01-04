@@ -1322,20 +1322,26 @@ class FUSION:
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
     def update_roi_pie(self,bounds,current_tab):
-        
-        # Making a box-poly from the bounds
-        if current_tab=='cell-compositions-tab':
-            if not self.wsi is None:
+
+        if not self.wsi is None:
+            if not bounds is None:
                 if len(bounds)==2:
                     bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
                 else:
                     bounds_box = shapely.geometry.box(*bounds)
 
-                #print(f'current viewport bounds: {bounds}')
-
                 # Storing current slide boundaries
                 self.current_slide_bounds = bounds_box
+            else:
+                self.current_slide_bounds = self.wsi.map_bounds
+        else:
+            self.current_slide_bounds = None
 
+            raise exceptions.PreventUpdate
+
+        # Making a box-poly from the bounds
+        if current_tab=='cell-compositions-tab':
+            if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
                 intersecting_ftus = {}
                 if 'Spots' in self.current_ftu_layers:
@@ -1429,8 +1435,6 @@ class FUSION:
                     return html.P('No FTUs in current view')
             else:
                 return html.P('Select a slide to get started!')
-        else:
-            raise exceptions.PreventUpdate
     
     def update_state_bar(self,cell_click):
         
@@ -3584,34 +3588,38 @@ class FUSION:
         return new_children
 
     def download_data(self,options,button_click):
-        #print(ctx.triggered_id)
-        #print(options)
-        if button_click:
-            if ctx.triggered_id['type'] == 'download-butt':
-                # Download data has to be a dictionary with content and filename keys. The filename extension will vary
 
-                try:
-                    os.remove('./assets/FUSION_Download.zip')
-                except OSError:
-                    print('No previous download zip file to remove')
+        if not self.wsi is None:
+            if button_click:
+                if ctx.triggered_id['type'] == 'download-butt':
+                    # Download data has to be a dictionary with content and filename keys. The filename extension will vary
 
-                print(f'Download type: {self.download_handler.what_data(options)}')
-                download_type = self.download_handler.what_data(options)
-                if download_type == 'annotations':
-                    download_list = self.download_handler.extract_annotations(self.wsi,self.current_slide_bounds, options)
-                elif download_type == 'cell':
-                    download_list = self.download_handler.extract_cell(self.current_ftus,options)
+                    try:
+                        os.remove('./assets/FUSION_Download.zip')
+                    except OSError:
+                        print('No previous download zip file to remove')
+
+                    print(f'Download type: {self.download_handler.what_data(options)}')
+                    download_type = self.download_handler.what_data(options)
+                    if download_type == 'annotations':
+                        download_list = self.download_handler.extract_annotations(self.wsi,self.current_slide_bounds, options)
+                    elif download_type == 'cell':
+                        download_list = self.download_handler.extract_cell(self.current_ftus,options)
+                    else:
+                        print('Working on it!')
+                        download_list = []
+
+                    self.download_handler.zip_data(download_list)
+                    
+                    return dcc.send_file('./assets/FUSION_Download.zip')
+
                 else:
-                    print('Working on it!')
-                    download_list = []
-
-                self.download_handler.zip_data(download_list)
-                
-                return dcc.send_file('./assets/FUSION_Download.zip')
-
+                    raise exceptions.PreventUpdate
             else:
                 raise exceptions.PreventUpdate
         else:
+            #TODO: Add some error handling here for if there isn't anything to save
+            # Or just make this tab not enabled
             raise exceptions.PreventUpdate
 
     def run_analysis(self,cli_name,cli_butt):
