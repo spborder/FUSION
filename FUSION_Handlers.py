@@ -2421,6 +2421,8 @@ class GirderHandler:
         
         self.apiUrl = apiUrl
         self.gc = girder_client.GirderClient(apiUrl = self.apiUrl)
+        self.base_path = None
+        self.base_path_type = None
 
         # Initializing usability study users/admins list
         self.usability_users = {
@@ -2442,25 +2444,28 @@ class GirderHandler:
     def authenticate(self, username, password):
         # Getting authentication for user
         #TODO: Add some handling here for incorrect username or password
-        self.username = username
+        self.username = username.lower()
         self.password = password
         
-        user_details = self.gc.authenticate(username,password)
+        user_details = self.gc.authenticate(username.lower(),password)
 
         user_info = self.check_usability(self.username)
         self.get_token()
+
+        if not self.base_path is None:
+            self.initialize_folder_structure()
 
         return user_info, user_details
 
     def create_user(self,username,password,email,firstName,lastName):
 
         # Creating new user from username/password combo
-        self.username = username
+        self.username = username.lower()
         self.password = password
 
         self.gc.post('/user',
                      parameters = {
-                         'login':username,
+                         'login':username.lower(),
                          'password':password,
                          'email':email,
                          'firstName':firstName,
@@ -2568,7 +2573,15 @@ class GirderHandler:
                         elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
 
-    def initialize_folder_structure(self,path,path_type):
+    def initialize_folder_structure(self,path=None,path_type=None):
+
+        if not path is None and not path_type is None:
+            self.base_path = path
+            self.base_path_type = path_type
+        else:
+            path = self.base_path
+            path_type = self.base_path_type
+
 
         self.current_collection = {
             'path':[],
