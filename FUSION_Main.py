@@ -3129,11 +3129,11 @@ class FUSION:
             return go.Figure(), go.Figure(), go.Figure(),[]
     
     def update_selected_state_bar(self, selected_cell_click):
-        print(f'Selected cell click: {selected_cell_click}, is None: {selected_cell_click is None}')
+        #print(f'Selected cell click: {selected_cell_click}, is None: {selected_cell_click is None}')
         if not selected_cell_click is None:
             cell_type = selected_cell_click['points'][0]['label']
 
-            cell_states_data = self.clustering_data['Cell_States'].tolist()
+            cell_states_data = self.feature_data['Cell_States'].tolist()
             state_data = pd.DataFrame([cell_states_data[i][cell_type] for i in self.current_selected_samples]).sum(axis=0).to_frame()
             state_data = state_data.reset_index()
             state_data.columns = ['Cell States',f'Cell States for {cell_type}']
@@ -4923,9 +4923,9 @@ class FUSION:
     def update_question_div(self,question_tab):
 
         # Updating the questions that the user sees in the usability questions tab
+        usability_info = self.dataset_handler.update_usability()
         user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
         user_type = user_info['type']
-        usability_info = self.dataset_handler.update_usability()
 
         # Getting questions for that type
         if not user_type=='admin':
