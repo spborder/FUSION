@@ -461,6 +461,20 @@ class FUSION:
             [Input('user-id-div', 'children')]
         )
 
+        # Tracking manual_roi data
+        self.app.clientside_callback(
+            "window.dash_clientside.clientside.trackManualRoiData",
+            Output('dummy-div-user-annotations', 'children'),
+            [Input('user-annotations-div', 'children')]
+        )
+
+        # Tracking PlugIns
+        self.app.clientside_callback(
+            "window.dash_clientside.clientside.trackPlugInData",
+            Output('dummy-div-plugin-track', 'children'),
+            [Input('plugin-ga-track', 'children')]
+        )
+
     def all_layout_callbacks(self):
 
         # Adding callbacks for items in every page
@@ -658,7 +672,8 @@ class FUSION:
         self.app.callback(
             Input({'type':'edit_control','index':ALL},'geojson'),
             [Output('layer-control','children'),
-             Output('data-select','options')],
+             Output('data-select','options'),
+             Output('user-annotations-div', 'children')],
             prevent_initial_call=True
         )(self.add_manual_roi)
 
@@ -725,7 +740,8 @@ class FUSION:
              Output('label-select','options'),
              Output('label-select','value'),
              Output('filter-select-tree','data'),
-             Output('download-plot-data-div','style')],
+             Output('download-plot-data-div','style'),
+             Output('plugin-ga-track', 'children')],
             [Input('tools-tabs','active_tab'),
              Input({'type':'get-clustering-butt','index':ALL},'n_clicks')],
             prevent_initial_call=True
@@ -748,7 +764,8 @@ class FUSION:
         # Find cluster markers button clicked and return dcc.Interval object
         self.app.callback(
             [Output({'type':'cluster-marker-div','index':ALL},'children'),
-             Output({'type':'cluster-markers-butt','index':ALL},'disabled')],
+             Output({'type':'cluster-markers-butt','index':ALL},'disabled'),
+             Output('plugin-ga-track', 'children')],
             Input({'type':'cluster-markers-butt','index':ALL},'n_clicks'),
             prevent_initial_call = True
         )(self.start_cluster_markers)
@@ -816,7 +833,8 @@ class FUSION:
              Output({'type':'omics-upload-div','index':ALL},'children'),
              Output('structure-type','disabled'),
              Output('post-upload-row','style'),
-             Output('upload-type','disabled')],
+             Output('upload-type','disabled'),
+             Output('plugin-ga-track','children')],
             prevent_initial_call=True
         )(self.upload_data)
 
@@ -3169,6 +3187,7 @@ class FUSION:
                         new_geojson = new_geojson[0]    
 
                 if not new_geojson is None:
+                    new_roi = None
                     if len(new_geojson['features'])>0:
                         
                         # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
@@ -3327,7 +3346,11 @@ class FUSION:
                         else:
                             self.update_hex_color_key(self.current_cell)
                         
-                        return self.current_overlays, data_select_options
+                        if new_roi:
+                            user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id, 'geoJSON_info': new_roi   })
+                            return self.current_overlays, data_select_options, user_ann_tracking
+                        
+                        return self.current_overlays, data_select_options, no_update
                     else:
 
                         # Clearing manual ROIs and reverting overlays
@@ -3350,7 +3373,7 @@ class FUSION:
                         else:
                             self.update_hex_color_key(self.current_cell)
                         
-                        return self.current_overlays, data_select_options
+                        return self.current_overlays, data_select_options, no_update
                 else:
                     raise exceptions.PreventUpdate
             else:
@@ -3982,17 +4005,17 @@ class FUSION:
             disable_upload_type = True
             
             if 'Omics' in self.upload_check:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': {'upload': { 'type': 'Visium' } } })
             else:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': {'upload': { 'type': 'non-Omnics' } } })
         else:
 
             disable_upload_type = True
 
             if 'Omics' in self.upload_check:
-                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type
+                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, json.dumps({'plugin_used': {'upload': { 'type': 'Visium' } } })
             else:
-                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type
+                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, json.dumps({'plugin_used': {'upload': { 'type': 'non-Omnics' } } })
 
     def slide_qc(self, upload_id):
 
@@ -4605,15 +4628,18 @@ class FUSION:
 
     def populate_cluster_tab(self,active_tab, cluster_butt):
 
+        used_get_cluster_data_plugin = None
+
         if active_tab == 'clustering-tab':
+             # Checking the current slides to see if they match self.current_slides:
+            current_slide_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
+            unique_ids = np.unique(current_slide_ids).tolist()
+            current_ids = [i['_id'] for i in self.current_slides]
+        
             if ctx.triggered_id=='tools-tabs':
 
                 # Checking current clustering data (either a full or empty pandas dataframe)
                 if not self.clustering_data.empty:
-                    # Checking the current slides to see if they match self.current_slides:
-                    current_slide_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
-                    unique_ids = np.unique(current_slide_ids).tolist()
-                    current_ids = [i['_id'] for i in self.current_slides]
                     print(f'in self.clustering_data: {unique_ids}')
                     print(f'slide ids in current_slides: {current_ids}')
                     # Checking if these are the same (regardless of order)
@@ -4649,6 +4675,8 @@ class FUSION:
                             id = {'type':'get-clustering-butt','index':0}
                         )
 
+                        used_get_cluster_data_plugin = True
+
                         # Setting style of download plot data button
                         download_style = {'display':None}
                         self.feature_data = None
@@ -4681,7 +4709,9 @@ class FUSION:
 
                 # Retrieving clustering data
                 data_getting_response = self.dataset_handler.get_collection_annotation_meta([i['_id'] for i in self.current_slides if i['included']])
-                
+
+                used_get_cluster_data_plugin = True
+            
                 self.dataset_handler.generate_feature_dict([i for i in self.current_slides if i['included']])
                 # Monitoring getting the data:
                 data_get_status = 0
@@ -4715,8 +4745,11 @@ class FUSION:
         else:
             # If in another tab, just leave alone
             raise exceptions.PreventUpdate
+        
+        if used_get_cluster_data_plugin:
+            return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style, json.dumps({'plugin_used': {'get_cluster_data': {'slide_ids': current_ids}} })
 
-        return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style
+        return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style, no_update
 
     def update_plot_report(self,report_tab):
 
@@ -4804,7 +4837,10 @@ class FUSION:
                 )
             ]
 
-            return [marker_logs_children],[disable_button]
+            labels = np.unique(self.feature_data['label'].tolist())
+            slide_ids = np.unique([i['Slide_Id'] for i in self.feature_data['Hidden'].tolist()])
+
+            return [marker_logs_children],[disable_button], json.dumps({'plugin_used': {'clustermarkers_fusion': { 'features': self.feature_data, 'label': labels, 'slide_ids': slide_ids } } })
         else:
             raise exceptions.PreventUpdate
 
