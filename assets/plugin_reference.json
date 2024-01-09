@@ -23,6 +23,10 @@
         {
             "image":"samborder2256_get_cluster_data:latest",
             "description":"Grab morphometrics and cell composition data for structures in current visualization dataset"
+        },
+        {
+            "image":"samborder2256_clustermarkers_fusion:latest",
+            "description":"Calculating cluster markers for selected features using Seurat"
         }
     ]
 }

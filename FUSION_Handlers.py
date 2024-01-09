@@ -2158,7 +2158,7 @@ class LayoutHandler:
             children = [
                 #dbc.CardHeader("Description and Instructions"),
                 dbc.CardBody([
-                    dbc.Button('Open Sidebar',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0),
+                    dbc.Button('Menu',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0),
                     dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px'}),
                     dbc.Button('Registered User Login',id={'type':'login-butt','index':0},className='mb-3',style = {'marginLeft':'5px'}),
                     login_popover,
