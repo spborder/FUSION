@@ -525,6 +525,7 @@ class FUSION:
             Output('tutorial-content','children'),
         )(self.update_tutorial_slide)
         
+        # Updating questions in question tab
         self.app.callback(
             Input({'type':'questions-tabs','index':ALL},'active_tab'),
             Output({'type':'question-div','index':ALL},'children'),
@@ -1129,8 +1130,29 @@ class FUSION:
                                     d_dict['Dataset'].append(dataset_name)
                                     d_dict['Slide Name'].append(s['name'])
                                     d_dict[new_meta].append(s['meta'][new_meta])
-                        
+                                else:
+                                    d_dict['Dataset'].append(dataset_name)
+                                    d_dict['Slide Name'].append(s['name'])
+                                    d_dict[new_meta].append(np.nan)
+
+                            # Finding nan fill value
+                            try:
+                                d_dict_meta_types = [type(i) for i in d_dict[new_meta] if not np.isnan(i)]
+                            except TypeError:
+                                # Most likely this is because the new_meta type is str which can't be tested for nan
+                                d_dict_meta_types = [type(i) for i in d_dict[new_meta] if not i!=i]
+                                
+                            if all([i in [int, float, complex] for i in d_dict_meta_types]):
+                                nan_fill_val = 0.0
+                            elif all([i==str for i in d_dict_meta_types]):
+                                nan_fill_val = 'Not Recorded'
+                            else:
+                                nan_fill_val = None
+                                print('type of new_meta in dataset builder is something strange')
+                                print(f'd_dict_meta_types: {d_dict_meta_types}')
+
                         else:
+                            nan_fill_val = 0.0
                             if new_meta=='FTU Expression Statistics':
                                 if not ctx.triggered_id['type']=='meta-drop':
                                     # Whether it's Mean, Median, Sum, Standard Deviation, or Nonzero
@@ -1159,6 +1181,11 @@ class FUSION:
                                                     d_dict['Slide Name'].append(slide_name)
                                                     if sub_meta[0]=='Cell States':
                                                         d_dict['State'].append(ct.split('_')[-1])
+                                                else:
+                                                    d_dict[new_meta].append(0.0)
+                                                    d_dict['FTU'].append(f.replace(' Expression Statistics',''))
+                                                    d_dict['Dataset'].append(dataset_name)
+                                                    d_dict['Slide Name'].append(slide_name)
                                 else:
                                     d_dict = {}
                             
@@ -1192,7 +1219,8 @@ class FUSION:
                 plot_data = pd.concat([pd.DataFrame.from_dict(i) for i in dataset_metadata],ignore_index=True)
                 
                 if not plot_data.empty:
-                    plot_data = plot_data.dropna(subset=[new_meta]).convert_dtypes()
+                    #plot_data = plot_data.dropna(subset=[new_meta]).convert_dtypes()
+                    plot_data = plot_data.fillna(nan_fill_val).convert_dtypes()
                     
                     # Assigning grouping variable
                     if group_type=='By Dataset':
@@ -1206,12 +1234,12 @@ class FUSION:
                         if group_bar == 'Dataset':
                             print('Generating violin plot')
                             if not new_meta == 'FTU Expression Statistics':
-                                fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name']))
+                                fig = go.Figure(px.violin(plot_data,points = 'all', x=group_bar,y=new_meta,hover_data=['Slide Name']))
                             else:
                                 if sub_meta[0]=='Main Cell Types':
-                                    fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name'],color='FTU'))
+                                    fig = go.Figure(px.violin(plot_data,points = 'all', x=group_bar,y=new_meta,hover_data=['Slide Name'],color='FTU'))
                                 else:
-                                    fig = go.Figure(px.violin(plot_data,x=group_bar,y=new_meta,hover_data=['Slide Name','State'],color='FTU'))
+                                    fig = go.Figure(px.violin(plot_data,points = 'all', x=group_bar,y=new_meta,hover_data=['Slide Name','State'],color='FTU'))
                         else:
                             print('Generating bar plot')
                             if not new_meta=='FTU Expression Statistics' and not new_meta=='FTU Morphometrics':
