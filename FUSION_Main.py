@@ -1798,46 +1798,6 @@ class FUSION:
             for i in range(0,n_layers)
         ]
 
-        """
-        new_children = [
-            dl.Overlay(
-                dl.LayerGroup(
-                    dl.GeoJSON(url = f'./assets/slide_annotations/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style=self.ftu_style_handle,filter = self.ftu_filter),
-                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity=self.cell_vis_val, ftu_color = self.ftu_colors[struct],filter_vals = self.filter_vals),
-                                hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'],dashArray='')),
-                                children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
-                ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
-            )
-            for struct in self.wsi.map_dict['FTUs']
-        ]
-
-        for m_idx,man in enumerate(self.wsi.manual_rois):
-            new_children.append(
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white',filter_vals = self.filter_vals),
-                                    hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'],dashArray='')),
-                                    children = [dl.Popup(id=man['popup_id'])])
-                    ), name = f'Manual ROI {m_idx+1}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
-                )
-            )
-
-        for mark_idx,mark in enumerate(self.wsi.marked_ftus):
-            new_children.append(
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(data = mark['geojson'], id = mark['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_color = 'white', filter_vals = self.filter_vals),
-                                    hoverStyle = arrow_function(dict(weight=5,color = mark['hover_color'],dashArray='')),
-                                    children = [])
-                    ), name = f'Marked FTUs {mark_idx+1}', checked = True, id = self.wsi.item_id+f'_marked_ftus{mark_idx}'
-                )
-            )
-
-        self.current_overlays = new_children
-        """
-
         return geojson_hideout, color_bar, filter_max_val, filter_disable, cell_sub_select_children
 
     def update_cell_hierarchy(self,cell_clickData):
@@ -2416,6 +2376,10 @@ class FUSION:
         
         # Grabbing current metadata from user private folder        
         # Finding features checked:
+
+        # Placeholder, replacing samples with missing cell types with 0 if cell features are included
+        replace_missing = False
+
         if ctx.triggered_id=='gen-plot-butt':
 
             self.reports_generated = {}
@@ -2431,11 +2395,12 @@ class FUSION:
             feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
             cell_features = [i for i in feature_names if i in self.cell_names_key]
             feature_data = pd.DataFrame()
+
             if len(cell_features)>0:
                 feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
                 feature_data = feature_data.reset_index(drop=True)
 
-                print(f'shape of feature_data: {feature_data.shape}')
+                #print(f'shape of feature_data: {feature_data.shape}')
                 if 'Main_Cell_Types' in self.clustering_data.columns:
                     cell_values = self.clustering_data['Main_Cell_Types'].tolist()
                     state_values = self.clustering_data['Cell_States'].tolist()
@@ -2449,10 +2414,18 @@ class FUSION:
                                     if cell_abbrev in i:
                                         specific_cell_values.append(i[cell_abbrev])
                                     else:
-                                        specific_cell_values.append(0)
+                                        # This is adding 0 for all samples without this specific cell type measured
+                                        if replace_missing:
+                                            specific_cell_values.append(0)
+                                        else:
+                                            specific_cell_values.append(np.nan)
                                 else:
-                                    specific_cell_values.append(0)
-                            
+                                    # This is adding 0 for all samples without any cell types measured
+                                    if replace_missing:
+                                        specific_cell_values.append(0)
+                                    else:
+                                        specific_cell_values.append(np.nan)
+
                             feature_data[c] = specific_cell_values
                     elif states_option=='separate':
                         for c in cell_features:
@@ -2466,11 +2439,21 @@ class FUSION:
                                         main_val = i[cell_abbrev]
                                         states = j[cell_abbrev]
                                     else:
+                                        # This is for if this specific cell type is not measured
+                                        if replace_missing:
+                                            main_val = 0.0
+                                            states = {c_state:0.0 for c_state in np.unique(self.cell_graphics_key[cell_abbrev]['states'])}
+                                        else:
+                                            main_val = np.nan
+                                            states = {c_state: np.nan for c_state in np.unique(self.cell_graphics_key[cell_abbrev]['states'])}
+                                else:
+                                    # This is for if no cell types are measured
+                                    if replace_missing:
                                         main_val = 0.0
                                         states = {c_state:0.0 for c_state in np.unique(self.cell_graphics_key[cell_abbrev]['states'])}
-                                else:
-                                    main_val = 0.0
-                                    states = {c_state:0.0 for c_state in np.unique(self.cell_graphics_key[cell_abbrev]['states'])}
+                                    else:
+                                        main_val = np.nan
+                                        states = {c_state: np.nan for c_state in np.unique(self.cell_graphics_key[cell_abbrev]['states'])}
 
                                 states_dict = {}
                                 for c_s in states:
@@ -3147,11 +3130,11 @@ class FUSION:
             return go.Figure(), go.Figure(), go.Figure(),[]
     
     def update_selected_state_bar(self, selected_cell_click):
-        print(f'Selected cell click: {selected_cell_click}, is None: {selected_cell_click is None}')
+        #print(f'Selected cell click: {selected_cell_click}, is None: {selected_cell_click is None}')
         if not selected_cell_click is None:
             cell_type = selected_cell_click['points'][0]['label']
 
-            cell_states_data = self.clustering_data['Cell_States'].tolist()
+            cell_states_data = self.feature_data['Cell_States'].tolist()
             state_data = pd.DataFrame([cell_states_data[i][cell_type] for i in self.current_selected_samples]).sum(axis=0).to_frame()
             state_data = state_data.reset_index()
             state_data.columns = ['Cell States',f'Cell States for {cell_type}']
@@ -4959,9 +4942,9 @@ class FUSION:
     def update_question_div(self,question_tab):
 
         # Updating the questions that the user sees in the usability questions tab
+        usability_info = self.dataset_handler.update_usability()
         user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
         user_type = user_info['type']
-        usability_info = self.dataset_handler.update_usability()
 
         # Getting questions for that type
         if not user_type=='admin':

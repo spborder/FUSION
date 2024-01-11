@@ -2166,7 +2166,7 @@ class LayoutHandler:
             children = [
                 #dbc.CardHeader("Description and Instructions"),
                 dbc.CardBody([
-                    dbc.Button('Open Sidebar',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0),
+                    dbc.Button('Menu',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0),
                     dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px'}),
                     dbc.Button('Registered User Login',id={'type':'login-butt','index':0},className='mb-3',style = {'marginLeft':'5px'}),
                     login_popover,
@@ -3098,7 +3098,7 @@ class GirderHandler:
         current_items = self.gc.get(f'/resource/{output_path_id}/items?token={self.user_token}',parameters={'type':'folder','limit':10000})
         current_items_names = [i['name'] for i in current_items]
         if save_object['filename'] in current_items_names:
-           self.gc.delete(f'/item/{current_items[current_items_names.index(save_object["filename"])]}')
+           self.gc.delete(f'/item/{current_items[current_items_names.index(save_object["filename"])]["_id"]}')
 
         if isinstance(save_object['content'],pd.DataFrame):
             
