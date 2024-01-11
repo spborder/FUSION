@@ -163,7 +163,15 @@ class LayoutHandler:
                              ),
             dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
             html.Div(id='ask-fusey-box',style={'visibility':'hidden','position':'absolute','top':'50px','right':'10px','zIndex':'1000'}),
-            html.Div(id='marker-add-div',children = [])
+            html.Div(id='marker-add-div',children = []),
+            html.Div(
+                id = 'dummy-div-user-annotations',
+                style={'display': 'none'}
+            ),
+            html.Div(
+                id = 'user-annotations-div',
+                style={'display': 'none'}
+            )
         ]
 
         map_layer = dl.Map(
@@ -2252,6 +2260,8 @@ class LayoutHandler:
             html.Hr(),
             html.Div(id='user-id-div', style={'display': 'none'}),
             html.Div(id='dummy-div-for-userId', style={'display': 'none'}),
+            html.Div(id='dummy-div-plugin-track', style={'display': 'none'}),
+            html.Div(id='plugin-ga-track', style={'display': 'none'}),
             html.P('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
         ])
 
