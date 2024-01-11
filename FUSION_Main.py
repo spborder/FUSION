@@ -3330,7 +3330,7 @@ class FUSION:
                             self.update_hex_color_key(self.current_cell)
                         
                         if new_roi:
-                            user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id, 'geoJSON_info': new_roi   })
+                            user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
                             return self.current_overlays, data_select_options, user_ann_tracking
                         
                         return self.current_overlays, data_select_options, no_update
@@ -3988,7 +3988,7 @@ class FUSION:
             disable_upload_type = True
             
             if 'Omics' in self.upload_check:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, no_update
             else:
                 return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
         else:
@@ -3998,7 +3998,7 @@ class FUSION:
             if 'Omics' in self.upload_check:
                 return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
             else:
-                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
+                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, no_update
 
     def slide_qc(self, upload_id):
 
@@ -4823,7 +4823,7 @@ class FUSION:
             labels = np.unique(self.feature_data['label'].tolist())
             slide_ids = np.unique([i['Slide_Id'] for i in self.feature_data['Hidden'].tolist()])
 
-            return [marker_logs_children],[disable_button], json.dumps({'plugin_used': 'clustermarkers_fusion', 'features': self.feature_data, 'label': labels, 'slide_ids': slide_ids })
+            return [marker_logs_children],[disable_button], json.dumps({'plugin_used': 'clustermarkers_fusion', 'features': self.feature_data.columns.tolist(), 'label': labels, 'slide_ids': slide_ids })
         else:
             raise exceptions.PreventUpdate
 
