@@ -367,14 +367,18 @@ class FUSION:
         # Opening collapse and populating internal div 
         if ctx.triggered_id['type']=='collapse-descrip':
             collapse_children = self.layout_handler.description_dict[self.current_page]
+            usability_color = [no_update]
         elif ctx.triggered_id['type']=='usability-butt':
             if n2:
                 user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
                 collapse_children = self.layout_handler.gen_usability_report(self.dataset_handler)
+                usability_color = ['success']
+            else:
+                usability_color = ['primary']
 
         if n or n2:
-            return [not i for i in is_open], collapse_children
-        return [i for i in is_open], collapse_children
+            return [not i for i in is_open], collapse_children, usability_color
+        return [i for i in is_open], collapse_children, usability_color
     
     def view_sidebar(self,n,is_open):
         if n:
@@ -477,7 +481,8 @@ class FUSION:
         # Opening the description/usability collapse content
         self.app.callback(
             [Output({'type':'collapse-content','index':ALL},'is_open'),
-             Output('descrip','children')],
+             Output('descrip','children'),
+             Output({'type':'usability-butt','index':ALL},'color')],
             [Input({'type':'collapse-descrip','index':ALL},'n_clicks'),
              Input({'type':'usability-butt','index':ALL},'n_clicks')],
             [State({'type':'collapse-content','index':ALL},'is_open')],
@@ -4959,7 +4964,7 @@ class FUSION:
                     if not l_q['input_type']=='bool':
                         question_list.append(
                             html.Div([
-                                dbc.Label(l_q['text']),
+                                dbc.Label(l_q['text'],size='lg'),
                                 dbc.Input(
                                     placeholder="Input response",
                                     type=l_q['input_type'],
@@ -4972,11 +4977,11 @@ class FUSION:
                     else:
                         question_list.append(
                             html.Div([
-                                dbc.Label(l_q['text']),
+                                dbc.Label(l_q['text'],size='lg'),
                                 dbc.RadioItems(
                                     options = [
-                                        {'label':'No','value':'No'},
-                                        {'label':'Yes','value':'Yes'}
+                                        {'label':dbc.Label('No',size='lg',style={'marginBottom':'15px'}),'value':'No'},
+                                        {'label':dbc.Label('Yes',size='lg',style={'marginBottom':'15px'}),'value':'Yes'}
                                     ],
                                     value = q_val,
                                     id = {'type':'question-input','index':q_idx},
@@ -4992,7 +4997,7 @@ class FUSION:
                 level_index = 4
                 question_list.append(
                     html.Div([
-                        dbc.Row(dbc.Label('Add any comments here!')),
+                        dbc.Row(dbc.Label('Add any comments here!',size='lg')),
                         dbc.Row(
                             dcc.Textarea(
                                 id = {'type':'question-input','index':0},
