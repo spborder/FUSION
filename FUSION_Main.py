@@ -3988,7 +3988,7 @@ class FUSION:
             disable_upload_type = True
             
             if 'Omics' in self.upload_check:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, no_update
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
             else:
                 return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
         else:
@@ -3996,7 +3996,7 @@ class FUSION:
             disable_upload_type = True
 
             if 'Omics' in self.upload_check:
-                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
+                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, no_update
             else:
                 return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, no_update
 
