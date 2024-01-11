@@ -37,7 +37,8 @@ window.dash_clientside.clientside = {
                 'event': 'User Annotations',
                 'user_ann_slide_name': userAnnotationsInfo.slide_name,
                 'user_ann_item_id': userAnnotationsInfo.item_id,
-                'geoJSON_info': userAnnotationsInfo.geoJSON_info
+                // 'geoJSON_info': JSON.stringify(userAnnotationsInfo.geoJSON_info)  
+                // add geoJSON data if required
             })
         }
         return null;
@@ -47,7 +48,11 @@ window.dash_clientside.clientside = {
             var pluginTrackInfo = JSON.parse(pluginTrack);
             window.dataLayer.push({
                 'event': 'Plugin used',
-                'plugin_used': pluginTrackInfo.plugin_used
+                'plugin_used': pluginTrackInfo.plugin_used,
+                'plugin_type': pluginTrackInfo.type,
+                'plugin_slide_ids': pluginTrackInfo.current_ids,
+                'plugin_features': pluginTrackInfo.features,
+                'plugin_label': pluginTrackInfo.label
             }) 
         }
         return null;

@@ -4005,17 +4005,17 @@ class FUSION:
             disable_upload_type = True
             
             if 'Omics' in self.upload_check:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': {'upload': { 'type': 'Visium' } } })
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
             else:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': {'upload': { 'type': 'non-Omnics' } } })
+                return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
         else:
 
             disable_upload_type = True
 
             if 'Omics' in self.upload_check:
-                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, json.dumps({'plugin_used': {'upload': { 'type': 'Visium' } } })
+                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
             else:
-                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, json.dumps({'plugin_used': {'upload': { 'type': 'non-Omnics' } } })
+                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
 
     def slide_qc(self, upload_id):
 
@@ -4747,7 +4747,7 @@ class FUSION:
             raise exceptions.PreventUpdate
         
         if used_get_cluster_data_plugin:
-            return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style, json.dumps({'plugin_used': {'get_cluster_data': {'slide_ids': current_ids}} })
+            return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style, json.dumps({'plugin_used': 'get_cluster_data', 'slide_ids': current_ids })
 
         return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style, no_update
 
@@ -4840,7 +4840,7 @@ class FUSION:
             labels = np.unique(self.feature_data['label'].tolist())
             slide_ids = np.unique([i['Slide_Id'] for i in self.feature_data['Hidden'].tolist()])
 
-            return [marker_logs_children],[disable_button], json.dumps({'plugin_used': {'clustermarkers_fusion': { 'features': self.feature_data, 'label': labels, 'slide_ids': slide_ids } } })
+            return [marker_logs_children],[disable_button], json.dumps({'plugin_used': 'clustermarkers_fusion', 'features': self.feature_data, 'label': labels, 'slide_ids': slide_ids })
         else:
             raise exceptions.PreventUpdate
 
