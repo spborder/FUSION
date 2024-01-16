@@ -1335,22 +1335,22 @@ class LayoutHandler:
                                 children = [
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
-                                        label = 'Level 1: Histology',
+                                        label = 'Task 1: Histology',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-2-tab',
-                                        label = 'Level 2: Spatial -Omics',
+                                        label = 'Task 2: Spatial -Omics',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-3-tab',
-                                        label = 'Level 3: Answer Hypothesis',
+                                        label = 'Task 3: Answer Hypothesis',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-4-tab',
-                                        label = 'Level 4: Generate Hypothesis',
+                                        label = 'Task 4: Generate Hypothesis',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
@@ -1381,22 +1381,22 @@ class LayoutHandler:
                                 children = [
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
-                                        label = 'Level 1: Spatial -Omics',
+                                        label = 'Task 1: Spatial -Omics',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-2-tab',
-                                        label = 'Level 2: Histology',
+                                        label = 'Task 2: Histology',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-3-tab',
-                                        label = 'Level 3: Answer Hypothesis',
+                                        label = 'Task 3: Answer Hypothesis',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-4-tab',
-                                        label = 'Level 4: Generate Hypothesis',
+                                        label = 'Task 4: Generate Hypothesis',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
@@ -1427,22 +1427,22 @@ class LayoutHandler:
                                 children = [
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
-                                        label = 'Level 1: Histology',
+                                        label = 'Task 1: Histology',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-2-tab',
-                                        label = 'Level 2: Spatial -Omics',
+                                        label = 'Task 2: Spatial -Omics',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-3-tab',
-                                        label = 'Level 3: Answer Hypothesis',
+                                        label = 'Task 3: Answer Hypothesis',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-4-tab',
-                                        label = 'Level 4: Generate Hypothesis',
+                                        label = 'Task 4: Generate Hypothesis',
                                         activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
