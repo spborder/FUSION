@@ -1294,27 +1294,33 @@ class LayoutHandler:
                             children = [
                                 dbc.Tab(
                                     tab_id = 'background-tab',
-                                    label = 'Background'
+                                    label = 'Background',
+                                    activeTabClassName='fw-bold fst-italic'
                                 ),
                                 dbc.Tab(
                                     tab_id = 'start-tab',
-                                    label = 'Start'
+                                    label = 'Start',
+                                    activeTabClassName='fw-bold fst-italic'
                                 ),
                                 dbc.Tab(
                                     tab_id = 'histo-tab',
-                                    label = 'Histology'
+                                    label = 'Histology',
+                                    activeTabClassName='fw-bold fst-italic'
                                 ),
                                 dbc.Tab(
                                     tab_id = 'omics-tab',
-                                    label = 'Spatial -Omics'
+                                    label = 'Spatial -Omics',
+                                    activeTabClassName='fw-bold fst-italic'
                                 ),
                                 dbc.Tab(
                                     tab_id = 'answer-tab',
-                                    label = 'Answer Hypothesis'
+                                    label = 'Answer Hypothesis',
+                                    activeTabClassName='fw-bold fst-italic'
                                 ),
                                 dbc.Tab(
                                     tab_id = 'generate-tab',
-                                    label = 'Generate Hypothesis'
+                                    label = 'Generate Hypothesis',
+                                    activeTabClassName='fw-bold fst-italic'
                                 )
                             ]
                         )
@@ -1337,23 +1343,28 @@ class LayoutHandler:
                                 children = [
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
-                                        label = 'Level 1: Histology'
+                                        label = 'Task 1: Histology',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-2-tab',
-                                        label = 'Level 2: Spatial -Omics'
+                                        label = 'Task 2: Spatial -Omics',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-3-tab',
-                                        label = 'Level 3: Answer Hypothesis'
+                                        label = 'Task 3: Answer Hypothesis',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-4-tab',
-                                        label = 'Level 4: Generate Hypothesis'
+                                        label = 'Task 4: Generate Hypothesis',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'comments-tab',
-                                        label = 'Comments'
+                                        label = 'Comments',
+                                        activeTabClassName='fw-bold fst-italic'
                                     )
                                 ]
                             )
@@ -1378,23 +1389,28 @@ class LayoutHandler:
                                 children = [
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
-                                        label = 'Level 1: Spatial -Omics'
+                                        label = 'Task 1: Spatial -Omics',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-2-tab',
-                                        label = 'Level 2: Histology'
+                                        label = 'Task 2: Histology',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-3-tab',
-                                        label = 'Level 3: Answer Hypothesis'
+                                        label = 'Task 3: Answer Hypothesis',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-4-tab',
-                                        label = 'Level 4: Generate Hypothesis'
+                                        label = 'Task 4: Generate Hypothesis',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'comments-tab',
-                                        label = 'Comments'
+                                        label = 'Comments',
+                                        activeTabClassName='fw-bold fst-italic'
                                     )
                                 ]
                             )
@@ -1419,23 +1435,28 @@ class LayoutHandler:
                                 children = [
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
-                                        label = 'Level 1: Histology'
+                                        label = 'Task 1: Histology',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-2-tab',
-                                        label = 'Level 2: Spatial -Omics'
+                                        label = 'Task 2: Spatial -Omics',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-3-tab',
-                                        label = 'Level 3: Answer Hypothesis'
+                                        label = 'Task 3: Answer Hypothesis',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-4-tab',
-                                        label = 'Level 4: Generate Hypothesis'
+                                        label = 'Task 4: Generate Hypothesis',
+                                        activeTabClassName='fw-bold fst-italic'
                                     ),
                                     dbc.Tab(
                                         tab_id = 'comments-tab',
-                                        label = 'Comments'
+                                        label = 'Comments',
+                                        activeTabClassName='fw-bold fst-italic'
                                     )
                                 ]
                             )
@@ -2005,6 +2026,7 @@ class LayoutHandler:
 
         welcome_layout = [
                 html.H1('Welcome to FUSION!'),
+                html.Img(src='./assets/hello_fusey.svg'),
                 html.Hr(),
                 html.B(),
                 dbc.Row([
@@ -2018,7 +2040,8 @@ class LayoutHandler:
                             controls = True,
                             autoPlay = True,
                             preload=False,
-                            id = {'type':'video','index':0})
+                            id = {'type':'video','index':0},
+                            style = {'height':'70vh'})
                 ],style={'height':'80vh'}),
                 html.Hr(),
                 html.Div(id='tutorial-content',children = [])
@@ -2167,7 +2190,7 @@ class LayoutHandler:
                 #dbc.CardHeader("Description and Instructions"),
                 dbc.CardBody([
                     dbc.Button('Menu',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0),
-                    dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px'}),
+                    dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px','display':'none'}),
                     dbc.Button('Registered User Login',id={'type':'login-butt','index':0},className='mb-3',style = {'marginLeft':'5px'}),
                     login_popover,
                     dbc.Button('Sign up for Usability Study',
@@ -2180,7 +2203,7 @@ class LayoutHandler:
                         style = {'marginLeft':'5px','display':'inline-block'}
                     ),
                     dbc.Button(
-                        'Usability Study',
+                        'Start Usability Study',
                         id = {'type':'usability-butt','index':0},
                         className='mb-3',
                         color = 'primary',
@@ -2255,6 +2278,7 @@ class LayoutHandler:
             ),
             dbc.Container([
                 html.H1('Welcome to FUSION!'),
+                html.Img(src='./assets/hello-fusey'),
                 ],fluid=True,id='container-content',style = {'height':'100vh'}
             ),
             html.Hr(),
@@ -2854,7 +2878,7 @@ class GirderHandler:
         usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
         if updated_info is None:
             usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
-
+            self.usability_users = usability_info
             return usability_info
         else:
             
@@ -2872,6 +2896,8 @@ class GirderHandler:
                     },
                 data = json.dumps(updated_info)
             )
+
+            self.usability_users = updated_info
 
     def check_usability(self,username):
 
