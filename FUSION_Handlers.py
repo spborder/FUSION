@@ -2018,6 +2018,7 @@ class LayoutHandler:
 
         welcome_layout = [
                 html.H1('Welcome to FUSION!'),
+                html.Img(src='./assets/hello_fusey.svg'),
                 html.Hr(),
                 html.B(),
                 dbc.Row([
@@ -2031,7 +2032,8 @@ class LayoutHandler:
                             controls = True,
                             autoPlay = True,
                             preload=False,
-                            id = {'type':'video','index':0})
+                            id = {'type':'video','index':0},
+                            style = {'height':'70vh'})
                 ],style={'height':'80vh'}),
                 html.Hr(),
                 html.Div(id='tutorial-content',children = [])
@@ -2180,7 +2182,7 @@ class LayoutHandler:
                 #dbc.CardHeader("Description and Instructions"),
                 dbc.CardBody([
                     dbc.Button('Menu',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0),
-                    dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px'}),
+                    dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px','display':'none'}),
                     dbc.Button('Registered User Login',id={'type':'login-butt','index':0},className='mb-3',style = {'marginLeft':'5px'}),
                     login_popover,
                     dbc.Button('Sign up for Usability Study',
@@ -2268,6 +2270,7 @@ class LayoutHandler:
             ),
             dbc.Container([
                 html.H1('Welcome to FUSION!'),
+                html.Img(src='./assets/hello-fusey'),
                 ],fluid=True,id='container-content',style = {'height':'100vh'}
             ),
             html.Hr(),
@@ -2865,7 +2868,7 @@ class GirderHandler:
         usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
         if updated_info is None:
             usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
-
+            self.usability_users = usability_info
             return usability_info
         else:
             
@@ -2883,6 +2886,8 @@ class GirderHandler:
                     },
                 data = json.dumps(updated_info)
             )
+
+            self.usability_users = updated_info
 
     def check_usability(self,username):
 

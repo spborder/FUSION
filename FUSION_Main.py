@@ -370,6 +370,7 @@ class FUSION:
             usability_color = [no_update]
         elif ctx.triggered_id['type']=='usability-butt':
             if n2:
+                self.dataset_handler.update_usability()
                 user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
                 collapse_children = self.layout_handler.gen_usability_report(self.dataset_handler)
                 usability_color = ['success']
@@ -927,6 +928,10 @@ class FUSION:
         )(self.update_feat_logs)
 
     def get_video(self,tutorial_category):
+
+        if not tutorial_category:
+            raise exceptions.PreventUpdate
+        
         tutorial_category = tutorial_category[0]
         print(f'tutorial_category: {tutorial_category}')
 
@@ -5011,9 +5016,17 @@ class FUSION:
 
             question_list.append(html.Div([
                 dbc.Button(
-                    'Submit Responses',
+                    'Save Responses',
                     className = 'd-grid mx-auto',
                     id = {'type':'questions-submit','index':level_index}
+                ),
+                dbc.Button(
+                    'Submit Recording',
+                    className = 'd-grid mx-auto',
+                    id = {'type':'recording-upload','index':0},
+                    target='_blank',
+                    href = '',
+                    disabled = True
                 ),
                 html.Div(id = {'type':'questions-submit-alert','index':0})
                 ])
