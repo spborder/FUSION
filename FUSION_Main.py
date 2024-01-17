@@ -2803,7 +2803,17 @@ class FUSION:
                         yanchor='top',
                         xanchor='left'
                     ),
-                    margin = {'r':0,'b':25}
+                    margin = {'r':0,'b':25,'l':0},
+                    yaxis = dict(
+                        title = {'text':''},
+                        ticks = '',
+                        tickfont = {'size':1}
+                    ),
+                    xaxis = dict(
+                        title = {'text':''},
+                        ticks = '',
+                        tickfont = {'size':1}
+                    )
                 )
 
             else:
@@ -2978,7 +2988,17 @@ class FUSION:
                             yanchor='top',
                             xanchor='left'
                         ),
-                        margin = {'r':0,'b':25}
+                        margin = {'r':0,'b':25,'l':0},
+                        yaxis = {
+                            'title':{'text':''},
+                            'ticks':"",
+                            'tickfont':{'size':1}
+                        },
+                        xaxis = {
+                            'title':{'text':''},
+                            'ticks':"",
+                            'tickfont':{'size':1}
+                        }
                     )
                 
                 return figure, label_info_children, filter_info_children, report_active_tab, download_plot_disable
@@ -4653,9 +4673,12 @@ class FUSION:
 
         if active_tab == 'clustering-tab':
              # Checking the current slides to see if they match self.current_slides:
-            current_slide_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
-            unique_ids = np.unique(current_slide_ids).tolist()
-            current_ids = [i['_id'] for i in self.current_slides]
+            if not self.clustering_data.empty:
+                current_slide_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist() if 'Hidden' in self.clustering_data.columns]
+                unique_ids = np.unique(current_slide_ids).tolist()
+                current_ids = [i['_id'] for i in self.current_slides]
+            else:
+                current_ids = [i['_id'] for i in self.current_slides]
         
             if ctx.triggered_id=='tools-tabs':
 
@@ -4820,7 +4843,7 @@ class FUSION:
 
         # Clicked Get Cluster Markers
         print(ctx.triggered)
-        if butt_click:
+        if ctx.triggered[0]['value']:
 
             disable_button = True
             
@@ -4858,8 +4881,8 @@ class FUSION:
                 )
             ]
 
-            labels = np.unique(self.feature_data['label'].tolist())
-            slide_ids = np.unique([i['Slide_Id'] for i in self.feature_data['Hidden'].tolist()])
+            labels = np.unique(self.feature_data['label'].tolist()).tolist()
+            slide_ids = np.unique([i['Slide_Id'] for i in self.feature_data['Hidden'].tolist()]).tolist()
 
             return [marker_logs_children],[disable_button], json.dumps({'plugin_used': 'clustermarkers_fusion', 'features': self.feature_data.columns.tolist(), 'label': labels, 'slide_ids': slide_ids })
         else:
@@ -5078,14 +5101,9 @@ class FUSION:
     def post_usability_response(self,butt_click,questions_inputs):
 
         # Updating usability info file in DSA after user clicks "Submit" button
-        print(questions_inputs)
-        print(len(questions_inputs))
-        print(ctx.triggered)
-        print(ctx.triggered_id)
         if butt_click:
             # Checking if all of the responses are not empty
             responses_check = [True if not i==[] else False for i in questions_inputs]
-            print(responses_check)
             if all(responses_check):
                 submit_alert = dbc.Alert('Submitted!',color='success')
 
@@ -5100,7 +5118,6 @@ class FUSION:
                     level_name = 'Comments'
                 usability_info['usability_study_users'][self.dataset_handler.username]['responses'][f'{level_name}'] = questions_inputs
 
-                print(usability_info)
                 # Posting to DSA
                 self.dataset_handler.update_usability(usability_info)
                 

@@ -499,15 +499,14 @@ class LayoutHandler:
                                 children = [
                                     dbc.Row(
                                         children = [
-                                            html.Div(id='selected-labels-div',children = []),
+                                            html.Div(id='selected-image-info',children = []),
                                             self.gen_info_button('Distribution of labels in selected samples')
                                         ]
                                     )
                                 ]
                             ), label = 'Selected Labels'
                         )
-                    ]),
-                    html.Div(id='selected-image-info')
+                    ])
                 ],md=6),
             ],align='start'),
             html.Hr(),
@@ -2025,26 +2024,37 @@ class LayoutHandler:
             video_dropdown.append({'label':t,'value':n,'disabled':False})
 
         welcome_layout = [
-                html.H1('Welcome to FUSION!'),
-                html.Img(src='./assets/hello_fusey.svg'),
+                dbc.Row([
+                    dbc.Col(html.Img(src='./assets/hello_fusey.svg',style={'width':'100%'}),width=4),
+                    dbc.Col(html.H1('Welcome to FUSION!',style={'width':'100%'}),width=4)
+                ],align='center'),
                 html.Hr(),
                 html.B(),
                 dbc.Row([
-                    dbc.Row([dbc.Label('Getting Started: Select a category below to view a tutorial video')]),
+                    dbc.Row([
+                        dbc.Label('Getting Started: Select a category below to view a tutorial video')
+                    ]),
                     html.Hr(),
-                    html.B(),
-                    dcc.Dropdown(video_dropdown,video_dropdown[0],id={'type':'video-drop','index':0}),
+                    dbc.Row([
+                        dcc.Dropdown(video_dropdown,video_dropdown[0],id={'type':'video-drop','index':0}),
+                    ]),
                     html.B(),
                     html.Hr(),
-                    html.Video(src='./assets/videos/FUSION_Introduction.mp4',
-                            controls = True,
-                            autoPlay = True,
-                            preload=False,
-                            id = {'type':'video','index':0},
-                            style = {'height':'70vh'})
-                ],style={'height':'80vh'}),
-                html.Hr(),
-                html.Div(id='tutorial-content',children = [])
+                    dbc.Row(
+                        dbc.Col(
+                            html.Video(src='./assets/videos/FUSION_Introduction.mp4',
+                                    controls = True,
+                                    autoPlay = True,
+                                    preload=False,
+                                    id = {'type':'video','index':0},
+                                    style = {'width':'100%'}
+                            ),
+                            width = {'size':6,'offset':3}
+                        ),
+                        align='center'
+                    ),
+                    html.Div(id='tutorial-content',children = [])
+                ],style={})
             ]
         
         self.current_welcome_layout = welcome_layout
@@ -2279,7 +2289,7 @@ class LayoutHandler:
             dbc.Container([
                 html.H1('Welcome to FUSION!'),
                 html.Img(src='./assets/hello-fusey'),
-                ],fluid=True,id='container-content',style = {'height':'100vh'}
+                ],fluid=True,id='container-content',style = {'height':'90vh'}
             ),
             html.Hr(),
             html.Div(id='user-id-div', style={'display': 'none'}),
