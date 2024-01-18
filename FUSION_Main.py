@@ -3117,7 +3117,7 @@ class FUSION:
             
             selected_image_info = html.Div(
                 selected_image_info,
-                style = {'maxHeight':'100px','overflow':'scroll'}
+                style = {'maxHeight':'500px','overflow':'scroll'}
             )
 
             current_image = self.grab_image(sample_info)

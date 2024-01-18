@@ -2290,14 +2290,14 @@ class LayoutHandler:
             dbc.Container([
                 html.H1('Welcome to FUSION!'),
                 html.Img(src='./assets/hello-fusey'),
-                ],fluid=True,id='container-content',style = {'height':'90vh'}
+                ],fluid=True,id='container-content',style = {'height':'100vh'}
             ),
             html.Hr(),
             html.Div(id='user-id-div', style={'display': 'none'}),
             html.Div(id='dummy-div-for-userId', style={'display': 'none'}),
             html.Div(id='dummy-div-plugin-track', style={'display': 'none'}),
             html.Div(id='plugin-ga-track', style={'display': 'none'}),
-            html.P('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
+            html.Footer('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
         ])
 
         self.current_initial_layout = welcome_layout
