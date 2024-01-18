@@ -367,13 +367,16 @@ class FUSION:
         # Opening collapse and populating internal div 
         if ctx.triggered_id['type']=='collapse-descrip':
             collapse_children = self.layout_handler.description_dict[self.current_page]
-            usability_color = [no_update]
+            usability_color = ['primary']
         elif ctx.triggered_id['type']=='usability-butt':
             if n2:
                 self.dataset_handler.update_usability()
                 user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
                 collapse_children = self.layout_handler.gen_usability_report(self.dataset_handler)
-                usability_color = ['success']
+                if not is_open[-1]:
+                    usability_color = ['success']
+                else:
+                    usability_color = ['primary']
             else:
                 usability_color = ['primary']
 
@@ -1124,8 +1127,6 @@ class FUSION:
             cell_types_options = (no_update,no_update,no_update)
 
         current_slide_count, slide_select_options = self.update_current_slides(slide_rows)
-
-        print(f'new_meta: {new_meta}')
         if type(new_meta)==list:
             if len(new_meta)>0:
                 new_meta = new_meta[0]
@@ -1301,9 +1302,9 @@ class FUSION:
 
                 return [slide_select_options, [fig], cell_types_options, cell_types_turn_off,[current_slide_count]]
             else:
-                raise exceptions.PreventUpdate
+                return [slide_select_options, [no_update], cell_types_options, cell_types_turn_off,[current_slide_count]]
         else:
-            raise exceptions.PreventUpdate
+            return [slide_select_options, [no_update], cell_types_options, cell_types_turn_off,[current_slide_count]]
         
     def update_current_slides(self,slide_rows):
 
@@ -3847,15 +3848,12 @@ class FUSION:
 
                 button_color = 'warning'
                 button_text = 'Login Failed'
-                logged_in_user = ''
+                logged_in_user = 'Welcome: fusionguest'
                 upload_disabled = True
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': user_id}), [usability_signup_style],[usability_butt_style]
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style]
         
         elif ctx.triggered_id=='create-user-submit':
-            print(f'email:{email}')
-            print(f'firstname: {firstname}')
-            print(f'lastname:{lastname}')
             if len(email)==0 or len(firstname)==0 or len(lastname)==0:
                 create_user_children = [
                     dbc.Label('Email:',width='auto'),
@@ -3873,9 +3871,12 @@ class FUSION:
                 ]
 
                 button_color = 'success'
-                button_text = 'Create Account'
-                logged_in_user = ''
+                button_text = 'Login'
+                logged_in_user = 'Welcome: fusionguest'
                 upload_disabled = True
+
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style]
+
 
             else:
                 create_user_children = no_update
@@ -3896,10 +3897,10 @@ class FUSION:
 
                     button_color = 'warning'
                     button_text = 'Login Failed'
-                    logged_in_user = ''
+                    logged_in_user = f'Welcome: fusionguest'
                     upload_disabled = True
             
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': user_id}), [usability_signup_style],[usability_butt_style]
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style]
 
         else:
             raise exceptions.PreventUpdate
@@ -5044,7 +5045,7 @@ class FUSION:
                                 dbc.Label(l_q['text'],size='lg'),
                                 dbc.RadioItems(
                                     options = [
-                                        {'label':dbc.Label('No',size='lg',style={'marginBottom':'15px'}),'value':'No'},
+                                        {'label':dbc.Label('No',size='lg',style={'marginBottom':'15px','marginRight':'10px'}),'value':'No'},
                                         {'label':dbc.Label('Yes',size='lg',style={'marginBottom':'15px'}),'value':'Yes'}
                                     ],
                                     value = q_val,

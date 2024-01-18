@@ -1755,9 +1755,10 @@ class LayoutHandler:
                         html.Div(
                             id = 'slide-thumbnail-holder',
                             children = []
-                        )
+                        ),
+                        md = 12
                     )
-                ]),
+                ],align='center'),
                 dbc.Row([
                     dbc.Col(
                         html.Div(
@@ -2184,7 +2185,7 @@ class LayoutHandler:
                     html.Div(id = 'create-user-extras',children = []),
                     dbc.Row(
                         children = html.Div([
-                            dbc.Button('Submit',color='primary',id='login-submit'),
+                            dbc.Button('Login',color='primary',id='login-submit'),
                             dbc.Button('Create Account',color='secondary',id='create-user-submit')
                         ],className='d-grid gap-2 d-md-flex')
                     )
@@ -2488,18 +2489,30 @@ class GirderHandler:
     def authenticate(self, username, password):
         # Getting authentication for user
         #TODO: Add some handling here for incorrect username or password
-        self.username = username.lower()
-        self.password = password
+        try:
+            self.username = username.lower()
+            self.password = password
+            
+            user_details = self.gc.authenticate(username.lower(),password)
+
+            user_info = self.check_usability(self.username)
+            self.get_token()
+
+            if not self.base_path is None:
+                self.initialize_folder_structure()
+
+            return user_info, user_details
         
-        user_details = self.gc.authenticate(username.lower(),password)
+        except girder_client.AuthenticationError:
+            user_details = self.gc.authenticate(self.username.lower(),self.password)
 
-        user_info = self.check_usability(self.username)
-        self.get_token()
+            user_info = self.check_usability(self.username)
+            self.get_token()
 
-        if not self.base_path is None:
-            self.initialize_folder_structure()
+            if not self.base_path is None:
+                self.initialize_folder_structure()
 
-        return user_info, user_details
+            return user_info, user_details
 
     def create_user(self,username,password,email,firstName,lastName):
 
@@ -2518,6 +2531,8 @@ class GirderHandler:
         
         user_info = self.check_usability(self.username)
         print(user_info)
+
+        user_info, user_details = self.authenticate(self.username,self.password)
 
         return user_info
 
