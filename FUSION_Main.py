@@ -3068,7 +3068,8 @@ class FUSION:
                                 dbc.Button(
                                     f'Add All Markers ({slide_names.count(self.wsi.slide_name)})',
                                     id = {'type':'add-mark-cluster','index':0},
-                                    className='d-grid col-12 mx-auto'
+                                    className='d-grid col-12 mx-auto',
+                                    style = {'marginBottom':'5px'}
                                 )
                             )
                         ])
@@ -3866,7 +3867,8 @@ class FUSION:
                     ),
                     dbc.Label('Last Name',width='auto'),
                     dbc.Col(
-                        dcc.Input(type='text',id={'type':'last-name-input','index':0})
+                        dcc.Input(type='text',id={'type':'last-name-input','index':0}),
+                        style = {'marginBottom':'5px'}
                     )
                 ]
 
@@ -5078,7 +5080,8 @@ class FUSION:
                 dbc.Button(
                     'Save Responses',
                     className = 'd-grid mx-auto',
-                    id = {'type':'questions-submit','index':level_index}
+                    id = {'type':'questions-submit','index':level_index},
+                    style = {'marginBottom':'15px'}
                 ),
                 dbc.Button(
                     'Submit Recording',

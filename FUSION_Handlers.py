@@ -2180,7 +2180,8 @@ class LayoutHandler:
                     ),
                     dbc.Label('Password',width='auto'),
                     dbc.Col(
-                        dbc.Input(type='password',placeholder='Password',id='pword-input')
+                        dbc.Input(type='password',placeholder='Password',id='pword-input'),
+                        style = {'marginBottom':'5px'}
                     ),
                     html.Div(id = 'create-user-extras',children = []),
                     dbc.Row(
@@ -2292,7 +2293,7 @@ class LayoutHandler:
                 html.Img(src='./assets/hello-fusey'),
                 ],fluid=True,id='container-content',style = {'height':'100vh'}
             ),
-            html.Hr(),
+            #html.Hr(),
             html.Div(id='user-id-div', style={'display': 'none'}),
             html.Div(id='dummy-div-for-userId', style={'display': 'none'}),
             html.Div(id='dummy-div-plugin-track', style={'display': 'none'}),
