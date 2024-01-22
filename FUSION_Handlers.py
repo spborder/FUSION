@@ -1271,10 +1271,10 @@ class LayoutHandler:
                         html.Div([
                             dbc.Button(
                                 'Download User Responses',
-                                id = 'download-usability-butt',
+                                id = {'type':'download-usability-butt','index':0},
                                 className = 'd-grid mx-auto'
                             ),
-                            dcc.Download(id = 'usability-download')
+                            dcc.Download(id = {'type':'usability-download','index':0})
                         ])
                     ])
                 ])
@@ -2029,7 +2029,7 @@ class LayoutHandler:
                 html.B(),
                 dbc.Row([
                     dbc.Row([
-                        dbc.Label('Getting Started: Select a category below to view a tutorial video')
+                        dbc.Label('Getting Started: Select a category below to view tutorial slides')
                     ]),
                     html.Hr(),
                     dbc.Row([
@@ -2043,15 +2043,25 @@ class LayoutHandler:
                         dbc.Col([
                             html.Div(html.H3('FUSION Introduction'),id='tutorial-name'),
                             html.Br(),
-                            dbc.Carousel(
+                            html.Div(
                                 id = 'welcome-tutorial',
-                                items = [
-                                    {'key':f'{i+1}','src':f'./assets/tutorials/FUSION Introduction/slide_{i}.svg'}
-                                    for i in range(len(os.listdir('./assets/tutorials/FUSION Introduction/')))
-                                ],
-                                controls = True,
-                                indicators = True
-                            )
+                                children=[
+                                    dbc.Carousel(
+                                        id = 'welcome-tutorial-slides',
+                                        items = [
+                                            {
+                                                'key':f'{i+1}',
+                                                'src':f'./static/tutorials/FUSION Introduction/slide_{i}.svg',
+                                                'img_style':{'height':'60vh','width':'80%'}
+                                                }
+                                            for i in range(len(os.listdir('./static/tutorials/FUSION Introduction/')))
+                                        ],
+                                        controls = True,
+                                        indicators = True,
+                                        variant = 'dark'
+                                    )
+                                ]
+                            ),
                         ],align='center',md=10)
                     ])
                 ],style={})

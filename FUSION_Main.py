@@ -564,8 +564,8 @@ class FUSION:
 
         # Downloading usability data for admins
         self.app.callback(
-            Output('usability-download','data'),
-            Input('download-usability-butt','n_clicks'),
+            Output({'type':'usability-download','index':ALL},'data'),
+            Input({'type':'download-usability-butt','index':ALL},'n_clicks'),
             prevent_initial_call = True
         )(self.download_usability_response)
 
@@ -817,7 +817,7 @@ class FUSION:
         # Updating tutorial slides shown
         self.app.callback(
             Input({'type':'tutorial-name','index':ALL},'n_clicks'),
-            [Output('welcome-tutorial','items'),
+            [Output('welcome-tutorial','children'),
              Output('tutorial-name','children')]
         )(self.get_tutorial)
 
@@ -950,7 +950,6 @@ class FUSION:
     
     def get_tutorial(self,a_click):
 
-        print(ctx.triggered)
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
 
@@ -959,12 +958,22 @@ class FUSION:
         tutorial_name = click_key[ctx.triggered_id["index"]]
         new_items_list = [{
             'key':f'{i+1}',
-            'src':f'./assets/tutorials/{tutorial_name}/slide_{i}.svg'
+            'src':f'./static/tutorials/{tutorial_name}/slide_{i}.svg',
+            'img_style':{'height':'60vh','width':'80%'}
             }
-            for i in range(len(os.listdir(f'./assets/tutorials/{tutorial_name}/')))
+            for i in range(len(os.listdir(f'./static/tutorials/{tutorial_name}/')))
         ]
 
-        return tutorial_name, new_items_list
+        new_slides = dbc.Carousel(
+            id = 'welcome-tutorial-slides',
+            items = new_items_list,
+            controls = True,
+            indicators = True,
+            variant = 'dark'
+        )
+
+
+        return new_slides, html.H3(tutorial_name)
 
     def update_plotting_metadata(self):
 
@@ -5131,6 +5140,7 @@ class FUSION:
 
     def download_usability_response(self,butt_click):
 
+        print(butt_click)
         if not butt_click:
             raise exceptions.PreventUpdate
 
