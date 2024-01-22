@@ -2018,11 +2018,7 @@ class LayoutHandler:
             html.P('Happy fusing!')
         ]
 
-        total_videos = ['FUSION Introduction','Preprocessing Steps','Visualization Page','Dataset Builder','Dataset Uploader']
-        video_names = ['FUSION_Introduction','Preprocessing_Overview','Visualization_Page','Dataset_Builder_Fusey','Dataset_Uploader_Fusey']
-        video_dropdown = []
-        for t,n in zip(total_videos,video_names):
-            video_dropdown.append({'label':t,'value':n,'disabled':False})
+        tutorial_list = ['FUSION Introduction','Preprocessing Steps','Visualization Page','Dataset Builder','Dataset Uploader']
 
         welcome_layout = [
                 dbc.Row([
@@ -2037,24 +2033,27 @@ class LayoutHandler:
                     ]),
                     html.Hr(),
                     dbc.Row([
-                        dcc.Dropdown(video_dropdown,video_dropdown[0],id={'type':'video-drop','index':0}),
-                    ]),
-                    html.B(),
-                    html.Hr(),
-                    dbc.Row(
-                        dbc.Col(
-                            html.Video(src='./assets/videos/FUSION_Introduction.mp4',
-                                    controls = True,
-                                    autoPlay = True,
-                                    preload=False,
-                                    id = {'type':'video','index':0},
-                                    style = {'width':'100%'}
-                            ),
-                            width = {'size':6,'offset':3}
-                        ),
-                        align='center'
-                    ),
-                    html.Div(id='tutorial-content',children = [])
+                        dbc.Col([
+                            dbc.Row([
+                                html.A(dcc.Markdown(f'* {i}'),id={'type':'tutorial-name','index':idx}),
+                                html.Br()
+                            ])
+                            for idx,i in enumerate(tutorial_list)
+                        ],align='center',md = 2),
+                        dbc.Col([
+                            html.Div(html.H3('FUSION Introduction'),id='tutorial-name'),
+                            html.Br(),
+                            dbc.Carousel(
+                                id = 'welcome-tutorial',
+                                items = [
+                                    {'key':f'{i+1}','src':f'./assets/tutorials/FUSION Introduction/slide_{i}.svg'}
+                                    for i in range(len(os.listdir('./assets/tutorials/FUSION Introduction/')))
+                                ],
+                                controls = True,
+                                indicators = True
+                            )
+                        ],align='center',md=10)
+                    ])
                 ],style={})
             ]
         

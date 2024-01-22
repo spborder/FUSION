@@ -814,13 +814,13 @@ class FUSION:
 
     def welcome_callbacks(self):
         
-        # Selecting a specific tutorial video
+        # Updating tutorial slides shown
         self.app.callback(
-            Input({'type':'video-drop','index':ALL},'value'),
-            [Output({'type':'video','index':ALL},'src'),
-             Output('tutorial-content','children')],
-            prevent_initial_call = True
-        )(self.get_video)
+            Input({'type':'tutorial-name','index':ALL},'n_clicks'),
+            [Output('welcome-tutorial','items'),
+             Output('tutorial-name','children')]
+        )(self.get_tutorial)
+
 
     def upload_callbacks(self):
 
@@ -947,24 +947,24 @@ class FUSION:
             ],
             prevent_initial_call = True
         )(self.update_feat_logs)
+    
+    def get_tutorial(self,a_click):
 
-    def get_video(self,tutorial_category):
-
-        if not tutorial_category:
+        print(ctx.triggered)
+        if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
-        
-        tutorial_category = tutorial_category[0]
-        print(f'tutorial_category: {tutorial_category}')
 
-        # Pull tutorial videos from DSA 
-        video_src = [f'./assets/videos/{tutorial_category}.mp4']
+        click_key = ['FUSION Introduction','Preprocessing Steps','Visualization Page','Dataset Builder','Dataset Uploader']
 
-        #TODO: Add some markdown tutorial/Readme-like thing for each of the videos below
-        tutorial_children = [
-            tutorial_category
+        tutorial_name = click_key[ctx.triggered_id["index"]]
+        new_items_list = [{
+            'key':f'{i+1}',
+            'src':f'./assets/tutorials/{tutorial_name}/slide_{i}.svg'
+            }
+            for i in range(len(os.listdir(f'./assets/tutorials/{tutorial_name}/')))
         ]
 
-        return video_src, tutorial_children
+        return tutorial_name, new_items_list
 
     def update_plotting_metadata(self):
 
