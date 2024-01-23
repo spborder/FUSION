@@ -821,7 +821,6 @@ class FUSION:
              Output('tutorial-name','children')]
         )(self.get_tutorial)
 
-
     def upload_callbacks(self):
 
         # Creating upload components depending on omics type

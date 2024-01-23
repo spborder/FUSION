@@ -1100,7 +1100,7 @@ class LayoutHandler:
                     ]
 
                     # Overall silhouette score for this set of data
-                    overall_silhouette = silhouette_score(feature_data.values[:,0:2],feature_data['label'].tolist())
+                    overall_silhouette = round(silhouette_score(feature_data.values[:,0:2],feature_data['label'].tolist()),4)
                     print(f'overall silhouette score: {overall_silhouette}')
                     if overall_silhouette>=-1 and overall_silhouette<=-0.5:
                         silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
