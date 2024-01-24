@@ -1099,6 +1099,9 @@ class FUSION:
 
     def update_metadata_plot(self,new_meta,sub_meta,group_type,slide_rows):
         
+        if not ctx.triggered[0]['value']:
+            raise exceptions.PreventUpdate
+
         if not new_meta == ['FTU Expression Statistics']:
             if not new_meta == ['FTU Morphometrics']:
                 # This is for expression statistics
@@ -1310,7 +1313,7 @@ class FUSION:
 
                 return [slide_select_options, [fig], cell_types_options, cell_types_turn_off,[current_slide_count]]
             else:
-                return [slide_select_options, [no_update], cell_types_options, cell_types_turn_off,[current_slide_count]]
+                return [slide_select_options, [], [], [],[]]
         else:
             return [slide_select_options, [no_update], cell_types_options, cell_types_turn_off,[current_slide_count]]
         
