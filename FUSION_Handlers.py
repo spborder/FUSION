@@ -2853,8 +2853,11 @@ class GirderHandler:
     def get_slide_thumbnail(self,item_id:str):
 
         #thumbnail = Image.open(BytesIO(self.gc.get(f'/item/{item_id}/tiles/thumbnail?token={self.user_token}')))
-        thumbnail = Image.open(BytesIO(requests.get(f'{self.gc.urlBase}/item/{item_id}/tiles/thumbnail?width=200&height=200&token={self.user_token}').content))
-        return thumbnail
+        try:
+            thumbnail = Image.open(BytesIO(requests.get(f'{self.gc.urlBase}/item/{item_id}/tiles/thumbnail?width=200&height=200&token={self.user_token}').content))
+            return thumbnail
+        except:
+            return np.zeros((200,200))
 
     def run_histo_qc(self,folder_id:str):
 

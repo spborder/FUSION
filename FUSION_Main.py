@@ -127,6 +127,9 @@ class FUSION:
         self.filter_labels = []
         self.umap_df = None
         self.reports_generated = {}
+        
+        # Initializing fusey_data as empty
+        self.fusey_data = None
 
         # Number of main cell types to include in pie-charts (currently set to all cell types)
         self.plot_cell_types_n = len(list(self.cell_names_key.keys()))
@@ -729,7 +732,8 @@ class FUSION:
             [Output('ask-fusey-box','children'),
              Output('ask-fusey-box','style')],
             Input('fusey-button','n_clicks'),
-            State('ask-fusey-box','style'),
+            [State('ask-fusey-box','style'),
+             State('tools-tabs','active_tab')],
             prevent_initial_call = True
         )(self.ask_fusey)
 
@@ -2213,10 +2217,16 @@ class FUSION:
 
                 label = clicked['label']
                 try:
-                    id = table_data['CT/1/ID'].tolist()[0]
-                    # Modifying base url to make this link to UBERON
-                    base_url = self.node_cols['Cell Types']['base_url']
-                    new_url = base_url+id.replace('CL:','')
+                    try:
+                        id = table_data['CT/1/ID'].tolist()[0]
+                        # Modifying base url to make this link to UBERON
+                        base_url = self.node_cols['Cell Types']['base_url']
+                        new_url = base_url+id.replace('CL:','')
+                    except AttributeError:
+                        # for float objects
+                        print(id)
+                        base_url = self.node_cols['Cell Types']['base_url']
+                        new_url = base_url+str(id).replace('CL:','')
 
                 except IndexError:
                     print(table_data['CT/1/ID'].tolist())
@@ -4536,113 +4546,118 @@ class FUSION:
         
         return [feat_logs_disable],[feat_logs_div]
 
-    def ask_fusey(self,butt_click,current_style):
+    def ask_fusey(self,butt_click,current_style,current_tab):
+        
+        # Don't do anything if there isn't a WSI in view
+        if self.wsi is None:
+            raise exceptions.PreventUpdate
 
         # Generate some summary of the current view
-        fusey_child = []
-        fusey_style = {}
-        if not current_style is None:
-            if current_style['visibility']=='hidden':
-                fusey_style = {
-                    'visibility':'visible',
-                    'background':'white',
-                    'background':'rgba(255,255,255,0.8)',
-                    'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
-                    'border-radius':'5px',
-                    'display':'inline-block',
-                    'position':'absolute',
-                    'top':'75px',
-                    'right':'10px',
-                    'zIndex':'1000',
-                    'padding':'8px 10px',
-                    'width':'115px'
-                }
+        if current_tab == 'cell-compositions-tab':
+            fusey_child = []
+            fusey_style = {}
+            if not current_style is None:
+                if current_style['visibility']=='hidden':
+                    fusey_style = {
+                        'visibility':'visible',
+                        'background':'white',
+                        'background':'rgba(255,255,255,0.8)',
+                        'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
+                        'border-radius':'5px',
+                        'display':'inline-block',
+                        'position':'absolute',
+                        'top':'75px',
+                        'right':'10px',
+                        'zIndex':'1000',
+                        'padding':'8px 10px',
+                        'width':'115px'
+                    }
 
-                parent_style = {
-                    'visibility': 'visible',
-                    'display':'inline-block',
-                    'position':'absolute',
-                    'top':'75px',
-                    'right':'10px',
-                    'zIndex':'1000',
-                    'padding':'8px 10px',
-                    'width':'125px'
-                }
+                    parent_style = {
+                        'visibility': 'visible',
+                        'display':'inline-block',
+                        'position':'absolute',
+                        'top':'75px',
+                        'right':'10px',
+                        'zIndex':'1000',
+                        'padding':'8px 10px',
+                        'width':'125px'
+                    }
 
-                # Getting data for Fusey to use
-                if 'Spots' in self.fusey_data:
+                    # Getting data for Fusey to use
+                    if 'Spots' in self.fusey_data:
 
-                    # This will be the top cell type overall for a region
-                    top_cell = self.fusey_data['Spots']['top_cell']
-                    top_cell_states = self.fusey_data['Spots']['pct_states'].to_dict('records')
-                    top_cell_pct = round(self.fusey_data['Spots']['normalized_counts'].loc[top_cell]*100,2)
+                        # This will be the top cell type overall for a region
+                        top_cell = self.fusey_data['Spots']['top_cell']
+                        top_cell_states = self.fusey_data['Spots']['pct_states'].to_dict('records')
+                        top_cell_pct = round(self.fusey_data['Spots']['normalized_counts'].loc[top_cell]*100,2)
 
-                    table_data = self.table_df.dropna(subset=['CT/1/ABBR'])
-                    table_data = table_data[table_data['CT/1/ABBR'].str.match(top_cell)]
+                        table_data = self.table_df.dropna(subset=['CT/1/ABBR'])
+                        table_data = table_data[table_data['CT/1/ABBR'].str.match(top_cell)]
 
-                    try:
-                        id = table_data['CT/1/ID'].tolist()[0]
-                        # Modifying base url to make this link to UBERON
-                        base_url = self.node_cols['Cell Types']['base_url']
-                        new_url = base_url+id.replace('CL:','')
-                    except:
-                        new_url = ''
+                        try:
+                            id = table_data['CT/1/ID'].tolist()[0]
+                            # Modifying base url to make this link to UBERON
+                            base_url = self.node_cols['Cell Types']['base_url']
+                            new_url = base_url+id.replace('CL:','')
+                        except:
+                            new_url = ''
 
-                    cell_state_text = []
-                    for cs in top_cell_states:
-                        cell_state_text.append(f'{cs["Cell State"]} ({round(cs["Proportion"]*100,2)}%)')
-                    
-                    cell_state_text = ' '.join(cell_state_text)
+                        cell_state_text = []
+                        for cs in top_cell_states:
+                            cell_state_text.append(f'{cs["Cell State"]} ({round(cs["Proportion"]*100,2)}%)')
+                        
+                        cell_state_text = ' '.join(cell_state_text)
 
-                    top_cell_text = f'The current region is mostly {self.cell_graphics_key[top_cell]["full"]} ({top_cell_pct}% in intersecting Spots).'
-                    top_cell_text += f' {self.cell_graphics_key[top_cell]["full"]} cells in this region exhibit {cell_state_text} cell states. '
+                        top_cell_text = f'The current region is mostly {self.cell_graphics_key[top_cell]["full"]} ({top_cell_pct}% in intersecting Spots).'
+                        top_cell_text += f' {self.cell_graphics_key[top_cell]["full"]} cells in this region exhibit {cell_state_text} cell states. '
 
-                    # Finding the FTU with most of this cell type:
-                    top_ftu_text = ''
-                    ftu_exp_list = []
-                    for f in self.fusey_data:
-                        if not f=='Spots':
-                            ftu_exp_list.append(round(self.fusey_data[f]['normalized_counts'].loc[top_cell]*100,2))
-                    
-                    if len(ftu_exp_list)>0:
-                        ftu_list = [i for i in list(self.fusey_data.keys()) if not i == 'Spots']
-                        ftu_exp_list = [i if not np.isnan(i) else 0 for i in ftu_exp_list]
-                        top_ftu = ftu_list[np.argmax(ftu_exp_list)]
-                        top_ftu_pct = np.max(ftu_exp_list)
-
-                        top_ftu_text = f'This cell type is mostly represented in {top_ftu} ({self.fusey_data[top_ftu]["structure_number"]} intersecting) with an average of {top_ftu_pct}%'
-                    else:
+                        # Finding the FTU with most of this cell type:
                         top_ftu_text = ''
+                        ftu_exp_list = []
+                        for f in self.fusey_data:
+                            if not f=='Spots':
+                                ftu_exp_list.append(round(self.fusey_data[f]['normalized_counts'].loc[top_cell]*100,2))
+                        
+                        if len(ftu_exp_list)>0:
+                            ftu_list = [i for i in list(self.fusey_data.keys()) if not i == 'Spots']
+                            ftu_exp_list = [i if not np.isnan(i) else 0 for i in ftu_exp_list]
+                            top_ftu = ftu_list[np.argmax(ftu_exp_list)]
+                            top_ftu_pct = np.max(ftu_exp_list)
 
-                    final_text = top_cell_text+top_ftu_text
+                            top_ftu_text = f'This cell type is mostly represented in {top_ftu} ({self.fusey_data[top_ftu]["structure_number"]} intersecting) with an average of {top_ftu_pct}%'
+                        else:
+                            top_ftu_text = ''
 
-                else:
-                    
-                    final_text = 'Uh oh! It looks like there are no Spots in this area!'
+                        final_text = top_cell_text+top_ftu_text
 
-                fusey_child = [
-                    html.Div([
-                        dbc.Row([
-                            dbc.Col(html.Img(src='./assets/fusey_clean.svg',height='75px',width='75px')),
-                        ]),
-                        dbc.Row([
-                            dbc.Col(html.H4('Hi, my name is Fusey!',style={'fontSize':11}))
+                    else:
+                        
+                        final_text = 'Uh oh! It looks like there are no Spots in this area!'
 
-                        ]),
-                        html.Hr(),
-                        dbc.Row([
-                            dbc.Col(html.P(final_text,style={'fontSize':10}))
-                        ]),
-                        dbc.Row([
-                            dbc.Col(html.A('Learn more about this cell!',href=new_url))
-                        ])
-                    ],style = fusey_style)
-                ]
-            elif current_style['visibility']=='visible': 
-                parent_style = {
-                    'visibility':'hidden'
-                }
-        
+                    fusey_child = [
+                        html.Div([
+                            dbc.Row([
+                                dbc.Col(html.Img(src='./assets/fusey_clean.svg',height='75px',width='75px')),
+                            ]),
+                            dbc.Row([
+                                dbc.Col(html.H4('Hi, my name is Fusey!',style={'fontSize':11}))
+
+                            ]),
+                            html.Hr(),
+                            dbc.Row([
+                                dbc.Col(html.P(final_text,style={'fontSize':10}))
+                            ]),
+                            dbc.Row([
+                                dbc.Col(html.A('Learn more about this cell!',href=new_url))
+                            ])
+                        ],style = fusey_style)
+                    ]
+                elif current_style['visibility']=='visible': 
+                    parent_style = {
+                        'visibility':'hidden'
+                    }
+            
         return fusey_child, parent_style
 
     def add_label(self,notes_click,delete_click,pop_input):
