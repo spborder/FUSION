@@ -44,7 +44,7 @@ import dash_mantine_components as dmc
 from timeit import default_timer as timer
 import time
 
-from FUSION_WSI import DSASlide
+from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler
 from FUSION_Prep import PrepHandler
 
@@ -2270,16 +2270,40 @@ class FUSION:
     def ingest_wsi(self,slide_name):
         
         if not slide_name=='':
+            new_children = []
             print(f'Slide selected: {slide_name}')
             # Find folder containing this slide
             for d in self.dataset_handler.slide_datasets:
                 d_slides = [i['name'] for i in self.dataset_handler.slide_datasets[d]['Slides']]
                 if slide_name in d_slides:
                     # Getting slide item id
-                    slide_id = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]['_id']
+                    slide_info = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]
+                    slide_id = slide_info['_id']
+                    if 'Spatial Omics Type' in slide_info['meta']:
+                        slide_type = slide_info['meta']['Spatial Omics Type']
+                    else:
+                        slide_type = 'Regular'
 
             #TODO: Check for previous manual ROIs or marked FTUs
-            new_slide = DSASlide(slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+            if slide_type=='Regular':
+                new_slide = DSASlide(slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+            elif slide_type=='Visium':
+                new_slide = VisiumSlide(slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+            elif slide_type=='CODEX':
+                new_slide = CODEXSlide(slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+
+                # Adding the different frames to the layers control object
+                new_children+=[
+                    dl.BaseLayer(
+                        dl.TileLayer(
+                            url = new_slide.channel_tile_url.format(c_idx),
+                        ),
+                        name = c_name,
+                        checked = c_name=='Histology'
+                    )
+                    for c_idx,c_name in enumerate(new_slide.channel_names)
+                ]
+
             self.wsi = new_slide
 
             # Updating in the case that an FTU isn't in the previous set of ftu_colors
@@ -2288,7 +2312,7 @@ class FUSION:
             # Updating overlays colors according to the current cell
             self.update_hex_color_key(self.current_cell)
 
-            new_children = [
+            new_children += [
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(url = f'./assets/slide_annotations/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
@@ -2313,8 +2337,6 @@ class FUSION:
                         name = f'Manual ROI {m_idx}', checked = True, id = new_slide.item_id+f'_manual_roi{m_idx}'
                     )
                 )
-
-            print(f'length of new_children: {len(new_children)}')
 
             new_url = self.wsi.tile_url
             center_point = [0.5*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),0.5*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
@@ -2358,11 +2380,9 @@ class FUSION:
                 for idx, struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-
             return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children
 
         else:
-
             raise exceptions.PreventUpdate
 
     def update_graph_label_children(self,leftover_labels):

@@ -395,7 +395,9 @@ class CODEXSlide(DSASlide):
                  channel_names:dict):
         super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
 
+        # Updating tile_url so that it includes the different frames
         self.channel_names = channel_names
+        self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/fzxy/{{frame}}/{z}/{x}/{y}?token='+self.user_token
 
     def intersecting_frame_intensity(self,box_poly):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
