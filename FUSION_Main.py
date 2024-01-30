@@ -2287,7 +2287,7 @@ class FUSION:
                     slide_id = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]['_id']
 
             #TODO: Check for previous manual ROIs or marked FTUs
-            new_slide = DSASlide(slide_name,slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+            new_slide = DSASlide(slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
             self.wsi = new_slide
 
             # Updating in the case that an FTU isn't in the previous set of ftu_colors

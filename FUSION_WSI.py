@@ -17,17 +17,18 @@ from tqdm import tqdm
 
 class DSASlide:
     def __init__(self,
-                 slide_name,
                  item_id,
                  girder_handler,
                  ftu_colors,
                  manual_rois = [],
                  marked_ftus = []):
 
-        self.slide_name = slide_name
-        self.slide_ext = slide_name.split('.')[-1]
         self.item_id = item_id
         self.girder_handler = girder_handler
+
+        self.item_info = self.girder_handler.gc.get(f'/item/{self.item_id}?token={self.girder_handler.user_token}')
+        self.slide_name = self.item_info['name']
+        self.slide_ext = self.slide_name.split('.')[-1]
         self.ftu_colors = ftu_colors
 
         self.manual_rois = manual_rois
@@ -354,4 +355,50 @@ class DSASlide:
 
         return return_coords
     
+
+class VisiumSlide(DSASlide):
+    # Additional properties for Visium slides are:
+    # id of RDS object
+    spatial_omics_type = 'Visium'
+
+    def __init__(self,
+                 item_id:str,
+                 girder_handler,
+                 ftu_colors,
+                 manual_rois:list,
+                 marked_ftus:list):
+        super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
+
+    def find_intersecting_spots(self,box_poly):
+        # Finging intersecting spots within a particular region
+        intersecting_spot_idxes = [i for i in range(0,len(self.spot_polys)) if self.spot_polys[i].intersects(box_poly)]
+        
+        # Returning list of dictionaries using original keys
+        intersecting_spot_props = []
+        if len(intersecting_spot_idxes)>0:
+            intersecting_spot_props = [self.spot_props[i] for i in intersecting_spot_idxes]
+
+        return intersecting_spot_props
+
+class CODEXSlide(DSASlide):
+    # Additional properties needed for CODEX slides are:
+    # names for each channel
+
+    spatial_omics_type = 'CODEX'
+
+    def __init__(self,
+                 item_id:str,
+                 girder_handler,
+                 ftu_colors:dict,
+                 manual_rois:list,
+                 marked_ftus:list,
+                 channel_names:dict):
+        super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
+
+        self.channel_names = channel_names
+
+    def intersecting_frame_intensity(self,box_poly):
+        # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
+        pass
+
 
