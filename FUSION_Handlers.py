@@ -733,7 +733,8 @@ class LayoutHandler:
                                             )
                                         ],md=12,align='center')
                                     ],align='center',style={'marginTop':'5px','marginLeft':'10px'})
-                                ], label = struct
+                                ],
+                                label = struct
                             )
                             for idx,struct in enumerate(list(combined_colors_dict.keys()))
                         ]

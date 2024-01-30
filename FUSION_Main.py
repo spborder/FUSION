@@ -582,6 +582,7 @@ class FUSION:
             [Input('cell-drop','value'),Input('vis-slider','value'),
              Input('filter-slider','value'),Input({'type':'ftu-bound-color','index':ALL},'value'),
              Input({'type':'cell-sub-drop','index':ALL},'value')],
+            State('ftu-bound-opts','active_tab'),
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -1634,7 +1635,7 @@ class FUSION:
         else:
             self.hex_color_key = {}
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color,cell_sub_val):
+    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color,cell_sub_val,ftu_bound_tab):
 
         print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
 
@@ -1657,20 +1658,11 @@ class FUSION:
         if len(cell_sub_val)==0:
             cell_sub_val = [None]
 
-        if not ftu_color is None:
-            # Getting these to align with the ftu-colors property order
-            current_ftu_colors = list(self.ftu_colors.values())
-            ftu_list = list(self.ftu_colors.keys())
-
-            # Index of which ftu is different
-            new_color = [i for i in range(len(current_ftu_colors)) if current_ftu_colors[i] not in ftu_color]
-            if len(new_color)>0:
-                for n in new_color:
-                    check_for_new = [i for i in ftu_color if i not in current_ftu_colors]
-                    if len(check_for_new)>0:
-                        self.ftu_colors[ftu_list[n]] = check_for_new[0]
-                    
-            self.filter_vals = filter_vals
+        if ctx.triggered_id['type']=='ftu-bound-color':
+            if not ftu_color is None and not ftu_bound_tab is None:
+                self.ftu_colors[self.wsi.ftu_names[int(float(ftu_bound_tab.split('-')[-1]))]] = ftu_color[int(float(ftu_bound_tab.split('-')[-1]))]
+                        
+        self.filter_vals = filter_vals
 
         # Extracting cell val if there are sub-properties
         if not cell_val is None:
