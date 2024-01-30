@@ -401,6 +401,10 @@ class CODEXSlide(DSASlide):
 
     def intersecting_frame_intensity(self,box_poly):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
+        
+        box_coordinates = self.convert_map_coords(list(box_poly.exterior.coords))
+        
+        
         pass
 
 
