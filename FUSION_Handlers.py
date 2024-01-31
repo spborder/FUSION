@@ -1326,7 +1326,7 @@ class LayoutHandler:
                         )
                     ),
                     dbc.CardBody(
-                        html.Div(id = 'tutorial-content',children = [])
+                        html.Div(id = {'type':'tutorial-content','index':0},children = [])
                     )
                 ])
             ],md=6)
@@ -2621,7 +2621,7 @@ class GirderHandler:
         for f in np.unique(folder_ids):
             if f not in list(self.slide_datasets.keys()):
                 folder_name = self.gc.get(f'/folder/{f}')['name']
-                if 'FUSION_Upload' in folder_name:
+                if not folder_name=='Public':
 
                     self.slide_datasets[f] = {
                         'name':folder_name

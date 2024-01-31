@@ -26,6 +26,8 @@ class DSASlide:
         self.item_id = item_id
         self.girder_handler = girder_handler
 
+        self.spatial_omics_type = 'Regular'
+
         self.item_info = self.girder_handler.gc.get(f'/item/{self.item_id}?token={self.girder_handler.user_token}')
         self.slide_name = self.item_info['name']
         self.slide_ext = self.slide_name.split('.')[-1]
@@ -33,6 +35,8 @@ class DSASlide:
 
         self.manual_rois = manual_rois
         self.marked_ftus = marked_ftus
+
+        self.n_frames = 1
 
         self.visualization_properties = [
             'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
@@ -84,6 +88,13 @@ class DSASlide:
 
         # Step 2: get resource tile metadata
         tile_metadata = self.girder_handler.get_tile_metadata(item_id)
+        print(tile_metadata)
+        # Step 2.1: adding n_frames if "frames" in metadata
+        if 'frames' in tile_metadata:
+            self.n_frames = len(tile_metadata['frames'])
+        else:
+            self.n_frames = 1
+
         # Step 3: get tile, base, zoom, etc.
         # Number of zoom levels for an image
         self.zoom_levels = tile_metadata['levels']
@@ -109,12 +120,6 @@ class DSASlide:
         # Step 5: Getting annotations for a resource
         self.annotations = self.girder_handler.get_annotations(item_id)
         print(f'Found: {len(self.annotations)} Annotations')
-        if 'Spots' in [i['annotation']['name'] for i in self.annotations if 'annotation' in i]:
-            self.slide_type = '10xVisium'
-            print(f'slide type = {self.slide_type}')
-        else:
-            self.slide_type = 'Other'
-            print(f'slide_type: {self.slide_type}')
 
         # Step 6: Getting user token and tile url
         self.user_token = self.girder_handler.get_token()
@@ -397,7 +402,14 @@ class CODEXSlide(DSASlide):
 
         # Updating tile_url so that it includes the different frames
         self.channel_names = channel_names
-        self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/fzxy/{{frame}}/{z}/{x}/{y}?token='+self.user_token
+        if self.channel_names == {}:
+            # Fill in with dummy channel_names (test case with 16 or 17 channels)
+            self.channel_names = [f'Channel_{i}' for i in range(0,self.n_frames)]
+
+        self.channel_tile_url = [
+            self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/fzxy/'+str(i)+'/{z}/{x}/{y}?token='+self.user_token
+            for i in range(len(self.channel_names))
+        ]
 
     def intersecting_frame_intensity(self,box_poly):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region

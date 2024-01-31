@@ -548,7 +548,7 @@ class FUSION:
         # Loading new tutorial slides
         self.app.callback(
             Input({'type':'tutorial-tabs','index':ALL},'active_tab'),
-            Output('tutorial-content','children'),
+            Output({'type':'tutorial-content','index':ALL},'children'),
         )(self.update_tutorial_slide)
         
         # Updating questions in question tab
@@ -1658,7 +1658,13 @@ class FUSION:
         if len(cell_sub_val)==0:
             cell_sub_val = [None]
 
-        if ctx.triggered_id['type']=='ftu-bound-color':
+        print(ctx.triggered_id)
+        if type(ctx.triggered_id)==list:
+            triggered_id = ctx.triggered_id[0]
+        else:
+            triggered_id = ctx.triggered_id
+
+        if triggered_id['type']=='ftu-bound-color':
             if not ftu_color is None and not ftu_bound_tab is None:
                 self.ftu_colors[self.wsi.ftu_names[int(float(ftu_bound_tab.split('-')[-1]))]] = ftu_color[int(float(ftu_bound_tab.split('-')[-1]))]
                         
@@ -2286,20 +2292,40 @@ class FUSION:
 
             #TODO: Check for previous manual ROIs or marked FTUs
             if slide_type=='Regular':
-                new_slide = DSASlide(slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+                new_slide = DSASlide(
+                    slide_id,
+                    self.dataset_handler,
+                    self.ftu_colors,
+                    manual_rois=[],
+                    marked_ftus=[]
+                )
             elif slide_type=='Visium':
-                new_slide = VisiumSlide(slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+                new_slide = VisiumSlide(
+                    slide_id,
+                    self.dataset_handler,
+                    self.ftu_colors,
+                    manual_rois=[],
+                    marked_ftus=[]
+                )
             elif slide_type=='CODEX':
-                new_slide = CODEXSlide(slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+                new_slide = CODEXSlide(
+                    slide_id,
+                    self.dataset_handler,
+                    self.ftu_colors,
+                    manual_rois=[],
+                    marked_ftus=[],
+                    channel_names = {}
+                )
 
                 # Adding the different frames to the layers control object
                 new_children+=[
                     dl.BaseLayer(
                         dl.TileLayer(
-                            url = new_slide.channel_tile_url.format(c_idx),
+                            url = new_slide.channel_tile_url[c_idx],
+                            tileSize = 240
                         ),
                         name = c_name,
-                        checked = c_name=='Histology'
+                        checked = c_name=='Channel_0'
                     )
                     for c_idx,c_name in enumerate(new_slide.channel_names)
                 ]
@@ -3269,7 +3295,11 @@ class FUSION:
                         # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
                         self.wsi.manual_rois = []
                         self.wsi.marked_ftus = []
-                        self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
+                        if not self.wsi.spatial_omics_type=='CODEX':
+                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
+                        else:
+                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)+1]
+
                         for geo in new_geojson['features']:
 
                             if not geo['properties']['type'] == 'marker':
@@ -3432,7 +3462,12 @@ class FUSION:
                         # Clearing manual ROIs and reverting overlays
                         self.wsi.manual_rois = []
                         self.wsi.marked_ftus = []
-                        self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
+
+                        if not self.wsi.spatial_omics_type=='CODEX':
+                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
+                        else:
+                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)+1]
+
                         data_select_options = self.layout_handler.data_options
 
                         if not self.current_cell is None:
@@ -5037,7 +5072,7 @@ class FUSION:
                 )
             ]
 
-            return tutorial_children
+            return [tutorial_children]
         else:
             raise exceptions.PreventUpdate
 
