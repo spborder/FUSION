@@ -16,6 +16,9 @@ import shutil
 from tqdm import tqdm
 
 class DSASlide:
+
+    spatial_omics_type = 'Regular'
+    
     def __init__(self,
                  item_id,
                  girder_handler,
@@ -25,8 +28,6 @@ class DSASlide:
 
         self.item_id = item_id
         self.girder_handler = girder_handler
-
-        self.spatial_omics_type = 'Regular'
 
         self.item_info = self.girder_handler.gc.get(f'/item/{self.item_id}?token={self.girder_handler.user_token}')
         self.slide_name = self.item_info['name']

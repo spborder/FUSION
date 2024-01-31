@@ -2330,6 +2330,8 @@ class FUSION:
                     for c_idx,c_name in enumerate(new_slide.channel_names)
                 ]
 
+            print(f'New Slide type: {new_slide.spatial_omics_type}')
+
             self.wsi = new_slide
 
             # Updating in the case that an FTU isn't in the previous set of ftu_colors
@@ -3295,10 +3297,11 @@ class FUSION:
                         # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
                         self.wsi.manual_rois = []
                         self.wsi.marked_ftus = []
+
                         if not self.wsi.spatial_omics_type=='CODEX':
-                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
+                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
                         else:
-                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)+1]
+                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
 
                         for geo in new_geojson['features']:
 
@@ -3464,9 +3467,9 @@ class FUSION:
                         self.wsi.marked_ftus = []
 
                         if not self.wsi.spatial_omics_type=='CODEX':
-                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
+                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
                         else:
-                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)+1]
+                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
 
                         data_select_options = self.layout_handler.data_options
 
