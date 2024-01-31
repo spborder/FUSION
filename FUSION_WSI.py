@@ -18,7 +18,7 @@ from tqdm import tqdm
 class DSASlide:
 
     spatial_omics_type = 'Regular'
-    
+
     def __init__(self,
                  item_id,
                  girder_handler,
@@ -416,8 +416,23 @@ class CODEXSlide(DSASlide):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
         
         box_coordinates = self.convert_map_coords(list(box_poly.exterior.coords))
+        # box coordinates are in the form:
+        # (maxx,miny), (maxx,maxy), (minx,maxy), (minx,miny), (maxx,miny)
+        # Box size then can be determined by (maxx-minx)*(maxy-miny)
+        box_size = (box_coordinates[0][0]-box_coordinates[2][0])*(box_coordinates[1][1]-box_coordinates[0][1])
+        # Or probably also by multiplying some scale factors by box_poly.area
+
+
+        # Pulling out those regions of the image
+        frame_properties = {}
+        for frame in range(0,self.n_frames):
+            # Get the image region associated with that frame
+            image_region = self.girder_handler.gc.get(f'/item/{self.item_id}/tiles/region')
+
+            # Fraction of total intensity (maximum intensity = every pixel is 255 for uint8)
+            frame_properties[self.channel_names[frame]] = np.nansum(image_region)/(255*box_size)
+
         
-        
-        pass
+        return frame_properties
 
 

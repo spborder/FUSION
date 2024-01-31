@@ -1417,9 +1417,12 @@ class FUSION:
             if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
                 intersecting_ftus = {}
-                if 'Spots' in self.current_ftu_layers:
+                if self.wsi.spatial_omics_type=='Visium':
                     intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
                     intersecting_ftus['Spots'] = intersecting_spots
+                elif self.wsi.spatial_omics_type=='CODEX':
+                    intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box)
+                    intersecting_ftus['Tissue'] = intersecting_region
 
                 for ftu in self.current_ftu_layers:
                     if not ftu=='Spots':
