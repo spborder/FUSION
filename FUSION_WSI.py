@@ -89,7 +89,6 @@ class DSASlide:
 
         # Step 2: get resource tile metadata
         tile_metadata = self.girder_handler.get_tile_metadata(item_id)
-        print(tile_metadata)
         # Step 2.1: adding n_frames if "frames" in metadata
         if 'frames' in tile_metadata:
             self.n_frames = len(tile_metadata['frames'])
@@ -137,7 +136,7 @@ class DSASlide:
         # Translation step
         base_x_scale = self.base_dims[0]/self.tile_dims[0]
         base_y_scale = self.base_dims[1]/self.tile_dims[1]
-        print(f'base_x_scale: {base_x_scale}, base_y_scale: {base_y_scale}')
+        #print(f'base_x_scale: {base_x_scale}, base_y_scale: {base_y_scale}')
 
         # image bounds [maxX, maxY]
         # bottom_right[0]-top_left[0] --> range of x values in target crs
@@ -148,7 +147,7 @@ class DSASlide:
         y_scale = (self.tile_dims[1])/(self.image_dims[1]*(self.tile_dims[1]/240))
         y_scale*=-1
 
-        print(f'x_scale: {x_scale}, y_scale: {y_scale}')
+        #print(f'x_scale: {x_scale}, y_scale: {y_scale}')
         # y_scale has to be inverted because y is measured upward in these maps
 
         print('Processing annotations')
@@ -415,9 +414,7 @@ class CODEXSlide(DSASlide):
     def intersecting_frame_intensity(self,box_poly):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
         
-        print(list(box_poly.exterior.coords))
         box_coordinates = np.array(self.convert_map_coords(list(box_poly.exterior.coords)))
-        print(box_coordinates)
         min_x = np.min(box_coordinates[:,0])
         min_y = np.min(box_coordinates[:,1])
         max_x = np.max(box_coordinates[:,0])
@@ -430,18 +427,26 @@ class CODEXSlide(DSASlide):
 
         # Slide coordinates list should be [minx,miny,maxx,maxy]
         slide_coords_list = [min_x,min_y,max_x,max_y]
-        print(slide_coords_list)
         frame_properties = {}
         for frame in range(0,self.n_frames):
             print(f'Working on frame {frame} of {self.n_frames}')
             # Get the image region associated with that frame
             #TODO: Get a specific frame here, verify type is uint8
-            image_region = self.girder_handler.get_image_region(self.item_id,slide_coords_list,frame_index=frame)
+            #image_region = self.girder_handler.get_image_region(self.item_id,slide_coords_list,frame_index=frame)
             
             # Or just get the histogram for that channel? not sure if this can be for a specific image region
+            image_histogram = self.girder_handler.gc.get(f'/item/{self.item_id}/tiles/histogram',
+                                                         parameters = {
+                                                            'top': min_y,
+                                                            'left': min_x,
+                                                            'bottom': max_y,
+                                                            'right': max_x,
+                                                            'frame': frame
+                                                            }
+                                                        )
 
             # Fraction of total intensity (maximum intensity = every pixel is 255 for uint8)
-            frame_properties[self.channel_names[frame]] = np.nansum(image_region)/(255*box_size)
+            frame_properties[self.channel_names[frame]] = image_histogram[0]
 
         
         return frame_properties

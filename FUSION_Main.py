@@ -1453,31 +1453,49 @@ class FUSION:
 
                             first_chart_label = f'{f} Cell Type Proportions'
 
+                            if len(counts_dict_list)>0:
+                                counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
+                                counts_data.columns = [f]
+
+
                         elif self.wsi.spatial_omics_type=='CODEX':
                             counts_dict_list = [intersecting_ftus['Tissue']]
 
-                            first_chart_label = 'Channel Relative Intensity'
+                            first_chart_label = 'Channel Intensity Histogram'
 
-                        if len(counts_dict_list)>0:
-                            counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
-
-                        if not counts_data.empty:
-                            counts_data.columns = [f]
+                            if f=='Tissue':
+                                # Getting the first channel
+                                counts_data = intersecting_ftus['Tissue'][self.wsi.channel_names[0]]
+                                # This returns a dictionary with bin_edges and hist
+                                counts_data = pd.DataFrame({'hist':[0]+counts_data['hist'],'bin_edges':counts_data['bin_edges']})
                             
-                            # Storing some data for Fusey to use :3
-                            structure_number = len(counts_dict_list)
-                            normalized_counts = counts_data[f]/counts_data[f].sum()
+                        if not counts_data.empty:
+                            
+                            if self.wsi.spatial_omics_type=='Visium':
+                                # Storing some data for Fusey to use :3
+                                structure_number = len(counts_dict_list)
+                                normalized_counts = counts_data[f]/counts_data[f].sum()
 
-                            # Normalizing to sum to 1
-                            counts_data[f] = counts_data[f]/counts_data[f].sum()
-                            # Only getting top n
-                            counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
-                            counts_data = counts_data.reset_index()
+                                # Normalizing to sum to 1
+                                counts_data[f] = counts_data[f]/counts_data[f].sum()
+                                # Only getting top n
+                                counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
+                                counts_data = counts_data.reset_index()
 
-                            f_pie = px.pie(counts_data,values=f,names='index')
-                            f_pie.update_traces(textposition='inside')
-                            f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
+                                f_pie = px.pie(counts_data,values=f,names='index')
+                                f_pie.update_traces(textposition='inside')
+                                f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
 
+                            elif self.wsi.spatial_omics_type=='CODEX':
+                                # For CODEX images, have the tissue tab be one histogram
+                                if f=='Tissue':
+                                    
+                                    # Getting one of the channels. Maybe just the first one
+                                    f_pie = px.bar(
+                                        data_frame = counts_data,
+                                        x = 'bin_edges',
+                                        y = 'hist'
+                                    )
 
                             if self.wsi.spatial_omics_type=='Visium':
                                 
@@ -1501,6 +1519,26 @@ class FUSION:
                                 }
                                 state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
 
+                                f_tab = dbc.Tab(
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Label(first_chart_label),
+                                            dcc.Graph(
+                                                id = {'type':'ftu-cell-pie','index':f_idx},
+                                                figure = go.Figure(f_pie)
+                                            )
+                                        ],md=6),
+                                        dbc.Col([
+                                            dbc.Label(second_plot_label),
+                                            dcc.Graph(
+                                                id = {'type':'ftu-state-bar','index':f_idx},
+                                                figure = go.Figure(state_bar)
+                                            )
+                                        ],md=6)
+                                    ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
+                                )
+
+
                             elif self.wsi.spatial_omics_type=='CODEX':
 
                                 # Returning blank for now
@@ -1509,25 +1547,34 @@ class FUSION:
 
                                 self.fusey_data['Tissue'] = {}
 
+                                f_tab = dbc.Tab([
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Label('Select a Channel Name to view Histogram:',html_for={'type':'frame-histogram-drop','index':0}),
+                                            md = 6, align = 'center'
+                                        ),
+                                        dbc.Col(
+                                            dcc.Dropdown(
+                                                options = self.wsi.channel_names,
+                                                value = self.wsi.channel_names[0],
+                                                multi = True,
+                                                id = {'type':'frame-histogram-drop'}
+                                            ),
+                                            md = 6, align = 'center'
+                                        )
+                                    ]),
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Label(first_chart_label),
+                                            dcc.Graph(
+                                                id = {'type':'ftu-cell-pie','index':f_idx},
+                                                figure = go.Figure(f_pie)
+                                            )
+                                        ],md=12)
+                                    ])],
+                                    label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
+                                )
 
-                            f_tab = dbc.Tab(
-                                dbc.Row([
-                                    dbc.Col([
-                                        dbc.Label(first_chart_label),
-                                        dcc.Graph(
-                                            id = {'type':'ftu-cell-pie','index':f_idx},
-                                            figure = go.Figure(f_pie)
-                                        )
-                                    ],md=6),
-                                    dbc.Col([
-                                        dbc.Label(second_plot_label),
-                                        dcc.Graph(
-                                            id = {'type':'ftu-state-bar','index':f_idx},
-                                            figure = go.Figure(state_bar)
-                                        )
-                                    ],md=6)
-                                ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
-                            )
 
                             tab_list.append(f_tab)
 
@@ -1686,16 +1733,19 @@ class FUSION:
         if len(cell_sub_val)==0:
             cell_sub_val = [None]
 
-        print(ctx.triggered_id)
         if type(ctx.triggered_id)==list:
             triggered_id = ctx.triggered_id[0]
         else:
             triggered_id = ctx.triggered_id
 
-        if triggered_id['type']=='ftu-bound-color':
-            if not ftu_color is None and not ftu_bound_tab is None:
-                self.ftu_colors[self.wsi.ftu_names[int(float(ftu_bound_tab.split('-')[-1]))]] = ftu_color[int(float(ftu_bound_tab.split('-')[-1]))]
-                        
+        try:
+            if triggered_id['type']=='ftu-bound-color':
+                if not ftu_color is None and not ftu_bound_tab is None:
+                    self.ftu_colors[self.wsi.ftu_names[int(float(ftu_bound_tab.split('-')[-1]))]] = ftu_color[int(float(ftu_bound_tab.split('-')[-1]))]
+        except TypeError:
+            # This is for non-pattern matching components so the ctx.triggered_id is just a str
+            pass
+
         self.filter_vals = filter_vals
 
         # Extracting cell val if there are sub-properties
@@ -1838,7 +1888,6 @@ class FUSION:
                 filter_disable = True
             else:
                 # For other morphometric properties
-                print(cell_val)
                 self.current_cell = cell_val
                 self.update_hex_color_key(cell_val)
 
@@ -1864,9 +1913,7 @@ class FUSION:
             filter_max_val = 1
 
         self.cell_vis_val = vis_val/100
-        print(callback_context.outputs_list)
         n_layers = len(callback_context.outputs_list[0])
-        print(f'n_layers to update: {n_layers}')
         geojson_hideout = [
             {
                 'color_key':self.hex_color_key,
