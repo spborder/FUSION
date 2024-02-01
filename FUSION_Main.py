@@ -1411,16 +1411,18 @@ class FUSION:
             self.current_slide_bounds = None
 
             raise exceptions.PreventUpdate
-
+        
         # Making a box-poly from the bounds
         if current_tab=='cell-compositions-tab':
             if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
                 intersecting_ftus = {}
                 if self.wsi.spatial_omics_type=='Visium':
+                    # Returns dictionary of intersecting spot properties
                     intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
                     intersecting_ftus['Spots'] = intersecting_spots
                 elif self.wsi.spatial_omics_type=='CODEX':
+                    # Returns dictionary of intersecting tissue frame intensities
                     intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box)
                     intersecting_ftus['Tissue'] = intersecting_region
 
@@ -1443,11 +1445,19 @@ class FUSION:
 
                     tab_list = []
                     self.fusey_data = {}
-                    #counts_data = pd.DataFrame()
                     for f_idx,f in enumerate(included_ftus):
                         counts_data = pd.DataFrame()
 
-                        counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
+                        if self.wsi.spatial_omics_type=='Visium':
+                            counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
+
+                            first_chart_label = f'{f} Cell Type Proportions'
+
+                        elif self.wsi.spatial_omics_type=='CODEX':
+                            counts_dict_list = [intersecting_ftus['Tissue']]
+
+                            first_chart_label = 'Channel Relative Intensity'
+
                         if len(counts_dict_list)>0:
                             counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
 
@@ -1468,34 +1478,49 @@ class FUSION:
                             f_pie.update_traces(textposition='inside')
                             f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
 
-                            top_cell = counts_data['index'].tolist()[0]
 
-                            pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
-                            
-                            pct_states = pct_states.reset_index()
-                            pct_states.columns = ['Cell State','Proportion']
-                            pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+                            if self.wsi.spatial_omics_type=='Visium':
+                                
+                                # Finding cell state proportions per main cell type in the current region
+                                second_plot_label = f'{f} Cell State Proportions'
 
-                            # Fusey data
-                            self.fusey_data[f] = {
-                                'structure_number':structure_number,
-                                'normalized_counts':normalized_counts,
-                                'pct_states':pct_states,
-                                'top_cell':top_cell
-                            }
-                            state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
+                                top_cell = counts_data['index'].tolist()[0]
+
+                                pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
+                                
+                                pct_states = pct_states.reset_index()
+                                pct_states.columns = ['Cell State','Proportion']
+                                pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+
+                                # Fusey data
+                                self.fusey_data[f] = {
+                                    'structure_number':structure_number,
+                                    'normalized_counts':normalized_counts,
+                                    'pct_states':pct_states,
+                                    'top_cell':top_cell
+                                }
+                                state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
+
+                            elif self.wsi.spatial_omics_type=='CODEX':
+
+                                # Returning blank for now
+                                state_bar = []
+                                second_plot_label = 'This is CODEX'
+
+                                self.fusey_data['Tissue'] = {}
+
 
                             f_tab = dbc.Tab(
                                 dbc.Row([
                                     dbc.Col([
-                                        dbc.Label(f'{f} Cell Type Proportions'),
+                                        dbc.Label(first_chart_label),
                                         dcc.Graph(
                                             id = {'type':'ftu-cell-pie','index':f_idx},
                                             figure = go.Figure(f_pie)
                                         )
                                     ],md=6),
                                     dbc.Col([
-                                        dbc.Label(f'{f} Cell State Proportions'),
+                                        dbc.Label(second_plot_label),
                                         dcc.Graph(
                                             id = {'type':'ftu-state-bar','index':f_idx},
                                             figure = go.Figure(state_bar)

@@ -415,19 +415,30 @@ class CODEXSlide(DSASlide):
     def intersecting_frame_intensity(self,box_poly):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
         
-        box_coordinates = self.convert_map_coords(list(box_poly.exterior.coords))
-        # box coordinates are in the form:
-        # (maxx,miny), (maxx,maxy), (minx,maxy), (minx,miny), (maxx,miny)
+        print(list(box_poly.exterior.coords))
+        box_coordinates = np.array(self.convert_map_coords(list(box_poly.exterior.coords)))
+        print(box_coordinates)
+        min_x = np.min(box_coordinates[:,0])
+        min_y = np.min(box_coordinates[:,1])
+        max_x = np.max(box_coordinates[:,0])
+        max_y = np.max(box_coordinates[:,1])
+        
         # Box size then can be determined by (maxx-minx)*(maxy-miny)
-        box_size = (box_coordinates[0][0]-box_coordinates[2][0])*(box_coordinates[1][1]-box_coordinates[0][1])
+        box_size = (max_x-min_x)*(max_y-min_y)
         # Or probably also by multiplying some scale factors by box_poly.area
-
-
         # Pulling out those regions of the image
+
+        # Slide coordinates list should be [minx,miny,maxx,maxy]
+        slide_coords_list = [min_x,min_y,max_x,max_y]
+        print(slide_coords_list)
         frame_properties = {}
         for frame in range(0,self.n_frames):
+            print(f'Working on frame {frame} of {self.n_frames}')
             # Get the image region associated with that frame
-            image_region = self.girder_handler.gc.get(f'/item/{self.item_id}/tiles/region')
+            #TODO: Get a specific frame here, verify type is uint8
+            image_region = self.girder_handler.get_image_region(self.item_id,slide_coords_list,frame_index=frame)
+            
+            # Or just get the histogram for that channel? not sure if this can be for a specific image region
 
             # Fraction of total intensity (maximum intensity = every pixel is 255 for uint8)
             frame_properties[self.channel_names[frame]] = np.nansum(image_region)/(255*box_size)
