@@ -1924,7 +1924,7 @@ class LayoutHandler:
                                     value = [0.0,50.0,120.0],
                                     marks = {
                                         0.0:{'label':'Luminal Space: 0','style':'rgb(0,255,0)'},
-                                        50.0:{'label':'PAS: 50','style':'rgb(255,0,0)'},
+                                        50.0:{'label':'Eosinophilic: 50','style':'rgb(255,0,0)'},
                                         120.0:{'label':'Nuclei: 120','style':'rgb(0,0,255)'}
                                     },
                                     tooltip = {'placement':'top','always_visible':False},

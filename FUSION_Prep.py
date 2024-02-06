@@ -88,7 +88,7 @@ class PrepHandler:
                 'marks_color':'rgb(0,0,255)'
             },            
             {
-                'name':'PAS',
+                'name':'Eosinophilic',
                 'threshold':45,
                 'min_size':20,
                 'color':[255,0,0],
@@ -402,7 +402,7 @@ class PrepHandler:
 
         # Parsing through sub-seg-params
         _, thresh_nuc, minsize_nuc, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Nuclei'][0].values()))
-        _, thresh_pas, minsize_pas, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='PAS'][0].values()))
+        _, thresh_pas, minsize_pas, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Eosinophilic'][0].values()))
         _, thresh_las, minsize_las, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Luminal Space'][0].values()))
 
         job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.feature_extraction_plugin}/run',

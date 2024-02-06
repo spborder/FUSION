@@ -448,4 +448,10 @@ class CODEXSlide(DSASlide):
         
         return frame_properties
 
+    def update_url_style(self,channel,color_options):
+
+        #TODO: Updating style parameter of the frames endpoint
+        # Define what the "color_options" input should be, 
+        
+        return ''
 
