@@ -3288,7 +3288,7 @@ class DownloadHandler:
             return 'manual_rois'
         
         else:
-
+            
             return 'select_ftus'
 
     def zip_data(self,download_data_list):

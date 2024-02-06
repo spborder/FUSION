@@ -3805,7 +3805,6 @@ class FUSION:
             if button_click:
                 if ctx.triggered_id['type'] == 'download-butt':
                     # Download data has to be a dictionary with content and filename keys. The filename extension will vary
-
                     try:
                         os.remove('./assets/FUSION_Download.zip')
                     except OSError:
@@ -3817,6 +3816,16 @@ class FUSION:
                         download_list = self.download_handler.extract_annotations(self.wsi,self.current_slide_bounds, options)
                     elif download_type == 'cell':
                         download_list = self.download_handler.extract_cell(self.current_ftus,options)
+                    elif download_type == 'manual_rois':
+                        #TODO: Find bounding box of all manually annotated regions for current slide, create new image,
+                        # get those files as well as annotations for manual ROIs
+                        download_list = []
+
+                    elif download_type == 'select_ftus':
+                        #TODO: Find all manually selected FTUs, extract image bounding box of those regions,
+                        # create binary mask for each one, save along with cell data if needed
+                        download_list = []
+
                     else:
                         print('Working on it!')
                         download_list = []
