@@ -3668,6 +3668,9 @@ class FUSION:
                 # After selecting slide metadata, users select which labels they want to keep slide-level metadata
                 # names of slides, disease label (if there), numbers and names of FTUs, tissue type, omics type, per-FTU properties
 
+                #TODO: Get rid of options here, just download all the metadata for current slides
+                # Except nested features?
+
                 child = dbc.Card([
                     dbc.Label('Select per-slide properties:'),
                     dbc.Row(

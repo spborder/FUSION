@@ -3414,6 +3414,8 @@ class DownloadHandler:
         # Main_Cell_Types is a pd.DataFrame with a column for every cell type and an index of the FTU label
         # Cell states is a dictionary of pd.DataFrames with a column for every cell state and an index of the FTU label for each main cell type
 
+        #TODO: Update for CODEX
+
         # Formatting for downloads
         download_data = []
         for ftu in list(intersecting_ftus.keys()):
@@ -3458,6 +3460,8 @@ class DownloadHandler:
         #    'type':'FeatureCollection',
         #    'features': []
         #}
+
+        #TODO: make this flexible for CODEX images as well
 
         download_data = []
 
@@ -3537,6 +3541,8 @@ class DownloadHandler:
         return download_data
 
     def extract_select_ftus(self,current_slide,dataset_handler,options):
+
+        #TODO: Update this for CODEX images
 
         # Extracting select ftus image/cell info
         download_data = []
