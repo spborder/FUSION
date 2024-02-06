@@ -431,9 +431,6 @@ class CODEXSlide(DSASlide):
         for frame in range(0,self.n_frames):
             print(f'Working on frame {frame} of {self.n_frames}')
             # Get the image region associated with that frame
-            #TODO: Get a specific frame here, verify type is uint8
-            #image_region = self.girder_handler.get_image_region(self.item_id,slide_coords_list,frame_index=frame)
-            
             # Or just get the histogram for that channel? not sure if this can be for a specific image region
             image_histogram = self.girder_handler.gc.get(f'/item/{self.item_id}/tiles/histogram',
                                                          parameters = {

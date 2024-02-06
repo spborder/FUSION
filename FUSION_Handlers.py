@@ -3241,6 +3241,11 @@ class GirderHandler:
 
         return user_folder_file
 
+    def add_slide_metadata(self,item_id,metadata_dict):
+
+        # Adding slide-level metadata from upload page
+        self.gc.put(f'/item/{item_id}/metadata',parameters={'metadata':json.dumps(metadata_dict)})
+
 
     """
     def get_cli_input_list(self,cli_id):

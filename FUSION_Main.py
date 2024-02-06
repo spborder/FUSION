@@ -3938,6 +3938,7 @@ class FUSION:
             ])
         
             self.upload_check = {'WSI':False,'Omics':False}
+            self.current_upload_type = 'Visium'
         
         elif upload_type =='Regular':
             # Regular slide with no --omics
@@ -3962,6 +3963,32 @@ class FUSION:
             ])
         
             self.upload_check = {'WSI':False}
+            self.current_upload_type = 'Regular'
+
+        elif upload_type == 'CODEX':
+
+            # CODEX uploads include histology and multi-frame CODEX image (or just CODEX?)
+            upload_reqs = html.Div([
+                dbc.Row([
+                    html.Div(
+                        id = {'type': 'wsi-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload Whole Slide Image (CODEX) Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-upload','index':0},
+                                uploadComplete = False,
+                                baseurl = self.dataset_handler.apiUrl,
+                                parentId = parentId,
+                                filetypes = ['svs','ndpi','scn','tiff','tif']
+                            )
+                        ],
+                        style = {'marginBottom':'10px','display':'inline-block'}
+                    )
+                ],align='center')
+            ])
+
+            self.upload_check = {'WSI':False}
+            self.current_upload_type = 'CODEX'
         
         self.upload_wsi_id = None
         self.upload_omics_id = None
@@ -4069,6 +4096,14 @@ class FUSION:
 
                     self.upload_check['WSI'] = True
 
+                    # Adding metadata to the uploaded slide
+                    self.dataset_handler.add_slide_metadata(
+                        item_id = self.upload_wsi_id,
+                        metadata_dict = {
+                            'Spatial Omics Type': self.current_upload_type
+                        }
+                    )
+
                 else:
                     wsi_upload_children = [
                         dbc.Alert('WSI Upload Failure! Accepted file types include svs, ndpi, scn, tiff, and tif',color='danger'),
@@ -4160,6 +4195,7 @@ class FUSION:
                 )
             )
 
+            #TODO: Replace this with editable metadata adding table
             slide_qc_results = dash_table.DataTable(
                 id = {'type':'slide-qc-table','index':0},
                 columns = [{'name':i, 'id': i, 'deletable':False, 'selectable':True} for i in slide_qc_table],
