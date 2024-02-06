@@ -3819,7 +3819,7 @@ class FUSION:
                     elif download_type == 'manual_rois':
                         #TODO: Find bounding box of all manually annotated regions for current slide, create new image,
                         # get those files as well as annotations for manual ROIs
-                        download_list = []
+                        download_list = self.download_handler.extract_manual_rois(self.wsi,self.dataset_handler,options)
 
                     elif download_type == 'select_ftus':
                         #TODO: Find all manually selected FTUs, extract image bounding box of those regions,

@@ -3288,7 +3288,7 @@ class DownloadHandler:
             return 'manual_rois'
         
         else:
-            
+
             return 'select_ftus'
 
     def zip_data(self,download_data_list):
@@ -3335,18 +3335,12 @@ class DownloadHandler:
 
                 d['content'].to_csv(save_path)
             
-            """
-            elif file_ext == 'xlsx':
-                # If it's supposed to be an excel file, include sheet name as a key
-                if not os.path.exists(save_path):
-                    with pd.ExcelWriter(save_path,mode='w') as writer:
-                        d['content'].to_excel(writer,sheet_name=d['sheet'],engine='openpyxl')
-                        writer.close()
-                else:
-                    with pd.ExcelWriter(save_path,mode='a') as writer:
-                        d['content'].to_excel(writer,sheet_name=d['sheet'],engine='openpyxl')
-                        writer.close()
-            """
+            elif file_ext in ['tiff','png']:
+                
+                # Maybe this will work?
+                #TODO: test this for larger ROIs
+                Image.fromarray(d['content']).save(save_path)
+
         # Writing temporary data to a zip file
         with zipfile.ZipFile(output_file,'w', zipfile.ZIP_DEFLATED) as zip:
             for file in os.listdir('./assets/FUSION_Download/'):
@@ -3457,11 +3451,165 @@ class DownloadHandler:
 
         return download_data
 
-    """
-    def extract_ftu(self, slide, data):
-    
-    """
-    """
+    def extract_manual_rois(self, current_slide, dataset_handler, options):
 
-    def extract_manual(self, slide, data):
-    """
+        # Getting manual ROIs from current_slide object
+        #total_geojson = {
+        #    'type':'FeatureCollection',
+        #    'features': []
+        #}
+
+        download_data = []
+
+        # Initializing bounding box
+        if 'Image' in options:
+            bounding_box = {'minx':0,'miny':0,'maxx':0,'maxy':0}
+
+            for m in current_slide.manual_rois:
+
+                # Getting geojson property for manual ROI
+                m_geojson = m['geojson']
+
+                # Scaling coordinates to slide coordinates
+                slide_coordinates = current_slide.convert_map_coords(m_geojson['geometry']['coordinates'])
+                
+                # Checking with current bounding box (pretty sure the geojson is X,Y)
+                slide_coord_array = np.array(slide_coordinates)
+                bounding_box['minx'] = np.minimum(bounding_box['minx'],np.min(slide_coord_array[:,0]))
+                bounding_box['miny'] = np.minimum(bounding_box['miny'],np.min(slide_coord_array[:,1]))
+                bounding_box['maxx'] = np.maximum(bounding_box['maxx'],np.max(slide_coord_array[:,0]))
+                bounding_box['maxy'] = np.maximum(bounding_box['maxy'],np.max(slide_coord_array[:,1]))
+
+                # Replacing coordinates in m_geojson
+                #m_geojson['geometry']['coordinates'] = slide_coordinates
+                #total_geojson['features'].append(m_geojson)
+
+            # Now extracting that image region from the bounding box
+            full_image_region = dataset_handler.get_image_region(
+                current_slide.item_id,
+                [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']]
+            )
+
+            download_data.append({
+                'filename':f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Manual_ROIs.tiff',
+                'content': full_image_region
+            })
+
+        if 'Cell' in options:
+
+            # Getting cell type info from the manual ROI geojsons
+            cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
+            cell_data = []
+            cell_state_data = []
+            for m_idx,m in enumerate(current_slide.manual_rois):
+                if 'Main_Cell_Types' in m['geojson']['features'][0]['properties']:
+                    cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
+                    cell_types_data['Name'] = f'Manual_ROI_{m_idx+1}'
+
+                    cell_state_data.append(m['geojson']['features'][0]['properties']['Cell_States'])
+
+                    cell_data.append(cell_types_data)
+
+            main_cell_types_df = pd.DataFrame.from_records(cell_data)
+            download_data.append({
+                'filename': cell_filename,
+                'sheet':'Main_Cell_Types',
+                'content': main_cell_types_df
+            })
+
+            # Now getting cell state info for each cell type
+            for m in main_cell_types_df.columns.tolist():
+                if not m=='Name':
+
+                    # Pulling that main cell types cell state info from each manual ROI
+                    # This should be a list of dictionaries for each manual ROI 
+                    m_cell_state = [i[m] for i in cell_state_data]
+                    
+                    m_cell_state_df = pd.DataFrame.from_records(m_cell_state)
+                    m_cell_state_df['Name'] = [f'Manual_ROI_{i+1}' for i in range(0,len(current_slide.manual_rois))]
+
+                    download_data.append({
+                        'filename': cell_filename,
+                        'sheet': m,
+                        'content': m_cell_state_df
+                    })
+
+        return download_data
+
+    def extract_select_ftus(self,current_slide,dataset_handler,options):
+
+        # Extracting select ftus image/cell info
+        download_data = []
+
+        for s_idx, s in enumerate(current_slide.marked_ftus):
+
+            # Checking if including image data
+            if 'Image' in options:
+                # Pulling out the coordinates from the geojson
+
+                s_coords = current_slide.convert_map_coords(s['geojson']['features'][0]['geometry']['coordinates'])
+                s_coords_array = np.array(s_coords)
+
+                # Getting bounding box for this structure
+                min_x = np.min(s_coords_array[:,0])
+                min_y = np.min(s_coords_array[:,1])
+                max_x = np.max(s_coords_array[:,0])
+                max_y = np.max(s_coords_array[:,1])
+
+                # Scaling coordinates (for saving boundary mask)
+                #TODO: Saving bounding box image
+                scaled_coords = [
+                    [i[0]-min_x,i[1]-min_y]
+                    for i in s_coords
+                ]
+
+                image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+
+                download_data.append({
+                    'filename': f'Marked_FTU_{s_idx+1}.png',
+                    'content': image
+                })
+
+            if 'Cell' in options:
+                # Pulling out cell type info for marked ftus
+                cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
+                cell_data = []
+                cell_state_data = []
+                for m_idx,m in enumerate(current_slide.marked_ftus):
+                    if 'Main_Cell_Types' in m['geojson']['features'][0]['properties']:
+                        cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
+                        cell_types_data['Name'] = f'Marked_FTU_{m_idx+1}'
+
+                        cell_state_data.append(m['geojson']['features'][0]['properties']['Cell_States'])
+
+                        cell_data.append(cell_types_data)
+
+                main_cell_types_df = pd.DataFrame.from_records(cell_data)
+                download_data.append({
+                    'filename': cell_filename,
+                    'sheet':'Main_Cell_Types',
+                    'content': main_cell_types_df
+                })
+
+                # Now getting cell state info for each cell type
+                for m in main_cell_types_df.columns.tolist():
+                    if not m=='Name':
+
+                        # Pulling that main cell types cell state info from each manual ROI
+                        # This should be a list of dictionaries for each manual ROI 
+                        m_cell_state = [i[m] for i in cell_state_data]
+                        
+                        m_cell_state_df = pd.DataFrame.from_records(m_cell_state)
+                        m_cell_state_df['Name'] = [f'Marked_FTU_{i+1}' for i in range(0,len(current_slide.manual_rois))]
+
+                        download_data.append({
+                            'filename': cell_filename,
+                            'sheet': m,
+                            'content': m_cell_state_df
+                        })
+
+
+        return download_data
+
+
+
