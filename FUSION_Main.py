@@ -46,7 +46,7 @@ import time
 
 from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler
-from FUSION_Prep import PrepHandler
+from FUSION_Prep import PrepHandler, CODEXPrep, VisiumPrep, Prepper
 
 from upload_component import UploadComponent
 
@@ -3668,15 +3668,12 @@ class FUSION:
                 # After selecting slide metadata, users select which labels they want to keep slide-level metadata
                 # names of slides, disease label (if there), numbers and names of FTUs, tissue type, omics type, per-FTU properties
 
-                #TODO: Get rid of options here, just download all the metadata for current slides
-                # Except nested features?
-
                 child = dbc.Card([
                     dbc.Label('Select per-slide properties:'),
                     dbc.Row(
                         dcc.Dropdown(
-                            ['FTU Properties', 'Tissue Type','Omics Type','Slide Metadata', 'FTU Counts'],
-                            ['FTU Properties', 'Tissue Type','Omics Type','Slide Metadata', 'FTU Counts'],
+                            [i['name'] for i in self.current_slides],
+                            [i['name'] for i in self.current_slides],
                             multi=True,
                             id = {'type':'download-opts','index':options_idx} 
                         ),style = {'marginBottom':'20px'}
