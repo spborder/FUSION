@@ -1748,8 +1748,8 @@ class LayoutHandler:
         # Slide QC card:
         slide_qc_card = dbc.Card([
             dbc.CardHeader([
-                'Slide Quality Control Results',
-                self.gen_info_button('HistoQC-derived metrics for slide quality. These can be used to determine resulting quality of segmentation results')
+                'Slide Quality Control',
+                self.gen_info_button('Check uploaded slide thumbnail and add metadata. Add the name of the metadata and the value (e.g. for adding a disease label, type "Disease" in the Metadata Name column and the disease in the Value column).')
                 ]),
             dbc.CardBody([
                 dbc.Row([
@@ -1761,12 +1761,22 @@ class LayoutHandler:
                         md = 12
                     )
                 ],align='center'),
+                html.Hr(),
+                html.H3('Add Slide-level Metadata'),
                 dbc.Row([
                     dbc.Col(
                         html.Div(
                             id='slide-qc-results',
                             children = []
                         )
+                    )
+                ]),
+                dbc.Row([
+                    dbc.Button(
+                        'Update Metadata',
+                        id = {'type':'add-slide-metadata','index':0},
+                        className = 'd-grid mx-auto',
+                        disabled=False
                     )
                 ])
             ])

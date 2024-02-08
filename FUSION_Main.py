@@ -853,6 +853,14 @@ class FUSION:
             prevent_initial_call=True
         )(self.upload_data)
 
+        # Adding slide metadata
+        self.app.callback(
+            Input({'type':'add-slide-metadata','index':ALL},'n_clicks'),
+            State({'type':'slide-qc-table','index':ALL},'data'),
+            Output({'type':'slide-qc-table','index':ALL},'data'),
+            prevent_initial_call = True
+        )(self.add_slide_metadata)
+
         # Starting segmentation for selected structures
         self.app.callback(
             output = [
@@ -4192,8 +4200,7 @@ class FUSION:
         if all([self.upload_check[i] for i in self.upload_check]):
             print('All set!')
 
-            slide_thumbnail, slide_qc_table = self.slide_qc(self.upload_wsi_id)
-            print(slide_qc_table)
+            slide_thumbnail = self.dataset_handler.get_slide_thumbnail(self.upload_wsi_id)
 
             if 'Omics' in self.upload_check:
                 omics_upload_children = [
@@ -4213,21 +4220,17 @@ class FUSION:
                 )
             )
 
-            #TODO: Replace this with editable metadata adding table
-            slide_qc_results = dash_table.DataTable(
+            # This slide_meta is a dictionary which should just have the "Spatial Omics Type"
+            slide_meta = self.dataset_handler.gc.get(f'/item/{self.upload_wsi_id}')['meta']
+            # Now create the dataframe with columns like "metadata name" "value"
+            slide_meta_df = pd.DataFrame({'Metadata Name':list(slide_meta.keys())+[''],'Value':list(slide_meta.values())+['']})
+
+            slide_metadata_table = dash_table.DataTable(
                 id = {'type':'slide-qc-table','index':0},
-                columns = [{'name':i, 'id': i, 'deletable':False, 'selectable':True} for i in slide_qc_table],
-                data = slide_qc_table.to_dict('records'),
-                editable=False,
-                filter_action='native',
-                sort_action='native',
-                sort_mode='multi',
-                column_selectable = 'single',
-                row_selectable = 'multi',
-                row_deletable = False,
-                selected_columns = [],
-                selected_rows = [],
-                page_action = 'native',
+                columns = [{'name':i, 'id': i, 'deletable':False, 'selectable':True} for i in slide_meta_df],
+                data = slide_meta_df.to_dict('records'),
+                editable=True,
+                row_deletable = True,
                 page_current = 0,
                 page_size = 10,
                 style_cell = {
@@ -4239,7 +4242,7 @@ class FUSION:
                     {
                         column:{'value':str(value), 'type':'markdown'}
                         for column,value in row.items()
-                    } for row in slide_qc_table.to_dict('records')
+                    } for row in slide_meta_df.to_dict('records')
                 ],
                 tooltip_duration = None
             )
@@ -4249,9 +4252,9 @@ class FUSION:
             disable_upload_type = True
             
             if 'Omics' in self.upload_check:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
+                return slide_metadata_table, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
             else:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
+                return slide_metadata_table, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
         else:
 
             disable_upload_type = True
@@ -4260,21 +4263,51 @@ class FUSION:
                 return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, no_update
             else:
                 return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, no_update
-
-    def slide_qc(self, upload_id):
-
-        #try:
-        #collection_contents = self.dataset_handler.get_collection_items(upload_id)
-        thumbnail = self.dataset_handler.get_slide_thumbnail(upload_id)
-        collection_contents = self.dataset_handler.gc.get(f'/item/{upload_id}')
-
-        #histo_qc_run = self.dataset_handler.run_histo_qc(self.latest_upload_folder['id'])
-
-        #TODO: Activate the HistoQC plugin from here and return some metrics
-        histo_qc_output = pd.DataFrame(collection_contents)
-
-        return thumbnail, histo_qc_output
     
+    def add_slide_metadata(self, button_click, table_data):
+
+        # Adding slide metadata according to user inputs
+        if not button_click:
+            raise exceptions.PreventUpdate
+        
+        # Formatting the data so instead of a list of dicts it's one dictionary
+        table_data = table_data[0]
+        # Making it so you can't delete this metadata
+        slide_metadata = {
+            'Spatial Omics Type': self.current_upload_type
+        }
+        add_row = True
+        for m in table_data:
+            if not m['Value']=='':
+                slide_metadata[m['Metadata Name']] = m['Value']
+            else:
+                add_row = False
+
+        # Checking current slide metadata and seeing if it differs from "slide_metadata"
+        current_slide_metadata = self.dataset_handler.gc.get(f'/item/{self.upload_wsi_id}')['meta']
+
+        if not list(slide_metadata.keys())==list(current_slide_metadata.keys()):
+            # Finding the ones that are different
+            add_keys = [i for i in list(slide_metadata.keys()) if i not in list(current_slide_metadata.keys())]
+            rm_keys = [i for i in list(current_slide_metadata.keys()) if i not in list(slide_metadata.keys())]
+
+            if len(rm_keys)>0:
+                for m in rm_keys:
+                    self.dataset_handler.gc.delete(
+                        f'/item/{self.upload_wsi_id}/metadata',
+                        parameters = {
+                            'fields':f'["{m}"]'
+                        }
+                    )
+
+            # Adding metadata through GirderHandler
+            if add_row:
+                self.dataset_handler.add_slide_metadata(self.upload_wsi_id,slide_metadata)
+                # Adding new empty row
+                table_data.append({'Metadata Name':'', 'Value': ''})
+
+        return [table_data]
+
     def start_segmentation(self,structure_selection,go_butt):
 
         # Starting segmentation job and initializing dcc.Interval object to check logs
