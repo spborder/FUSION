@@ -5293,8 +5293,8 @@ class FUSION:
                     className = 'd-grid mx-auto',
                     id = {'type':'recording-upload','index':0},
                     target='_blank',
-                    href = '',
-                    disabled = True
+                    href = 'https://trailblazer.app.box.com/f/f843d7b1da204b538dd3173c81ce66cf',
+                    disabled = False
                 ),
                 html.Div(id = {'type':'questions-submit-alert','index':0})
                 ])
@@ -5432,7 +5432,9 @@ def app(*args):
     initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
 
     # For testing, setting initial slide
-    initial_collection_contents = initial_collection_contents[0:2]
+    # Avoiding image with elbow thing
+    default_images = ['XY04_IU-21-020F.svs','XY03_IU-21-019F.svs']
+    initial_collection_contents = [i for i in initial_collection_contents if i['name'] in default_images]
     
     # Saving & organizing relevant id's in GirderHandler
     print('Getting initial items metadata')
