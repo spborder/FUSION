@@ -1713,7 +1713,8 @@ class LayoutHandler:
             {'label':'Regular Histology','value':'Regular','disabled':False},
             {'label':'10x Visium','value':'Visium','disabled':False},
             {'label':'Co-Detection by Indexing (CODEX)','value':'CODEX','disabled':True},
-            {'label':'CosMx','value':'CoxMx','disabled':True}
+            {'label':'CosMx','value':'CosMx','disabled':True},
+            {'label':'GeoMx','value':'GeoMx','disabled':True}
         ]
         collection_list = [i['name'] for i in dataset_handler.get_collections()]
         collection_list += ['New Collection']

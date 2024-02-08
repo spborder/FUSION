@@ -44,7 +44,7 @@ class PrepHandler:
         # Dictionary containing model and item id's
         self.model_zoo = {
             'MultiCompartment_Model':{
-                'plugin_name':'sayatmimar_histo-cloud_MultiCompartmentSegment_2/MultiCompartmentSegment',
+                'plugin_name':'samborder2256_multicomp/MultiCompartmentSegment',
                 'model_id':'648123761019450486d13dce',
                 'structures':['Cortical interstitium','Medullary interstitium','Glomeruli','Sclerotic Glomeruli','Tubules','Arteries and Arterioles']
             },
@@ -428,7 +428,7 @@ class Prepper:
         # Dictionary containing model and item id's
         self.model_zoo = {
             'MultiCompartment_Model':{
-                'plugin_name':'sayatmimar_histo-cloud_MultiCompartmentSegment_2/MultiCompartmentSegment',
+                'plugin_name':'samborder2256_multicomp/MultiCompartmentSegment',
                 'model_id':'648123761019450486d13dce',
                 'structures':['Cortical interstitium','Medullary interstitium','Glomeruli','Sclerotic Glomeruli','Tubules','Arteries and Arterioles']
             },
@@ -696,7 +696,7 @@ class Prepper:
                 dbc.Card([
                     dbc.CardHeader('Feature extraction progress'),
                     dbc.CardBody([
-                        html.Div('Record logs/progress here',id={'type':'feat-logs','index':0})
+                        html.Div('Feature Extraction Logs',id={'type':'feat-logs','index':0})
                     ])
                 ])
             ])

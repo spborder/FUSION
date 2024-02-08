@@ -5432,7 +5432,7 @@ def app(*args):
     initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
 
     # For testing, setting initial slide
-    # Avoiding image with elbow thing
+    # Avoiding image with elbow (permeabilization artifact present)
     default_images = ['XY04_IU-21-020F.svs','XY03_IU-21-019F.svs']
     initial_collection_contents = [i for i in initial_collection_contents if i['name'] in default_images]
     
