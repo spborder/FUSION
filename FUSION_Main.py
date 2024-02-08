@@ -44,9 +44,9 @@ import dash_mantine_components as dmc
 from timeit import default_timer as timer
 import time
 
-from FUSION_WSI import DSASlide
+from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler
-from FUSION_Prep import PrepHandler
+from FUSION_Prep import PrepHandler, CODEXPrep, VisiumPrep, Prepper
 
 from upload_component import UploadComponent
 
@@ -548,7 +548,7 @@ class FUSION:
         # Loading new tutorial slides
         self.app.callback(
             Input({'type':'tutorial-tabs','index':ALL},'active_tab'),
-            Output('tutorial-content','children'),
+            Output({'type':'tutorial-content','index':ALL},'children'),
         )(self.update_tutorial_slide)
         
         # Updating questions in question tab
@@ -582,6 +582,7 @@ class FUSION:
             [Input('cell-drop','value'),Input('vis-slider','value'),
              Input('filter-slider','value'),Input({'type':'ftu-bound-color','index':ALL},'value'),
              Input({'type':'cell-sub-drop','index':ALL},'value')],
+            State('ftu-bound-opts','active_tab'),
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -822,7 +823,8 @@ class FUSION:
         self.app.callback(
             Input({'type':'tutorial-name','index':ALL},'n_clicks'),
             [Output('welcome-tutorial','children'),
-             Output('tutorial-name','children')]
+             Output('tutorial-name','children'),
+             Output({'type':'tutorial-name','index':ALL},'style')]
         )(self.get_tutorial)
 
     def upload_callbacks(self):
@@ -850,6 +852,14 @@ class FUSION:
              Output('plugin-ga-track','children')],
             prevent_initial_call=True
         )(self.upload_data)
+
+        # Adding slide metadata
+        self.app.callback(
+            Input({'type':'add-slide-metadata','index':ALL},'n_clicks'),
+            State({'type':'slide-qc-table','index':ALL},'data'),
+            Output({'type':'slide-qc-table','index':ALL},'data'),
+            prevent_initial_call = True
+        )(self.add_slide_metadata)
 
         # Starting segmentation for selected structures
         self.app.callback(
@@ -975,8 +985,16 @@ class FUSION:
             variant = 'dark'
         )
 
+        # Returning style list for html.A components
+        selected_style = {
+            'background':'rgba(255,255,255,0.8)',
+            'box-shadow':'0 0 10px rgba(0,0,0,0.2)',
+            'border-radius':'5px',
+        }
+        style_list = [{} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(click_key))]
 
-        return new_slides, html.H3(tutorial_name)
+
+        return new_slides, html.H3(tutorial_name), style_list
 
     def update_plotting_metadata(self):
 
@@ -1410,15 +1428,20 @@ class FUSION:
             self.current_slide_bounds = None
 
             raise exceptions.PreventUpdate
-
+        
         # Making a box-poly from the bounds
         if current_tab=='cell-compositions-tab':
             if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
                 intersecting_ftus = {}
-                if 'Spots' in self.current_ftu_layers:
+                if self.wsi.spatial_omics_type=='Visium':
+                    # Returns dictionary of intersecting spot properties
                     intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
                     intersecting_ftus['Spots'] = intersecting_spots
+                elif self.wsi.spatial_omics_type=='CODEX':
+                    # Returns dictionary of intersecting tissue frame intensities
+                    intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box)
+                    intersecting_ftus['Tissue'] = intersecting_region
 
                 for ftu in self.current_ftu_layers:
                     if not ftu=='Spots':
@@ -1439,66 +1462,136 @@ class FUSION:
 
                     tab_list = []
                     self.fusey_data = {}
-                    #counts_data = pd.DataFrame()
                     for f_idx,f in enumerate(included_ftus):
                         counts_data = pd.DataFrame()
 
-                        counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
-                        if len(counts_dict_list)>0:
-                            counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
+                        if self.wsi.spatial_omics_type=='Visium':
+                            counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
 
+                            first_chart_label = f'{f} Cell Type Proportions'
+
+                            if len(counts_dict_list)>0:
+                                counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
+                                counts_data.columns = [f]
+
+
+                        elif self.wsi.spatial_omics_type=='CODEX':
+                            counts_dict_list = [intersecting_ftus['Tissue']]
+
+                            first_chart_label = 'Channel Intensity Histogram'
+
+                            if f=='Tissue':
+                                # Getting the first channel
+                                counts_data = intersecting_ftus['Tissue'][self.wsi.channel_names[0]]
+                                # This returns a dictionary with bin_edges and hist
+                                counts_data = pd.DataFrame({'hist':[0]+counts_data['hist'],'bin_edges':counts_data['bin_edges']})
+                            
                         if not counts_data.empty:
-                            counts_data.columns = [f]
                             
-                            # Storing some data for Fusey to use :3
-                            structure_number = len(counts_dict_list)
-                            normalized_counts = counts_data[f]/counts_data[f].sum()
+                            if self.wsi.spatial_omics_type=='Visium':
+                                # Storing some data for Fusey to use :3
+                                structure_number = len(counts_dict_list)
+                                normalized_counts = counts_data[f]/counts_data[f].sum()
 
-                            # Normalizing to sum to 1
-                            counts_data[f] = counts_data[f]/counts_data[f].sum()
-                            # Only getting top n
-                            counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
-                            counts_data = counts_data.reset_index()
+                                # Normalizing to sum to 1
+                                counts_data[f] = counts_data[f]/counts_data[f].sum()
+                                # Only getting top n
+                                counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
+                                counts_data = counts_data.reset_index()
 
-                            f_pie = px.pie(counts_data,values=f,names='index')
-                            f_pie.update_traces(textposition='inside')
-                            f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
+                                f_pie = px.pie(counts_data,values=f,names='index')
+                                f_pie.update_traces(textposition='inside')
+                                f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
 
-                            top_cell = counts_data['index'].tolist()[0]
+                            elif self.wsi.spatial_omics_type=='CODEX':
+                                # For CODEX images, have the tissue tab be one histogram
+                                if f=='Tissue':
+                                    
+                                    # Getting one of the channels. Maybe just the first one
+                                    f_pie = px.bar(
+                                        data_frame = counts_data,
+                                        x = 'bin_edges',
+                                        y = 'hist'
+                                    )
 
-                            pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
-                            
-                            pct_states = pct_states.reset_index()
-                            pct_states.columns = ['Cell State','Proportion']
-                            pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+                            if self.wsi.spatial_omics_type=='Visium':
+                                
+                                # Finding cell state proportions per main cell type in the current region
+                                second_plot_label = f'{f} Cell State Proportions'
 
-                            # Fusey data
-                            self.fusey_data[f] = {
-                                'structure_number':structure_number,
-                                'normalized_counts':normalized_counts,
-                                'pct_states':pct_states,
-                                'top_cell':top_cell
-                            }
-                            state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
+                                top_cell = counts_data['index'].tolist()[0]
 
-                            f_tab = dbc.Tab(
-                                dbc.Row([
-                                    dbc.Col([
-                                        dbc.Label(f'{f} Cell Type Proportions'),
-                                        dcc.Graph(
-                                            id = {'type':'ftu-cell-pie','index':f_idx},
-                                            figure = go.Figure(f_pie)
+                                pct_states = pd.DataFrame.from_records([i['Cell_States'][top_cell] for i in intersecting_ftus[f]if 'Cell_States' in i]).sum(axis=0).to_frame()
+                                
+                                pct_states = pct_states.reset_index()
+                                pct_states.columns = ['Cell State','Proportion']
+                                pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+
+                                # Fusey data
+                                self.fusey_data[f] = {
+                                    'structure_number':structure_number,
+                                    'normalized_counts':normalized_counts,
+                                    'pct_states':pct_states,
+                                    'top_cell':top_cell
+                                }
+                                state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
+
+                                f_tab = dbc.Tab(
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Label(first_chart_label),
+                                            dcc.Graph(
+                                                id = {'type':'ftu-cell-pie','index':f_idx},
+                                                figure = go.Figure(f_pie)
+                                            )
+                                        ],md=6),
+                                        dbc.Col([
+                                            dbc.Label(second_plot_label),
+                                            dcc.Graph(
+                                                id = {'type':'ftu-state-bar','index':f_idx},
+                                                figure = go.Figure(state_bar)
+                                            )
+                                        ],md=6)
+                                    ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
+                                )
+
+
+                            elif self.wsi.spatial_omics_type=='CODEX':
+
+                                # Returning blank for now
+                                state_bar = []
+                                second_plot_label = 'This is CODEX'
+
+                                self.fusey_data['Tissue'] = {}
+
+                                f_tab = dbc.Tab([
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Label('Select a Channel Name to view Histogram:',html_for={'type':'frame-histogram-drop','index':0}),
+                                            md = 6, align = 'center'
+                                        ),
+                                        dbc.Col(
+                                            dcc.Dropdown(
+                                                options = self.wsi.channel_names,
+                                                value = self.wsi.channel_names[0],
+                                                multi = True,
+                                                id = {'type':'frame-histogram-drop'}
+                                            ),
+                                            md = 6, align = 'center'
                                         )
-                                    ],md=6),
-                                    dbc.Col([
-                                        dbc.Label(f'{f} Cell State Proportions'),
-                                        dcc.Graph(
-                                            id = {'type':'ftu-state-bar','index':f_idx},
-                                            figure = go.Figure(state_bar)
-                                        )
-                                    ],md=6)
-                                ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
-                            )
+                                    ]),
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Label(first_chart_label),
+                                            dcc.Graph(
+                                                id = {'type':'ftu-cell-pie','index':f_idx},
+                                                figure = go.Figure(f_pie)
+                                            )
+                                        ],md=12)
+                                    ])],
+                                    label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
+                                )
+
 
                             tab_list.append(f_tab)
 
@@ -1634,7 +1727,7 @@ class FUSION:
         else:
             self.hex_color_key = {}
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color,cell_sub_val):
+    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color,cell_sub_val,ftu_bound_tab):
 
         print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
 
@@ -1657,20 +1750,20 @@ class FUSION:
         if len(cell_sub_val)==0:
             cell_sub_val = [None]
 
-        if not ftu_color is None:
-            # Getting these to align with the ftu-colors property order
-            current_ftu_colors = list(self.ftu_colors.values())
-            ftu_list = list(self.ftu_colors.keys())
+        if type(ctx.triggered_id)==list:
+            triggered_id = ctx.triggered_id[0]
+        else:
+            triggered_id = ctx.triggered_id
 
-            # Index of which ftu is different
-            new_color = [i for i in range(len(current_ftu_colors)) if current_ftu_colors[i] not in ftu_color]
-            if len(new_color)>0:
-                for n in new_color:
-                    check_for_new = [i for i in ftu_color if i not in current_ftu_colors]
-                    if len(check_for_new)>0:
-                        self.ftu_colors[ftu_list[n]] = check_for_new[0]
-                    
-            self.filter_vals = filter_vals
+        try:
+            if triggered_id['type']=='ftu-bound-color':
+                if not ftu_color is None and not ftu_bound_tab is None:
+                    self.ftu_colors[self.wsi.ftu_names[int(float(ftu_bound_tab.split('-')[-1]))]] = ftu_color[int(float(ftu_bound_tab.split('-')[-1]))]
+        except TypeError:
+            # This is for non-pattern matching components so the ctx.triggered_id is just a str
+            pass
+
+        self.filter_vals = filter_vals
 
         # Extracting cell val if there are sub-properties
         if not cell_val is None:
@@ -1812,7 +1905,6 @@ class FUSION:
                 filter_disable = True
             else:
                 # For other morphometric properties
-                print(cell_val)
                 self.current_cell = cell_val
                 self.update_hex_color_key(cell_val)
 
@@ -1838,9 +1930,7 @@ class FUSION:
             filter_max_val = 1
 
         self.cell_vis_val = vis_val/100
-        print(callback_context.outputs_list)
         n_layers = len(callback_context.outputs_list[0])
-        print(f'n_layers to update: {n_layers}')
         geojson_hideout = [
             {
                 'color_key':self.hex_color_key,
@@ -2278,16 +2368,62 @@ class FUSION:
     def ingest_wsi(self,slide_name):
         
         if not slide_name=='':
+            new_children = []
             print(f'Slide selected: {slide_name}')
             # Find folder containing this slide
             for d in self.dataset_handler.slide_datasets:
                 d_slides = [i['name'] for i in self.dataset_handler.slide_datasets[d]['Slides']]
                 if slide_name in d_slides:
                     # Getting slide item id
-                    slide_id = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]['_id']
+                    slide_info = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]
+                    slide_id = slide_info['_id']
+                    if 'Spatial Omics Type' in slide_info['meta']:
+                        slide_type = slide_info['meta']['Spatial Omics Type']
+                    else:
+                        slide_type = 'Regular'
 
             #TODO: Check for previous manual ROIs or marked FTUs
-            new_slide = DSASlide(slide_name,slide_id,self.dataset_handler,self.ftu_colors,manual_rois=[],marked_ftus=[])
+            if slide_type=='Regular':
+                new_slide = DSASlide(
+                    slide_id,
+                    self.dataset_handler,
+                    self.ftu_colors,
+                    manual_rois=[],
+                    marked_ftus=[]
+                )
+            elif slide_type=='Visium':
+                new_slide = VisiumSlide(
+                    slide_id,
+                    self.dataset_handler,
+                    self.ftu_colors,
+                    manual_rois=[],
+                    marked_ftus=[]
+                )
+            elif slide_type=='CODEX':
+                new_slide = CODEXSlide(
+                    slide_id,
+                    self.dataset_handler,
+                    self.ftu_colors,
+                    manual_rois=[],
+                    marked_ftus=[],
+                    channel_names = {}
+                )
+
+                # Adding the different frames to the layers control object
+                new_children+=[
+                    dl.BaseLayer(
+                        dl.TileLayer(
+                            url = new_slide.channel_tile_url[c_idx],
+                            tileSize = 240
+                        ),
+                        name = c_name,
+                        checked = c_name=='Channel_0'
+                    )
+                    for c_idx,c_name in enumerate(new_slide.channel_names)
+                ]
+
+            print(f'New Slide type: {new_slide.spatial_omics_type}')
+
             self.wsi = new_slide
 
             # Updating in the case that an FTU isn't in the previous set of ftu_colors
@@ -2296,7 +2432,7 @@ class FUSION:
             # Updating overlays colors according to the current cell
             self.update_hex_color_key(self.current_cell)
 
-            new_children = [
+            new_children += [
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(url = f'./assets/slide_annotations/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
@@ -2321,8 +2457,6 @@ class FUSION:
                         name = f'Manual ROI {m_idx}', checked = True, id = new_slide.item_id+f'_manual_roi{m_idx}'
                     )
                 )
-
-            print(f'length of new_children: {len(new_children)}')
 
             new_url = self.wsi.tile_url
             center_point = [0.5*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),0.5*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
@@ -2366,11 +2500,9 @@ class FUSION:
                 for idx, struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-
             return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children
 
         else:
-
             raise exceptions.PreventUpdate
 
     def update_graph_label_children(self,leftover_labels):
@@ -3257,7 +3389,12 @@ class FUSION:
                         # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
                         self.wsi.manual_rois = []
                         self.wsi.marked_ftus = []
-                        self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
+
+                        if not self.wsi.spatial_omics_type=='CODEX':
+                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
+                        else:
+                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
+
                         for geo in new_geojson['features']:
 
                             if not geo['properties']['type'] == 'marker':
@@ -3420,7 +3557,12 @@ class FUSION:
                         # Clearing manual ROIs and reverting overlays
                         self.wsi.manual_rois = []
                         self.wsi.marked_ftus = []
-                        self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)+1]
+
+                        if not self.wsi.spatial_omics_type=='CODEX':
+                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
+                        else:
+                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
+
                         data_select_options = self.layout_handler.data_options
 
                         if not self.current_cell is None:
@@ -3547,8 +3689,8 @@ class FUSION:
                     dbc.Label('Select per-slide properties:'),
                     dbc.Row(
                         dcc.Dropdown(
-                            ['FTU Properties', 'Tissue Type','Omics Type','Slide Metadata', 'FTU Counts'],
-                            ['FTU Properties', 'Tissue Type','Omics Type','Slide Metadata', 'FTU Counts'],
+                            [i['name'] for i in self.current_slides],
+                            [i['name'] for i in self.current_slides],
                             multi=True,
                             id = {'type':'download-opts','index':options_idx} 
                         ),style = {'marginBottom':'20px'}
@@ -3680,7 +3822,6 @@ class FUSION:
             if button_click:
                 if ctx.triggered_id['type'] == 'download-butt':
                     # Download data has to be a dictionary with content and filename keys. The filename extension will vary
-
                     try:
                         os.remove('./assets/FUSION_Download.zip')
                     except OSError:
@@ -3692,6 +3833,16 @@ class FUSION:
                         download_list = self.download_handler.extract_annotations(self.wsi,self.current_slide_bounds, options)
                     elif download_type == 'cell':
                         download_list = self.download_handler.extract_cell(self.current_ftus,options)
+                    elif download_type == 'manual_rois':
+                        #TODO: Find bounding box of all manually annotated regions for current slide, create new image,
+                        # get those files as well as annotations for manual ROIs
+                        download_list = self.download_handler.extract_manual_rois(self.wsi,self.dataset_handler,options)
+
+                    elif download_type == 'select_ftus':
+                        #TODO: Find all manually selected FTUs, extract image bounding box of those regions,
+                        # create binary mask for each one, save along with cell data if needed
+                        download_list = []
+
                     else:
                         print('Working on it!')
                         download_list = []
@@ -3813,6 +3964,7 @@ class FUSION:
             ])
         
             self.upload_check = {'WSI':False,'Omics':False}
+            self.current_upload_type = 'Visium'
         
         elif upload_type =='Regular':
             # Regular slide with no --omics
@@ -3837,6 +3989,32 @@ class FUSION:
             ])
         
             self.upload_check = {'WSI':False}
+            self.current_upload_type = 'Regular'
+
+        elif upload_type == 'CODEX':
+
+            # CODEX uploads include histology and multi-frame CODEX image (or just CODEX?)
+            upload_reqs = html.Div([
+                dbc.Row([
+                    html.Div(
+                        id = {'type': 'wsi-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload Whole Slide Image (CODEX) Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-upload','index':0},
+                                uploadComplete = False,
+                                baseurl = self.dataset_handler.apiUrl,
+                                parentId = parentId,
+                                filetypes = ['svs','ndpi','scn','tiff','tif']
+                            )
+                        ],
+                        style = {'marginBottom':'10px','display':'inline-block'}
+                    )
+                ],align='center')
+            ])
+
+            self.upload_check = {'WSI':False}
+            self.current_upload_type = 'CODEX'
         
         self.upload_wsi_id = None
         self.upload_omics_id = None
@@ -3944,6 +4122,14 @@ class FUSION:
 
                     self.upload_check['WSI'] = True
 
+                    # Adding metadata to the uploaded slide
+                    self.dataset_handler.add_slide_metadata(
+                        item_id = self.upload_wsi_id,
+                        metadata_dict = {
+                            'Spatial Omics Type': self.current_upload_type
+                        }
+                    )
+
                 else:
                     wsi_upload_children = [
                         dbc.Alert('WSI Upload Failure! Accepted file types include svs, ndpi, scn, tiff, and tif',color='danger'),
@@ -4014,8 +4200,7 @@ class FUSION:
         if all([self.upload_check[i] for i in self.upload_check]):
             print('All set!')
 
-            slide_thumbnail, slide_qc_table = self.slide_qc(self.upload_wsi_id)
-            print(slide_qc_table)
+            slide_thumbnail = self.dataset_handler.get_slide_thumbnail(self.upload_wsi_id)
 
             if 'Omics' in self.upload_check:
                 omics_upload_children = [
@@ -4035,20 +4220,17 @@ class FUSION:
                 )
             )
 
-            slide_qc_results = dash_table.DataTable(
+            # This slide_meta is a dictionary which should just have the "Spatial Omics Type"
+            slide_meta = self.dataset_handler.gc.get(f'/item/{self.upload_wsi_id}')['meta']
+            # Now create the dataframe with columns like "metadata name" "value"
+            slide_meta_df = pd.DataFrame({'Metadata Name':list(slide_meta.keys())+[''],'Value':list(slide_meta.values())+['']})
+
+            slide_metadata_table = dash_table.DataTable(
                 id = {'type':'slide-qc-table','index':0},
-                columns = [{'name':i, 'id': i, 'deletable':False, 'selectable':True} for i in slide_qc_table],
-                data = slide_qc_table.to_dict('records'),
-                editable=False,
-                filter_action='native',
-                sort_action='native',
-                sort_mode='multi',
-                column_selectable = 'single',
-                row_selectable = 'multi',
-                row_deletable = False,
-                selected_columns = [],
-                selected_rows = [],
-                page_action = 'native',
+                columns = [{'name':i, 'id': i, 'deletable':False, 'selectable':True} for i in slide_meta_df],
+                data = slide_meta_df.to_dict('records'),
+                editable=True,
+                row_deletable = True,
                 page_current = 0,
                 page_size = 10,
                 style_cell = {
@@ -4060,7 +4242,7 @@ class FUSION:
                     {
                         column:{'value':str(value), 'type':'markdown'}
                         for column,value in row.items()
-                    } for row in slide_qc_table.to_dict('records')
+                    } for row in slide_meta_df.to_dict('records')
                 ],
                 tooltip_duration = None
             )
@@ -4070,9 +4252,9 @@ class FUSION:
             disable_upload_type = True
             
             if 'Omics' in self.upload_check:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
+                return slide_metadata_table, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
             else:
-                return slide_qc_results, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
+                return slide_metadata_table, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
         else:
 
             disable_upload_type = True
@@ -4081,21 +4263,51 @@ class FUSION:
                 return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, no_update
             else:
                 return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, no_update
-
-    def slide_qc(self, upload_id):
-
-        #try:
-        #collection_contents = self.dataset_handler.get_collection_items(upload_id)
-        thumbnail = self.dataset_handler.get_slide_thumbnail(upload_id)
-        collection_contents = self.dataset_handler.gc.get(f'/item/{upload_id}')
-
-        #histo_qc_run = self.dataset_handler.run_histo_qc(self.latest_upload_folder['id'])
-
-        #TODO: Activate the HistoQC plugin from here and return some metrics
-        histo_qc_output = pd.DataFrame(collection_contents)
-
-        return thumbnail, histo_qc_output
     
+    def add_slide_metadata(self, button_click, table_data):
+
+        # Adding slide metadata according to user inputs
+        if not button_click:
+            raise exceptions.PreventUpdate
+        
+        # Formatting the data so instead of a list of dicts it's one dictionary
+        table_data = table_data[0]
+        # Making it so you can't delete this metadata
+        slide_metadata = {
+            'Spatial Omics Type': self.current_upload_type
+        }
+        add_row = True
+        for m in table_data:
+            if not m['Value']=='':
+                slide_metadata[m['Metadata Name']] = m['Value']
+            else:
+                add_row = False
+
+        # Checking current slide metadata and seeing if it differs from "slide_metadata"
+        current_slide_metadata = self.dataset_handler.gc.get(f'/item/{self.upload_wsi_id}')['meta']
+
+        if not list(slide_metadata.keys())==list(current_slide_metadata.keys()):
+            # Finding the ones that are different
+            add_keys = [i for i in list(slide_metadata.keys()) if i not in list(current_slide_metadata.keys())]
+            rm_keys = [i for i in list(current_slide_metadata.keys()) if i not in list(slide_metadata.keys())]
+
+            if len(rm_keys)>0:
+                for m in rm_keys:
+                    self.dataset_handler.gc.delete(
+                        f'/item/{self.upload_wsi_id}/metadata',
+                        parameters = {
+                            'fields':f'["{m}"]'
+                        }
+                    )
+
+            # Adding metadata through GirderHandler
+            if add_row:
+                self.dataset_handler.add_slide_metadata(self.upload_wsi_id,slide_metadata)
+                # Adding new empty row
+                table_data.append({'Metadata Name':'', 'Value': ''})
+
+        return [table_data]
+
     def start_segmentation(self,structure_selection,go_butt):
 
         # Starting segmentation job and initializing dcc.Interval object to check logs
@@ -5025,7 +5237,7 @@ class FUSION:
                 )
             ]
 
-            return tutorial_children
+            return [tutorial_children]
         else:
             raise exceptions.PreventUpdate
 
@@ -5114,8 +5326,8 @@ class FUSION:
                     className = 'd-grid mx-auto',
                     id = {'type':'recording-upload','index':0},
                     target='_blank',
-                    href = '',
-                    disabled = True
+                    href = 'https://trailblazer.app.box.com/f/f843d7b1da204b538dd3173c81ce66cf',
+                    disabled = False
                 ),
                 html.Div(id = {'type':'questions-submit-alert','index':0})
                 ])
@@ -5253,7 +5465,9 @@ def app(*args):
     initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
 
     # For testing, setting initial slide
-    initial_collection_contents = initial_collection_contents[0:2]
+    # Avoiding image with elbow (permeabilization artifact present)
+    default_images = ['XY04_IU-21-020F.svs','XY03_IU-21-019F.svs']
+    initial_collection_contents = [i for i in initial_collection_contents if i['name'] in default_images]
     
     # Saving & organizing relevant id's in GirderHandler
     print('Getting initial items metadata')

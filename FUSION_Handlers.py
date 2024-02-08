@@ -733,7 +733,8 @@ class LayoutHandler:
                                             )
                                         ],md=12,align='center')
                                     ],align='center',style={'marginTop':'5px','marginLeft':'10px'})
-                                ], label = struct
+                                ],
+                                label = struct
                             )
                             for idx,struct in enumerate(list(combined_colors_dict.keys()))
                         ]
@@ -1325,7 +1326,7 @@ class LayoutHandler:
                         )
                     ),
                     dbc.CardBody(
-                        html.Div(id = 'tutorial-content',children = [])
+                        html.Div(id = {'type':'tutorial-content','index':0},children = [])
                     )
                 ])
             ],md=6)
@@ -1712,7 +1713,8 @@ class LayoutHandler:
             {'label':'Regular Histology','value':'Regular','disabled':False},
             {'label':'10x Visium','value':'Visium','disabled':False},
             {'label':'Co-Detection by Indexing (CODEX)','value':'CODEX','disabled':True},
-            {'label':'CosMx','value':'CoxMx','disabled':True}
+            {'label':'CosMx','value':'CosMx','disabled':True},
+            {'label':'GeoMx','value':'GeoMx','disabled':True}
         ]
         collection_list = [i['name'] for i in dataset_handler.get_collections()]
         collection_list += ['New Collection']
@@ -1746,8 +1748,8 @@ class LayoutHandler:
         # Slide QC card:
         slide_qc_card = dbc.Card([
             dbc.CardHeader([
-                'Slide Quality Control Results',
-                self.gen_info_button('HistoQC-derived metrics for slide quality. These can be used to determine resulting quality of segmentation results')
+                'Slide Quality Control',
+                self.gen_info_button('Check uploaded slide thumbnail and add metadata. Add the name of the metadata and the value (e.g. for adding a disease label, type "Disease" in the Metadata Name column and the disease in the Value column).')
                 ]),
             dbc.CardBody([
                 dbc.Row([
@@ -1759,12 +1761,22 @@ class LayoutHandler:
                         md = 12
                     )
                 ],align='center'),
+                html.Hr(),
+                html.H3('Add Slide-level Metadata'),
                 dbc.Row([
                     dbc.Col(
                         html.Div(
                             id='slide-qc-results',
                             children = []
                         )
+                    )
+                ]),
+                dbc.Row([
+                    dbc.Button(
+                        'Update Metadata',
+                        id = {'type':'add-slide-metadata','index':0},
+                        className = 'd-grid mx-auto',
+                        disabled=False
                     )
                 ])
             ])
@@ -1923,7 +1935,7 @@ class LayoutHandler:
                                     value = [0.0,50.0,120.0],
                                     marks = {
                                         0.0:{'label':'Luminal Space: 0','style':'rgb(0,255,0)'},
-                                        50.0:{'label':'PAS: 50','style':'rgb(255,0,0)'},
+                                        50.0:{'label':'Eosinophilic: 50','style':'rgb(255,0,0)'},
                                         120.0:{'label':'Nuclei: 120','style':'rgb(0,0,255)'}
                                     },
                                     tooltip = {'placement':'top','always_visible':False},
@@ -2046,19 +2058,21 @@ class LayoutHandler:
                             html.Div(
                                 id = 'welcome-tutorial',
                                 children=[
-                                    dbc.Carousel(
-                                        id = 'welcome-tutorial-slides',
-                                        items = [
-                                            {
-                                                'key':f'{i+1}',
-                                                'src':f'./static/tutorials/FUSION Introduction/slide_{i}.svg',
-                                                'img_style':{'height':'60vh','width':'80%'}
-                                                }
-                                            for i in range(len(os.listdir('./static/tutorials/FUSION Introduction/')))
-                                        ],
-                                        controls = True,
-                                        indicators = True,
-                                        variant = 'dark'
+                                    dcc.Loading(
+                                        dbc.Carousel(
+                                            id = 'welcome-tutorial-slides',
+                                            items = [
+                                                {
+                                                    'key':f'{i+1}',
+                                                    'src':f'./static/tutorials/FUSION Introduction/slide_{i}.svg',
+                                                    'img_style':{'height':'60vh','width':'80%'}
+                                                    }
+                                                for i in range(len(os.listdir('./static/tutorials/FUSION Introduction/')))
+                                            ],
+                                            controls = True,
+                                            indicators = True,
+                                            variant = 'dark'
+                                        )
                                     )
                                 ]
                             ),
@@ -2620,7 +2634,7 @@ class GirderHandler:
         for f in np.unique(folder_ids):
             if f not in list(self.slide_datasets.keys()):
                 folder_name = self.gc.get(f'/folder/{f}')['name']
-                if 'FUSION_Upload' in folder_name:
+                if not folder_name=='Public':
 
                     self.slide_datasets[f] = {
                         'name':folder_name
@@ -2761,35 +2775,68 @@ class GirderHandler:
         
         return job_response
 
-    def get_image_region(self,item_id,coords_list):
+    def get_image_region(self,item_id,coords_list,frame_index=None):
 
         # Checking to make sure coords are within the slide boundaries
         slide_metadata = self.gc.get(f'/item/{item_id}/tiles')
 
-        # coords_list is organized: [min_x, min_y, max_x, max_y]
-        if coords_list[0]>=0 and coords_list[1]>=0 and coords_list[2]<=slide_metadata['sizeX'] and coords_list[3]<=slide_metadata['sizeY']:
-            # Pulling specific region from an image using provided coordinates
-            image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
-        else:
-            # Wish there was a shorter way to write this
-            if coords_list[0]<0:
-                coords_list[0] = 0
-            if coords_list[1]<0:
-                coords_list[1] = 0
-            if coords_list[2]>slide_metadata['sizeX']:
-                coords_list[2] = slide_metadata['sizeX']
-            if coords_list[3]>slide_metadata['sizeY']:
-                coords_list[3] = slide_metadata['sizeY']
-
-            try:
+        if frame_index is None:
+            # coords_list is organized: [min_x, min_y, max_x, max_y]
+            if coords_list[0]>=0 and coords_list[1]>=0 and coords_list[2]<=slide_metadata['sizeX'] and coords_list[3]<=slide_metadata['sizeY']:
+                # Pulling specific region from an image using provided coordinates
                 image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
-            except:
-                print('-------------------------------------------------')
-                print(f'Error reading image region from item: {item_id}')
-                print(f'Provided coordinates: {coords_list}')
-                print(f'------------------------------------------------')
+            else:
+                # Wish there was a shorter way to write this
+                if coords_list[0]<0:
+                    coords_list[0] = 0
+                if coords_list[1]<0:
+                    coords_list[1] = 0
+                if coords_list[2]>slide_metadata['sizeX']:
+                    coords_list[2] = slide_metadata['sizeX']
+                if coords_list[3]>slide_metadata['sizeY']:
+                    coords_list[3] = slide_metadata['sizeY']
 
-                return np.zeros((100,100))
+                try:
+                    image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
+                except:
+                    print('-------------------------------------------------')
+                    print(f'Error reading image region from item: {item_id}')
+                    print(f'Provided coordinates: {coords_list}')
+                    print(f'------------------------------------------------')
+
+                    return np.zeros((100,100))
+
+        else:
+            # Hoping that all the frames of each image are the same size. They should be.
+            # coords_list is organized: [min_x, min_y, max_x, max_y]
+            if frame_index<len(slide_metadata['frames']):
+                if coords_list[0]>=0 and coords_list[1]>=0 and coords_list[2]<=slide_metadata['sizeX'] and coords_list[3]<=slide_metadata['sizeY']:
+                    # Pulling specific region from an image using provided coordinates
+                    image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}&frame={frame_index}').content))
+                else:
+                    # Wish there was a shorter way to write this
+                    if coords_list[0]<0:
+                        coords_list[0] = 0
+                    if coords_list[1]<0:
+                        coords_list[1] = 0
+                    if coords_list[2]>slide_metadata['sizeX']:
+                        coords_list[2] = slide_metadata['sizeX']
+                    if coords_list[3]>slide_metadata['sizeY']:
+                        coords_list[3] = slide_metadata['sizeY']
+
+                    try:
+                        image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}&frame={frame_index}').content))
+                    except:
+                        print('-------------------------------------------------')
+                        print(f'Error reading image region from item: {item_id}')
+                        print(f'Provided coordinates: {coords_list}')
+                        print(f'------------------------------------------------')
+
+                        return np.zeros((100,100))
+            else:
+                # This is if the requested frame index is greater than the number of frames for this image
+                # Hopefully we never come here.
+                return np.zeros((int(coords_list[3]-coords_list[1]),int(coords_list[2]-coords_list[0])))
 
         return image_region
 
@@ -3207,6 +3254,11 @@ class GirderHandler:
 
         return user_folder_file
 
+    def add_slide_metadata(self,item_id,metadata_dict):
+
+        # Adding slide-level metadata from upload page
+        self.gc.put(f'/item/{item_id}/metadata',parameters={'metadata':json.dumps(metadata_dict)})
+
 
     """
     def get_cli_input_list(self,cli_id):
@@ -3296,18 +3348,12 @@ class DownloadHandler:
 
                 d['content'].to_csv(save_path)
             
-            """
-            elif file_ext == 'xlsx':
-                # If it's supposed to be an excel file, include sheet name as a key
-                if not os.path.exists(save_path):
-                    with pd.ExcelWriter(save_path,mode='w') as writer:
-                        d['content'].to_excel(writer,sheet_name=d['sheet'],engine='openpyxl')
-                        writer.close()
-                else:
-                    with pd.ExcelWriter(save_path,mode='a') as writer:
-                        d['content'].to_excel(writer,sheet_name=d['sheet'],engine='openpyxl')
-                        writer.close()
-            """
+            elif file_ext in ['tiff','png']:
+                
+                # Maybe this will work?
+                #TODO: test this for larger ROIs (& multi-frame)
+                Image.fromarray(d['content']).save(save_path)
+
         # Writing temporary data to a zip file
         with zipfile.ZipFile(output_file,'w', zipfile.ZIP_DEFLATED) as zip:
             for file in os.listdir('./assets/FUSION_Download/'):
@@ -3381,6 +3427,8 @@ class DownloadHandler:
         # Main_Cell_Types is a pd.DataFrame with a column for every cell type and an index of the FTU label
         # Cell states is a dictionary of pd.DataFrames with a column for every cell state and an index of the FTU label for each main cell type
 
+        #TODO: Update for CODEX
+
         # Formatting for downloads
         download_data = []
         for ftu in list(intersecting_ftus.keys()):
@@ -3418,11 +3466,333 @@ class DownloadHandler:
 
         return download_data
 
-    """
-    def extract_ftu(self, slide, data):
-    
-    """
-    """
+    def extract_manual_rois(self, current_slide, dataset_handler, options):
 
-    def extract_manual(self, slide, data):
-    """
+        download_data = []
+
+        # Initializing bounding box
+        if current_slide.spatial_omics_type=='Visium':
+            if 'Image' in options:
+                bounding_box = {'minx':0,'miny':0,'maxx':0,'maxy':0}
+
+                for m in current_slide.manual_rois:
+
+                    # Getting geojson property for manual ROI
+                    m_geojson = m['geojson']
+
+                    # Scaling coordinates to slide coordinates
+                    slide_coordinates = current_slide.convert_map_coords(m_geojson['geometry']['coordinates'])
+                    
+                    # Checking with current bounding box (pretty sure the geojson is X,Y)
+                    slide_coord_array = np.array(slide_coordinates)
+                    bounding_box['minx'] = np.minimum(bounding_box['minx'],np.min(slide_coord_array[:,0]))
+                    bounding_box['miny'] = np.minimum(bounding_box['miny'],np.min(slide_coord_array[:,1]))
+                    bounding_box['maxx'] = np.maximum(bounding_box['maxx'],np.max(slide_coord_array[:,0]))
+                    bounding_box['maxy'] = np.maximum(bounding_box['maxy'],np.max(slide_coord_array[:,1]))
+
+                    # Replacing coordinates in m_geojson
+                    #m_geojson['geometry']['coordinates'] = slide_coordinates
+                    #total_geojson['features'].append(m_geojson)
+
+                # Now extracting that image region from the bounding box
+                full_image_region = dataset_handler.get_image_region(
+                    current_slide.item_id,
+                    [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']]
+                )
+
+                download_data.append({
+                    'filename':f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Manual_ROIs.tiff',
+                    'content': full_image_region
+                })
+
+            if 'Cell' in options:
+
+                # Getting cell type info from the manual ROI geojsons
+                cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
+                cell_data = []
+                cell_state_data = []
+                for m_idx,m in enumerate(current_slide.manual_rois):
+                    if 'Main_Cell_Types' in m['geojson']['features'][0]['properties']:
+                        cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
+                        cell_types_data['Name'] = f'Manual_ROI_{m_idx+1}'
+
+                        cell_state_data.append(m['geojson']['features'][0]['properties']['Cell_States'])
+
+                        cell_data.append(cell_types_data)
+
+                main_cell_types_df = pd.DataFrame.from_records(cell_data)
+                download_data.append({
+                    'filename': cell_filename,
+                    'sheet':'Main_Cell_Types',
+                    'content': main_cell_types_df
+                })
+
+                # Now getting cell state info for each cell type
+                for m in main_cell_types_df.columns.tolist():
+                    if not m=='Name':
+
+                        # Pulling that main cell types cell state info from each manual ROI
+                        # This should be a list of dictionaries for each manual ROI 
+                        m_cell_state = [i[m] for i in cell_state_data]
+                        
+                        m_cell_state_df = pd.DataFrame.from_records(m_cell_state)
+                        m_cell_state_df['Name'] = [f'Manual_ROI_{i+1}' for i in range(0,len(current_slide.manual_rois))]
+
+                        download_data.append({
+                            'filename': cell_filename,
+                            'sheet': m,
+                            'content': m_cell_state_df
+                        })
+
+        elif current_slide.spatial_omics_type=='Regular':
+            if 'Image' in options:
+                bounding_box = {'minx':0,'miny':0,'maxx':0,'maxy':0}
+
+                for m in current_slide.manual_rois:
+
+                    # Getting geojson property for manual ROI
+                    m_geojson = m['geojson']
+
+                    # Scaling coordinates to slide coordinates
+                    slide_coordinates = current_slide.convert_map_coords(m_geojson['geometry']['coordinates'])
+                    
+                    # Checking with current bounding box (pretty sure the geojson is X,Y)
+                    slide_coord_array = np.array(slide_coordinates)
+                    bounding_box['minx'] = np.minimum(bounding_box['minx'],np.min(slide_coord_array[:,0]))
+                    bounding_box['miny'] = np.minimum(bounding_box['miny'],np.min(slide_coord_array[:,1]))
+                    bounding_box['maxx'] = np.maximum(bounding_box['maxx'],np.max(slide_coord_array[:,0]))
+                    bounding_box['maxy'] = np.maximum(bounding_box['maxy'],np.max(slide_coord_array[:,1]))
+
+                    # Replacing coordinates in m_geojson
+                    #m_geojson['geometry']['coordinates'] = slide_coordinates
+                    #total_geojson['features'].append(m_geojson)
+
+                # Now extracting that image region from the bounding box
+                full_image_region = dataset_handler.get_image_region(
+                    current_slide.item_id,
+                    [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']]
+                )
+
+                download_data.append({
+                    'filename':f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Manual_ROIs.tiff',
+                    'content': full_image_region
+                })
+
+        elif current_slide.spatial_omics_type=='CODEX':
+            if 'Image' in options:
+                bounding_box = {'minx':0,'miny':0,'maxx':0,'maxy':0}
+
+                for m in current_slide.manual_rois:
+
+                    # Getting geojson property for manual ROI
+                    m_geojson = m['geojson']
+
+                    # Scaling coordinates to slide coordinates
+                    slide_coordinates = current_slide.convert_map_coords(m_geojson['geometry']['coordinates'])
+                    
+                    # Checking with current bounding box (pretty sure the geojson is X,Y)
+                    slide_coord_array = np.array(slide_coordinates)
+                    bounding_box['minx'] = np.minimum(bounding_box['minx'],np.min(slide_coord_array[:,0]))
+                    bounding_box['miny'] = np.minimum(bounding_box['miny'],np.min(slide_coord_array[:,1]))
+                    bounding_box['maxx'] = np.maximum(bounding_box['maxx'],np.max(slide_coord_array[:,0]))
+                    bounding_box['maxy'] = np.maximum(bounding_box['maxy'],np.max(slide_coord_array[:,1]))
+
+                    # Replacing coordinates in m_geojson
+                    #m_geojson['geometry']['coordinates'] = slide_coordinates
+                    #total_geojson['features'].append(m_geojson)
+
+                # Now extracting that image region from the bounding box (getting each frame for CODEX images)
+                frame_list = []
+                for frame in range(current_slide.n_frames):
+
+                    # Getting each frame
+                    full_image_region = dataset_handler.get_image_region(
+                        current_slide.item_id,
+                        [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']],
+                        frame_index = frame
+                    )
+
+                    frame_list.append(full_image_region)
+
+                download_data.append({
+                    'filename':f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Manual_ROIs.tiff',
+                    'content': frame_list
+                })
+
+            if 'Cell' in options:
+                
+                #TODO: Update where it says "Main_Cell_Types" here as needed
+                # Getting cell type info from the manual ROI geojsons
+                cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
+                cell_data = []
+                cell_state_data = []
+                for m_idx,m in enumerate(current_slide.manual_rois):
+                    if 'Main_Cell_Types' in m['geojson']['features'][0]['properties']:
+                        cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
+                        cell_types_data['Name'] = f'Manual_ROI_{m_idx+1}'
+
+
+                main_cell_types_df = pd.DataFrame.from_records(cell_data)
+                download_data.append({
+                    'filename': cell_filename,
+                    'sheet':'Main_Cell_Types',
+                    'content': main_cell_types_df
+                })
+
+
+        return download_data
+
+    def extract_select_ftus(self,current_slide,dataset_handler,options):
+
+        #TODO: Update this for CODEX images
+        # Extracting select ftus image/cell info
+        download_data = []
+        for s_idx, s in enumerate(current_slide.marked_ftus):
+
+            if current_slide.spatial_omics_type == 'Visium':
+                # Checking if including image data
+                if 'Image' in options:
+                    # Pulling out the coordinates from the geojson
+
+                    s_coords = current_slide.convert_map_coords(s['geojson']['features'][0]['geometry']['coordinates'])
+                    s_coords_array = np.array(s_coords)
+
+                    # Getting bounding box for this structure
+                    min_x = np.min(s_coords_array[:,0])
+                    min_y = np.min(s_coords_array[:,1])
+                    max_x = np.max(s_coords_array[:,0])
+                    max_y = np.max(s_coords_array[:,1])
+
+                    # Scaling coordinates (for saving boundary mask)
+                    #TODO: Saving bounding box image
+                    scaled_coords = [
+                        [i[0]-min_x,i[1]-min_y]
+                        for i in s_coords
+                    ]
+
+                    image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+
+                    download_data.append({
+                        'filename': f'Marked_FTU_{s_idx+1}.png',
+                        'content': image
+                    })
+
+                if 'Cell' in options:
+                    # Pulling out cell type info for marked ftus
+                    cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
+                    cell_data = []
+                    cell_state_data = []
+                    for m_idx,m in enumerate(current_slide.marked_ftus):
+                        if 'Main_Cell_Types' in m['geojson']['features'][0]['properties']:
+                            cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
+                            cell_types_data['Name'] = f'Marked_FTU_{m_idx+1}'
+
+                            cell_state_data.append(m['geojson']['features'][0]['properties']['Cell_States'])
+
+                            cell_data.append(cell_types_data)
+
+                    main_cell_types_df = pd.DataFrame.from_records(cell_data)
+                    download_data.append({
+                        'filename': cell_filename,
+                        'sheet':'Main_Cell_Types',
+                        'content': main_cell_types_df
+                    })
+
+                    # Now getting cell state info for each cell type
+                    for m in main_cell_types_df.columns.tolist():
+                        if not m=='Name':
+
+                            # Pulling that main cell types cell state info from each manual ROI
+                            # This should be a list of dictionaries for each manual ROI 
+                            m_cell_state = [i[m] for i in cell_state_data]
+                            
+                            m_cell_state_df = pd.DataFrame.from_records(m_cell_state)
+                            m_cell_state_df['Name'] = [f'Marked_FTU_{i+1}' for i in range(0,len(current_slide.manual_rois))]
+
+                            download_data.append({
+                                'filename': cell_filename,
+                                'sheet': m,
+                                'content': m_cell_state_df
+                            })
+
+            elif current_slide.spatial_omics_type == 'Regular':
+                # Checking if including image data
+                if 'Image' in options:
+                    # Pulling out the coordinates from the geojson
+
+                    s_coords = current_slide.convert_map_coords(s['geojson']['features'][0]['geometry']['coordinates'])
+                    s_coords_array = np.array(s_coords)
+
+                    # Getting bounding box for this structure
+                    min_x = np.min(s_coords_array[:,0])
+                    min_y = np.min(s_coords_array[:,1])
+                    max_x = np.max(s_coords_array[:,0])
+                    max_y = np.max(s_coords_array[:,1])
+
+                    # Scaling coordinates (for saving boundary mask)
+                    #TODO: Saving bounding box image
+                    scaled_coords = [
+                        [i[0]-min_x,i[1]-min_y]
+                        for i in s_coords
+                    ]
+
+                    image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+
+                    download_data.append({
+                        'filename': f'Marked_FTU_{s_idx+1}.png',
+                        'content': image
+                    })
+
+            elif current_slide.spatial_omics_type == 'CODEX':
+                # Checking if including image data
+                if 'Image' in options:
+                    # Pulling out the coordinates from the geojson
+
+                    s_coords = current_slide.convert_map_coords(s['geojson']['features'][0]['geometry']['coordinates'])
+                    s_coords_array = np.array(s_coords)
+
+                    # Getting bounding box for this structure
+                    min_x = np.min(s_coords_array[:,0])
+                    min_y = np.min(s_coords_array[:,1])
+                    max_x = np.max(s_coords_array[:,0])
+                    max_y = np.max(s_coords_array[:,1])
+
+                    # Scaling coordinates (for saving boundary mask)
+                    #TODO: Saving bounding box image
+                    scaled_coords = [
+                        [i[0]-min_x,i[1]-min_y]
+                        for i in s_coords
+                    ]
+
+                    # Getting each frame for this image region
+                    image_frame_list = []
+                    for frame in range(current_slide.n_frames):
+                        image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+                        image_frame_list.append(image)
+
+                    download_data.append({
+                        'filename': f'Marked_FTU_{s_idx+1}.png',
+                        'content': image_frame_list
+                    })
+
+                #TODO: Update "Main_Cell_Types" to whatever it should be
+                if 'Cell' in options:
+                    # Pulling out cell type info for marked ftus
+                    cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
+                    cell_data = []
+                    cell_state_data = []
+                    for m_idx,m in enumerate(current_slide.marked_ftus):
+                        if 'Main_Cell_Types' in m['geojson']['features'][0]['properties']:
+                            cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
+                            cell_types_data['Name'] = f'Marked_FTU_{m_idx+1}'
+
+                    main_cell_types_df = pd.DataFrame.from_records(cell_data)
+                    download_data.append({
+                        'filename': cell_filename,
+                        'sheet':'Main_Cell_Types',
+                        'content': main_cell_types_df
+                    })
+
+
+        return download_data
+

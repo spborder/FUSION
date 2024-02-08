@@ -16,22 +16,28 @@ import shutil
 from tqdm import tqdm
 
 class DSASlide:
+
+    spatial_omics_type = 'Regular'
+
     def __init__(self,
-                 slide_name,
                  item_id,
                  girder_handler,
                  ftu_colors,
                  manual_rois = [],
                  marked_ftus = []):
 
-        self.slide_name = slide_name
-        self.slide_ext = slide_name.split('.')[-1]
         self.item_id = item_id
         self.girder_handler = girder_handler
+
+        self.item_info = self.girder_handler.gc.get(f'/item/{self.item_id}?token={self.girder_handler.user_token}')
+        self.slide_name = self.item_info['name']
+        self.slide_ext = self.slide_name.split('.')[-1]
         self.ftu_colors = ftu_colors
 
         self.manual_rois = manual_rois
         self.marked_ftus = marked_ftus
+
+        self.n_frames = 1
 
         self.visualization_properties = [
             'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
@@ -83,6 +89,12 @@ class DSASlide:
 
         # Step 2: get resource tile metadata
         tile_metadata = self.girder_handler.get_tile_metadata(item_id)
+        # Step 2.1: adding n_frames if "frames" in metadata
+        if 'frames' in tile_metadata:
+            self.n_frames = len(tile_metadata['frames'])
+        else:
+            self.n_frames = 1
+
         # Step 3: get tile, base, zoom, etc.
         # Number of zoom levels for an image
         self.zoom_levels = tile_metadata['levels']
@@ -108,12 +120,6 @@ class DSASlide:
         # Step 5: Getting annotations for a resource
         self.annotations = self.girder_handler.get_annotations(item_id)
         print(f'Found: {len(self.annotations)} Annotations')
-        if 'Spots' in [i['annotation']['name'] for i in self.annotations if 'annotation' in i]:
-            self.slide_type = '10xVisium'
-            print(f'slide type = {self.slide_type}')
-        else:
-            self.slide_type = 'Other'
-            print(f'slide_type: {self.slide_type}')
 
         # Step 6: Getting user token and tile url
         self.user_token = self.girder_handler.get_token()
@@ -130,7 +136,7 @@ class DSASlide:
         # Translation step
         base_x_scale = self.base_dims[0]/self.tile_dims[0]
         base_y_scale = self.base_dims[1]/self.tile_dims[1]
-        print(f'base_x_scale: {base_x_scale}, base_y_scale: {base_y_scale}')
+        #print(f'base_x_scale: {base_x_scale}, base_y_scale: {base_y_scale}')
 
         # image bounds [maxX, maxY]
         # bottom_right[0]-top_left[0] --> range of x values in target crs
@@ -141,7 +147,7 @@ class DSASlide:
         y_scale = (self.tile_dims[1])/(self.image_dims[1]*(self.tile_dims[1]/240))
         y_scale*=-1
 
-        print(f'x_scale: {x_scale}, y_scale: {y_scale}')
+        #print(f'x_scale: {x_scale}, y_scale: {y_scale}')
         # y_scale has to be inverted because y is measured upward in these maps
 
         print('Processing annotations')
@@ -354,4 +360,98 @@ class DSASlide:
 
         return return_coords
     
+
+class VisiumSlide(DSASlide):
+    # Additional properties for Visium slides are:
+    # id of RDS object
+    spatial_omics_type = 'Visium'
+
+    def __init__(self,
+                 item_id:str,
+                 girder_handler,
+                 ftu_colors,
+                 manual_rois:list,
+                 marked_ftus:list):
+        super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
+
+    def find_intersecting_spots(self,box_poly):
+        # Finging intersecting spots within a particular region
+        intersecting_spot_idxes = [i for i in range(0,len(self.spot_polys)) if self.spot_polys[i].intersects(box_poly)]
+        
+        # Returning list of dictionaries using original keys
+        intersecting_spot_props = []
+        if len(intersecting_spot_idxes)>0:
+            intersecting_spot_props = [self.spot_props[i] for i in intersecting_spot_idxes]
+
+        return intersecting_spot_props
+
+class CODEXSlide(DSASlide):
+    # Additional properties needed for CODEX slides are:
+    # names for each channel
+
+    spatial_omics_type = 'CODEX'
+
+    def __init__(self,
+                 item_id:str,
+                 girder_handler,
+                 ftu_colors:dict,
+                 manual_rois:list,
+                 marked_ftus:list,
+                 channel_names:dict):
+        super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
+
+        # Updating tile_url so that it includes the different frames
+        self.channel_names = channel_names
+        if self.channel_names == {}:
+            # Fill in with dummy channel_names (test case with 16 or 17 channels)
+            self.channel_names = [f'Channel_{i}' for i in range(0,self.n_frames)]
+
+        self.channel_tile_url = [
+            self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/fzxy/'+str(i)+'/{z}/{x}/{y}?token='+self.user_token
+            for i in range(len(self.channel_names))
+        ]
+
+    def intersecting_frame_intensity(self,box_poly):
+        # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
+        
+        box_coordinates = np.array(self.convert_map_coords(list(box_poly.exterior.coords)))
+        min_x = np.min(box_coordinates[:,0])
+        min_y = np.min(box_coordinates[:,1])
+        max_x = np.max(box_coordinates[:,0])
+        max_y = np.max(box_coordinates[:,1])
+        
+        # Box size then can be determined by (maxx-minx)*(maxy-miny)
+        box_size = (max_x-min_x)*(max_y-min_y)
+        # Or probably also by multiplying some scale factors by box_poly.area
+        # Pulling out those regions of the image
+
+        # Slide coordinates list should be [minx,miny,maxx,maxy]
+        slide_coords_list = [min_x,min_y,max_x,max_y]
+        frame_properties = {}
+        for frame in range(0,self.n_frames):
+            print(f'Working on frame {frame} of {self.n_frames}')
+            # Get the image region associated with that frame
+            # Or just get the histogram for that channel? not sure if this can be for a specific image region
+            image_histogram = self.girder_handler.gc.get(f'/item/{self.item_id}/tiles/histogram',
+                                                         parameters = {
+                                                            'top': min_y,
+                                                            'left': min_x,
+                                                            'bottom': max_y,
+                                                            'right': max_x,
+                                                            'frame': frame
+                                                            }
+                                                        )
+
+            # Fraction of total intensity (maximum intensity = every pixel is 255 for uint8)
+            frame_properties[self.channel_names[frame]] = image_histogram[0]
+
+        
+        return frame_properties
+
+    def update_url_style(self,channel,color_options):
+
+        #TODO: Updating style parameter of the frames endpoint
+        # Define what the "color_options" input should be, 
+        
+        return ''
 
