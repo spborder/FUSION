@@ -2047,19 +2047,21 @@ class LayoutHandler:
                             html.Div(
                                 id = 'welcome-tutorial',
                                 children=[
-                                    dbc.Carousel(
-                                        id = 'welcome-tutorial-slides',
-                                        items = [
-                                            {
-                                                'key':f'{i+1}',
-                                                'src':f'./static/tutorials/FUSION Introduction/slide_{i}.svg',
-                                                'img_style':{'height':'60vh','width':'80%'}
-                                                }
-                                            for i in range(len(os.listdir('./static/tutorials/FUSION Introduction/')))
-                                        ],
-                                        controls = True,
-                                        indicators = True,
-                                        variant = 'dark'
+                                    dcc.Loading(
+                                        dbc.Carousel(
+                                            id = 'welcome-tutorial-slides',
+                                            items = [
+                                                {
+                                                    'key':f'{i+1}',
+                                                    'src':f'./static/tutorials/FUSION Introduction/slide_{i}.svg',
+                                                    'img_style':{'height':'60vh','width':'80%'}
+                                                    }
+                                                for i in range(len(os.listdir('./static/tutorials/FUSION Introduction/')))
+                                            ],
+                                            controls = True,
+                                            indicators = True,
+                                            variant = 'dark'
+                                        )
                                     )
                                 ]
                             ),
@@ -3589,20 +3591,26 @@ class DownloadHandler:
                     #total_geojson['features'].append(m_geojson)
 
                 # Now extracting that image region from the bounding box (getting each frame for CODEX images)
+                frame_list = []
                 for frame in range(current_slide.n_frames):
+
+                    # Getting each frame
                     full_image_region = dataset_handler.get_image_region(
                         current_slide.item_id,
                         [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']],
                         frame_index = frame
                     )
 
+                    frame_list.append(full_image_region)
+
                 download_data.append({
                     'filename':f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Manual_ROIs.tiff',
-                    'content': full_image_region
+                    'content': frame_list
                 })
 
             if 'Cell' in options:
-
+                
+                #TODO: Update where it says "Main_Cell_Types" here as needed
                 # Getting cell type info from the manual ROI geojsons
                 cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
                 cell_data = []
@@ -3612,9 +3620,6 @@ class DownloadHandler:
                         cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
                         cell_types_data['Name'] = f'Manual_ROI_{m_idx+1}'
 
-                        cell_state_data.append(m['geojson']['features'][0]['properties']['Cell_States'])
-
-                        cell_data.append(cell_types_data)
 
                 main_cell_types_df = pd.DataFrame.from_records(cell_data)
                 download_data.append({
@@ -3622,25 +3627,6 @@ class DownloadHandler:
                     'sheet':'Main_Cell_Types',
                     'content': main_cell_types_df
                 })
-
-                # Now getting cell state info for each cell type
-                for m in main_cell_types_df.columns.tolist():
-                    if not m=='Name':
-
-                        # Pulling that main cell types cell state info from each manual ROI
-                        # This should be a list of dictionaries for each manual ROI 
-                        m_cell_state = [i[m] for i in cell_state_data]
-                        
-                        m_cell_state_df = pd.DataFrame.from_records(m_cell_state)
-                        m_cell_state_df['Name'] = [f'Manual_ROI_{i+1}' for i in range(0,len(current_slide.manual_rois))]
-
-                        download_data.append({
-                            'filename': cell_filename,
-                            'sheet': m,
-                            'content': m_cell_state_df
-                        })
-
-
 
 
         return download_data
@@ -3648,79 +3634,154 @@ class DownloadHandler:
     def extract_select_ftus(self,current_slide,dataset_handler,options):
 
         #TODO: Update this for CODEX images
-
         # Extracting select ftus image/cell info
         download_data = []
-
         for s_idx, s in enumerate(current_slide.marked_ftus):
 
-            # Checking if including image data
-            if 'Image' in options:
-                # Pulling out the coordinates from the geojson
+            if current_slide.spatial_omics_type == 'Visium':
+                # Checking if including image data
+                if 'Image' in options:
+                    # Pulling out the coordinates from the geojson
 
-                s_coords = current_slide.convert_map_coords(s['geojson']['features'][0]['geometry']['coordinates'])
-                s_coords_array = np.array(s_coords)
+                    s_coords = current_slide.convert_map_coords(s['geojson']['features'][0]['geometry']['coordinates'])
+                    s_coords_array = np.array(s_coords)
 
-                # Getting bounding box for this structure
-                min_x = np.min(s_coords_array[:,0])
-                min_y = np.min(s_coords_array[:,1])
-                max_x = np.max(s_coords_array[:,0])
-                max_y = np.max(s_coords_array[:,1])
+                    # Getting bounding box for this structure
+                    min_x = np.min(s_coords_array[:,0])
+                    min_y = np.min(s_coords_array[:,1])
+                    max_x = np.max(s_coords_array[:,0])
+                    max_y = np.max(s_coords_array[:,1])
 
-                # Scaling coordinates (for saving boundary mask)
-                #TODO: Saving bounding box image
-                scaled_coords = [
-                    [i[0]-min_x,i[1]-min_y]
-                    for i in s_coords
-                ]
+                    # Scaling coordinates (for saving boundary mask)
+                    #TODO: Saving bounding box image
+                    scaled_coords = [
+                        [i[0]-min_x,i[1]-min_y]
+                        for i in s_coords
+                    ]
 
-                image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+                    image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
 
-                download_data.append({
-                    'filename': f'Marked_FTU_{s_idx+1}.png',
-                    'content': image
-                })
+                    download_data.append({
+                        'filename': f'Marked_FTU_{s_idx+1}.png',
+                        'content': image
+                    })
 
-            if 'Cell' in options:
-                # Pulling out cell type info for marked ftus
-                cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
-                cell_data = []
-                cell_state_data = []
-                for m_idx,m in enumerate(current_slide.marked_ftus):
-                    if 'Main_Cell_Types' in m['geojson']['features'][0]['properties']:
-                        cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
-                        cell_types_data['Name'] = f'Marked_FTU_{m_idx+1}'
+                if 'Cell' in options:
+                    # Pulling out cell type info for marked ftus
+                    cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
+                    cell_data = []
+                    cell_state_data = []
+                    for m_idx,m in enumerate(current_slide.marked_ftus):
+                        if 'Main_Cell_Types' in m['geojson']['features'][0]['properties']:
+                            cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
+                            cell_types_data['Name'] = f'Marked_FTU_{m_idx+1}'
 
-                        cell_state_data.append(m['geojson']['features'][0]['properties']['Cell_States'])
+                            cell_state_data.append(m['geojson']['features'][0]['properties']['Cell_States'])
 
-                        cell_data.append(cell_types_data)
+                            cell_data.append(cell_types_data)
 
-                main_cell_types_df = pd.DataFrame.from_records(cell_data)
-                download_data.append({
-                    'filename': cell_filename,
-                    'sheet':'Main_Cell_Types',
-                    'content': main_cell_types_df
-                })
+                    main_cell_types_df = pd.DataFrame.from_records(cell_data)
+                    download_data.append({
+                        'filename': cell_filename,
+                        'sheet':'Main_Cell_Types',
+                        'content': main_cell_types_df
+                    })
 
-                # Now getting cell state info for each cell type
-                for m in main_cell_types_df.columns.tolist():
-                    if not m=='Name':
+                    # Now getting cell state info for each cell type
+                    for m in main_cell_types_df.columns.tolist():
+                        if not m=='Name':
 
-                        # Pulling that main cell types cell state info from each manual ROI
-                        # This should be a list of dictionaries for each manual ROI 
-                        m_cell_state = [i[m] for i in cell_state_data]
-                        
-                        m_cell_state_df = pd.DataFrame.from_records(m_cell_state)
-                        m_cell_state_df['Name'] = [f'Marked_FTU_{i+1}' for i in range(0,len(current_slide.manual_rois))]
+                            # Pulling that main cell types cell state info from each manual ROI
+                            # This should be a list of dictionaries for each manual ROI 
+                            m_cell_state = [i[m] for i in cell_state_data]
+                            
+                            m_cell_state_df = pd.DataFrame.from_records(m_cell_state)
+                            m_cell_state_df['Name'] = [f'Marked_FTU_{i+1}' for i in range(0,len(current_slide.manual_rois))]
 
-                        download_data.append({
-                            'filename': cell_filename,
-                            'sheet': m,
-                            'content': m_cell_state_df
-                        })
+                            download_data.append({
+                                'filename': cell_filename,
+                                'sheet': m,
+                                'content': m_cell_state_df
+                            })
+
+            elif current_slide.spatial_omics_type == 'Regular':
+                # Checking if including image data
+                if 'Image' in options:
+                    # Pulling out the coordinates from the geojson
+
+                    s_coords = current_slide.convert_map_coords(s['geojson']['features'][0]['geometry']['coordinates'])
+                    s_coords_array = np.array(s_coords)
+
+                    # Getting bounding box for this structure
+                    min_x = np.min(s_coords_array[:,0])
+                    min_y = np.min(s_coords_array[:,1])
+                    max_x = np.max(s_coords_array[:,0])
+                    max_y = np.max(s_coords_array[:,1])
+
+                    # Scaling coordinates (for saving boundary mask)
+                    #TODO: Saving bounding box image
+                    scaled_coords = [
+                        [i[0]-min_x,i[1]-min_y]
+                        for i in s_coords
+                    ]
+
+                    image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+
+                    download_data.append({
+                        'filename': f'Marked_FTU_{s_idx+1}.png',
+                        'content': image
+                    })
+
+            elif current_slide.spatial_omics_type == 'CODEX':
+                # Checking if including image data
+                if 'Image' in options:
+                    # Pulling out the coordinates from the geojson
+
+                    s_coords = current_slide.convert_map_coords(s['geojson']['features'][0]['geometry']['coordinates'])
+                    s_coords_array = np.array(s_coords)
+
+                    # Getting bounding box for this structure
+                    min_x = np.min(s_coords_array[:,0])
+                    min_y = np.min(s_coords_array[:,1])
+                    max_x = np.max(s_coords_array[:,0])
+                    max_y = np.max(s_coords_array[:,1])
+
+                    # Scaling coordinates (for saving boundary mask)
+                    #TODO: Saving bounding box image
+                    scaled_coords = [
+                        [i[0]-min_x,i[1]-min_y]
+                        for i in s_coords
+                    ]
+
+                    # Getting each frame for this image region
+                    image_frame_list = []
+                    for frame in range(current_slide.n_frames):
+                        image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+                        image_frame_list.append(image)
+
+                    download_data.append({
+                        'filename': f'Marked_FTU_{s_idx+1}.png',
+                        'content': image_frame_list
+                    })
+
+                #TODO: Update "Main_Cell_Types" to whatever it should be
+                if 'Cell' in options:
+                    # Pulling out cell type info for marked ftus
+                    cell_filename = f'{current_slide.slide_name.replace(current_slide.slide_ext,"")}_Cell.xlsx'
+                    cell_data = []
+                    cell_state_data = []
+                    for m_idx,m in enumerate(current_slide.marked_ftus):
+                        if 'Main_Cell_Types' in m['geojson']['features'][0]['properties']:
+                            cell_types_data = m['geojson']['features'][0]['properties']['Main_Cell_Types']
+                            cell_types_data['Name'] = f'Marked_FTU_{m_idx+1}'
+
+                    main_cell_types_df = pd.DataFrame.from_records(cell_data)
+                    download_data.append({
+                        'filename': cell_filename,
+                        'sheet':'Main_Cell_Types',
+                        'content': main_cell_types_df
+                    })
 
 
         return download_data
-
-
 

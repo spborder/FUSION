@@ -823,7 +823,8 @@ class FUSION:
         self.app.callback(
             Input({'type':'tutorial-name','index':ALL},'n_clicks'),
             [Output('welcome-tutorial','children'),
-             Output('tutorial-name','children')]
+             Output('tutorial-name','children'),
+             Output({'type':'tutorial-name','index':ALL},'style')]
         )(self.get_tutorial)
 
     def upload_callbacks(self):
@@ -976,8 +977,16 @@ class FUSION:
             variant = 'dark'
         )
 
+        # Returning style list for html.A components
+        selected_style = {
+            'background':'rgba(255,255,255,0.8)',
+            'box-shadow':'0 0 10px rgba(0,0,0,0.2)',
+            'border-radius':'5px',
+        }
+        style_list = [{} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(click_key))]
 
-        return new_slides, html.H3(tutorial_name)
+
+        return new_slides, html.H3(tutorial_name), style_list
 
     def update_plotting_metadata(self):
 
