@@ -118,6 +118,12 @@ class FUSION:
         for ct in self.cell_graphics_key:
             self.cell_names_key[self.cell_graphics_key[ct]['full']] = ct
 
+        # Getting cell graphics color key sorted {'Red,Green,Blue': 'abbreviation'}
+        self.cell_colors_key = {}
+        for ct in self.cell_graphics_key:
+            for c_c in self.cell_graphics_key[ct]['color_code']:
+                self.cell_colors_key[c_c] = ct
+
         # Getting morphometrics reference from dataset_handler
         self.morphometrics_reference = self.dataset_handler.morphometrics_reference["Morphometrics"]
         self.morphometrics_names = self.dataset_handler.morpho_names
@@ -1957,21 +1963,22 @@ class FUSION:
 
         # Getting cell_val from the clicked location in the nephron diagram
         if not cell_clickData is None:
-            
             pt = cell_clickData['points'][0]
-            click_point = Point(pt['x'],pt['y'])
+            color = cell_clickData['points'][0]['color']
 
-            # Checking if the clicked point is inside any of the cells bounding boxes
-            possible_cells = [i for i in self.cell_graphics_key if len(self.cell_graphics_key[i]['bbox'])>0]
-            intersecting_cell = [i for i in possible_cells if click_point.intersects(box(*self.cell_graphics_key[i]['bbox']))]
-            
-            if len(intersecting_cell)>0:
-                cell_val = self.cell_graphics_key[intersecting_cell[0]]['full']
-                cell_name = html.H3(cell_val)
-                if self.cell_names_key[cell_val] in self.cell_graphics_key:
-                    cell_graphic = self.cell_graphics_key[self.cell_names_key[cell_val]]['graphic']
-                    cell_hierarchy = self.gen_cyto(self.cell_names_key[cell_val])
-                    cell_state_droptions = np.unique(self.cell_graphics_key[self.cell_names_key[cell_val]]['states'])
+            color_code = [str(color[i]) for i in color]
+
+            if not color_code[-1]=='0':
+                color_code = ','.join(color_code[0:-1])
+
+                if color_code in list(self.cell_colors_key.keys()):
+
+                    cell_val = self.cell_graphics_key[self.cell_colors_key[color_code]]['full']                    
+                    cell_name = html.H3(cell_val)
+                    if self.cell_names_key[cell_val] in self.cell_graphics_key:
+                        cell_graphic = self.cell_graphics_key[self.cell_names_key[cell_val]]['graphic']
+                        cell_hierarchy = self.gen_cyto(self.cell_names_key[cell_val])
+                        cell_state_droptions = np.unique(self.cell_graphics_key[self.cell_names_key[cell_val]]['states'])
 
         return cell_graphic, cell_hierarchy, cell_state_droptions, cell_name
 
@@ -1981,19 +1988,24 @@ class FUSION:
             return False, no_update, no_update
         
         pt = neph_hover['points'][0]
+        color = pt['color']
         tool_bbox = pt['bbox']
 
-        hover_point = Point(pt['x'],pt['y'])
+        color_code = [str(color[i]) for i in color]
 
-        possible_cells = [i for i in self.cell_graphics_key if len(self.cell_graphics_key[i]['bbox'])>0]
-        intersecting_cell = [i for i in possible_cells if hover_point.intersects(box(*self.cell_graphics_key[i]['bbox']))]
-        if len(intersecting_cell)>0:
-            cell_name = self.cell_graphics_key[intersecting_cell[0]]['full']
-            tool_children = [
-                html.Div([
-                    cell_name
-                ])
-            ]
+        if not color_code[-1]=='0':
+            color_code = ','.join(color_code[0:-1])
+
+            if color_code in list(self.cell_colors_key.keys()):
+
+                cell_name = self.cell_graphics_key[self.cell_colors_key[color_code]]['full']
+                tool_children = [
+                    html.Div([
+                        cell_name
+                    ])
+                ]
+            else:
+                tool_children = []
         else:
             tool_children = []
 
