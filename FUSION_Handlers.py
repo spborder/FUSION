@@ -229,10 +229,10 @@ class LayoutHandler:
         ]
 
         # Creating figure dictionary for nephron diagram
-        neph_figure = go.Figure(px.imshow(Image.open('./assets/cell_graphics/nephron_diagram.jpg')))
+        neph_figure = go.Figure(px.imshow(Image.open('./assets/cell_graphics/Edited Nephron Diagram_small.png')))
         neph_figure.update_traces(hoverinfo='none',hovertemplate=None)
-        neph_figure.update_xaxes(showticklabels=False)
-        neph_figure.update_yaxes(showticklabels=False)
+        neph_figure.update_xaxes(showticklabels=False, showgrid=False)
+        neph_figure.update_yaxes(showticklabels=False, showgrid=False)
         neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0})
 
         cell_graphic_tab = dbc.Card([
