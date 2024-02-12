@@ -796,8 +796,25 @@ class FUSION:
         self.app.callback(
             [Output({'type':'markers-interval','index':ALL},'disabled'),
              Output({'type':'marker-logs-div','index':ALL},'children')],
-            Input({'type':'markers-interval','index':ALL},'n_intervals')
+            Input({'type':'markers-interval','index':ALL},'n_intervals'),
+            prevent_initial_call = True
         )(self.update_cluster_logs)
+
+        # Special overlay populating
+        self.app.callback(
+            Output({'type':'channel-overlay-select-div','index': ALL},'children'),
+            Input({'type':'channel-overlay-drop','index': ALL},'value'),
+            prevent_initial_call = True,
+        )(self.add_channel_color_select)
+
+        # Adding CODEX channel overlay
+        self.app.callback(
+            Output('layer-control','children'),
+            Input({'type':'overlay-channel-color','index':ALL},'value'),
+            State({'type':'overlay-channel-tab','index':ALL},'label'),
+            prevent_initial_call = True
+        )(self.add_channel_overlay)
+
 
     def builder_callbacks(self):
 
@@ -2423,30 +2440,30 @@ class FUSION:
                 # Returning options for special-overlays div
                 # For Visium, this can be that change-level plugin
                 special_overlays_opts.extend([
-                    html.H3('Add Cell Subtypes'),
-                    self.layout_hanlder.gen_info_button('Select a cell type below to add the cell subtypes of that cell type to the list of overlaid visualizations'),
+                    html.H6('Add Cell Subtypes'),
+                    self.layout_handler.gen_info_button('Select a cell type below to add the cell subtypes of that cell type to the list of overlaid visualizations'),
                     dbc.Row([
                         dbc.Col(
                             dcc.Dropdown(
                                 id = {'type':'cell-subtype-drop','index':0},
                                 options = [
                                     {'label': i.split(' --> ')[-1], 'value': i.split(' --> ')[-1]}
-                                    for i in new_slide.visualization_properties if 'Main_Cell_Types' in i
+                                    for i in new_slide.properties_list if 'Main_Cell_Types' in i
                                 ],
                                 value = [],
                                 multi = True,
                                 disabled = False
                             ),
-                            md = 10
+                            md = 8
                         ),
                         dbc.Col(
                             dbc.Button(
                                 'Add Sub-Types!',
                                 id = {'type':'cell-subtype-butt','index':0},
-                                className = 'd-grid mx-auto',
+                                className = 'd-grid col-12 mx-auto',
                                 disabled = False
                             ),
-                            md = 2
+                            md = 4
                         )
                     ])
                 ])
@@ -2464,7 +2481,8 @@ class FUSION:
                 # Returning options for special-overlays div
                 # For CODEX, this can be adding colorful channel overlays
                 special_overlays_opts.extend([
-                    html.H3('Select Additional Channel Overlay(s)'),
+                    html.H6('Select Additional Channel Overlay(s)'),
+                    self.layout_handler.gen_info_button('Select Channel and adjust color for combined view of multiple channels.'),
                     dcc.Dropdown(
                         id = {'type':'channel-overlay-drop','index':0},
                         options = [
@@ -2479,12 +2497,13 @@ class FUSION:
                     ),
                     html.Div(
                         id = {'type':'channel-overlay-select-div','index':0},
-                        children = []
+                        children = [],
+                        style = {'marginBottom':'5px','marginTop':'5px'}
                     ),
                     dbc.Button(
                         'Overlay Channels!',
                         id = {'type':'channel-overlay-butt','index':0},
-                        className = 'd-grid mx-auto',
+                        className = 'd-grid col-12 mx-auto',
                         disabled = True
                     )
                 ])
@@ -2562,19 +2581,12 @@ class FUSION:
             boundary_options_children = [
                 dbc.Tab(
                     children = [
-                        dbc.Row([
-                            dbc.Col([
-                                html.Div(
-                                    dmc.ColorPicker(
-                                        id = {'type':'ftu-bound-color','index':idx},
-                                        format = 'hex',
-                                        value = combined_colors_dict[struct]['color'],
-                                        fullWidth=True
-                                    ),
-                                    style = {'width':'30vh'}
-                                )
-                            ],md=12,align='center')
-                        ],align='center')
+                        dmc.ColorPicker(
+                            id = {'type':'ftu-bound-color','index':idx},
+                            format = 'hex',
+                            value = combined_colors_dict[struct]['color'],
+                            fullWidth=True
+                        )
                     ], label = struct
                 )
                 for idx, struct in enumerate(list(combined_colors_dict.keys()))
@@ -5514,6 +5526,56 @@ class FUSION:
             return dcc.send_file('Usability_Response_Data.xlsx')
         else:
             raise exceptions.PreventUpdate
+
+    def add_channel_color_select(self,channel_opts):
+
+        # Creating a new color selector thing for overlaid channels?
+        if not channel_opts is None:
+            if type(channel_opts)==list:
+                if len(channel_opts[0])>0:
+                    channel_opts = channel_opts[0]
+                    active_tab = channel_opts[0]
+                else:
+                    active_tab = None
+
+            channel_tab_list = []
+            for c_idx,channel in enumerate(channel_opts):
+
+                channel_tab_list.append(
+                    dbc.Tab(
+                        id = {'type':'overlay-channel-tab','index':c_idx},
+                        tab_id = channel,
+                        label = channel,
+                        activeTabClassName='fw-bold fst-italic',
+                        children = [
+                            dmc.ColorPicker(
+                                id =  {'type':'overlay-channel-color','index':c_idx},
+                                format = 'rgba',
+                                value = 'rgba(255,255,255,255)',
+                                fullWidth=True,
+                            ),
+                        ]
+                    )
+                )
+
+            channel_tabs = dbc.Tabs(
+                id = {'type':'channel-color-tabs','index':0},
+                children = channel_tab_list,
+                active_tab = active_tab
+            )
+
+            return [channel_tabs]
+        else:
+            raise exceptions.PreventUpdate
+    
+    def add_channel_overlay(self,channel_colors,channels):
+
+        # Adding an overlay for channel with a TileLayer containing stylized grayscale info
+
+        print(channel_colors)
+        print(channels)
+
+        return self.current_overlays
 
 
 

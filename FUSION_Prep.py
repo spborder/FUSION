@@ -422,7 +422,7 @@ class PrepHandler:
 
 class Prepper:
     def __init__(self, girder_handler):
-        pass
+
         self.girder_handler = girder_handler
 
         # Dictionary containing model and item id's

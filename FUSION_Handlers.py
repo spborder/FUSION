@@ -724,19 +724,12 @@ class LayoutHandler:
                         children = [
                             dbc.Tab(
                                 children = [
-                                    dbc.Row([
-                                        dbc.Col([
-                                            html.Div(
-                                                dmc.ColorPicker(
-                                                    id =  {'type':'ftu-bound-color','index':idx},
-                                                    format = 'hex',
-                                                    value = combined_colors_dict[struct]['color'],
-                                                    fullWidth=True
-                                                ),
-                                                style = {'width':'30vh'}
-                                            )
-                                        ],md=12,align='center')
-                                    ],align='center',style={'marginTop':'5px','marginLeft':'10px'})
+                                    dmc.ColorPicker(
+                                        id =  {'type':'ftu-bound-color','index':idx},
+                                        format = 'hex',
+                                        value = combined_colors_dict[struct]['color'],
+                                        fullWidth=True
+                                    ),
                                 ],
                                 label = struct
                             )

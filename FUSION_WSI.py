@@ -407,7 +407,7 @@ class CODEXSlide(DSASlide):
             self.channel_names = [f'Channel_{i}' for i in range(0,self.n_frames)]
 
         self.channel_tile_url = [
-            self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/fzxy/'+str(i)+'/{z}/{x}/{y}?token='+self.user_token
+            self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/fzxy/'+str(i)+'/{z}/{x}/{y}?token='+self.user_token+'&style={}'
             for i in range(len(self.channel_names))
         ]
 
@@ -452,6 +452,7 @@ class CODEXSlide(DSASlide):
 
         #TODO: Updating style parameter of the frames endpoint
         # Define what the "color_options" input should be, 
+        if not color_options == {}:
+            self.channel_tile_url[channel] = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/fzxy/{str(channel)}'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands":[{"band":1,"palette":["rgba(0,0,0,0)"',+f'"{color_options}"'+']}]}'
         
-        return ''
 
