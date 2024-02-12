@@ -640,7 +640,8 @@ class FUSION:
              Output('slide-tile','tileSize'),
              Output('slide-map','maxZoom'),
              Output('cell-drop','options'),
-             Output('ftu-bound-opts','children')],
+             Output('ftu-bound-opts','children'),
+             Output('special-overlays','children')],
             Input('slide-select','value'),
             prevent_initial_call=True,
             suppress_callback_exceptions=True
@@ -1614,7 +1615,7 @@ class FUSION:
 
             self.pie_ftu = list(self.current_ftus.keys())[ctx.triggered_id['index']]
 
-            pct_states = pd.DataFrame.from_records([i['Cell_States'][self.pie_cell] for i in self.current_ftus[self.pie_ftu]]).sum(axis=0).to_frame()
+            pct_states = pd.DataFrame.from_records([i['Cell_States'][self.pie_cell] for i in self.current_ftus[self.pie_ftu] if 'Cell_States' in self.current_ftus[self.pie_ftu]]).sum(axis=0).to_frame()
     
             pct_states = pct_states.reset_index()
             pct_states.columns = ['Cell State', 'Proportion']
@@ -2395,7 +2396,9 @@ class FUSION:
                         slide_type = 'Regular'
 
             #TODO: Check for previous manual ROIs or marked FTUs
+            special_overlays_opts = []
             if slide_type=='Regular':
+
                 new_slide = DSASlide(
                     slide_id,
                     self.dataset_handler,
@@ -2403,6 +2406,11 @@ class FUSION:
                     manual_rois=[],
                     marked_ftus=[]
                 )
+
+                # Returning options for special-overlays div
+                # Not sure what this can be 
+                #special_overlays_opts = []
+
             elif slide_type=='Visium':
                 new_slide = VisiumSlide(
                     slide_id,
@@ -2411,6 +2419,38 @@ class FUSION:
                     manual_rois=[],
                     marked_ftus=[]
                 )
+
+                # Returning options for special-overlays div
+                # For Visium, this can be that change-level plugin
+                special_overlays_opts.extend([
+                    html.H3('Add Cell Subtypes'),
+                    self.layout_hanlder.gen_info_button('Select a cell type below to add the cell subtypes of that cell type to the list of overlaid visualizations'),
+                    dbc.Row([
+                        dbc.Col(
+                            dcc.Dropdown(
+                                id = {'type':'cell-subtype-drop','index':0},
+                                options = [
+                                    {'label': i.split(' --> ')[-1], 'value': i.split(' --> ')[-1]}
+                                    for i in new_slide.visualization_properties if 'Main_Cell_Types' in i
+                                ],
+                                value = [],
+                                multi = True,
+                                disabled = False
+                            ),
+                            md = 10
+                        ),
+                        dbc.Col(
+                            dbc.Button(
+                                'Add Sub-Types!',
+                                id = {'type':'cell-subtype-butt','index':0},
+                                className = 'd-grid mx-auto',
+                                disabled = False
+                            ),
+                            md = 2
+                        )
+                    ])
+                ])
+
             elif slide_type=='CODEX':
                 new_slide = CODEXSlide(
                     slide_id,
@@ -2420,6 +2460,34 @@ class FUSION:
                     marked_ftus=[],
                     channel_names = {}
                 )
+
+                # Returning options for special-overlays div
+                # For CODEX, this can be adding colorful channel overlays
+                special_overlays_opts.extend([
+                    html.H3('Select Additional Channel Overlay(s)'),
+                    dcc.Dropdown(
+                        id = {'type':'channel-overlay-drop','index':0},
+                        options = [
+                            {
+                                'label': i, 'value': i
+                            }
+                            for i in new_slide.channel_names
+                        ],
+                        value = [],
+                        multi = True,
+                        disabled = False
+                    ),
+                    html.Div(
+                        id = {'type':'channel-overlay-select-div','index':0},
+                        children = []
+                    ),
+                    dbc.Button(
+                        'Overlay Channels!',
+                        id = {'type':'channel-overlay-butt','index':0},
+                        className = 'd-grid mx-auto',
+                        disabled = True
+                    )
+                ])
 
                 # Adding the different frames to the layers control object
                 new_children+=[
@@ -2512,7 +2580,7 @@ class FUSION:
                 for idx, struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children
+            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children, special_overlays_opts
 
         else:
             raise exceptions.PreventUpdate

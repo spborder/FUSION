@@ -665,6 +665,10 @@ class LayoutHandler:
                                 dcc.Dropdown(options = cell_types_list, placeholder='Select Property for Overlaid Heatmap',id='cell-drop'),
                                 html.Div(id='cell-sub-select-div',children = [],style={'marginTop':'5px'})
                             ]
+                        ),
+                        html.Div(
+                            id = 'special-overlays',
+                            children = []
                         )
                     ])
                 ]),
@@ -2112,7 +2116,7 @@ class LayoutHandler:
                                         id = 'user-survey-button',
                                         outline = True,
                                         color = 'primary',
-                                        href = ' https://ufl.qualtrics.com/jfe/form/SV_1A0CcKNLhTnFCHI',
+                                        href = 'https://ufl.qualtrics.com/jfe/form/SV_1A0CcKNLhTnFCHI',
                                         target='_blank',
                                         style = {'textTransform':'none'}
                                     )
