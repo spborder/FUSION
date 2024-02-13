@@ -811,7 +811,7 @@ class FUSION:
         # Adding CODEX channel overlay
         self.app.callback(
             Output('layer-control','children'),
-            Input({'type':'channel-overlay-butt','index':ALL},'n_clicks')
+            Input({'type':'channel-overlay-butt','index':ALL},'n_clicks'),
             [State({'type':'overlay-channel-color','index':ALL},'value'),
             State({'type':'overlay-channel-tab','index':ALL},'label')],
             prevent_initial_call = True
@@ -2477,7 +2477,7 @@ class FUSION:
                     self.ftu_colors,
                     manual_rois=[],
                     marked_ftus=[],
-                    channel_names = {}
+                    channel_names = []
                 )
 
                 # Returning options for special-overlays div
@@ -5592,8 +5592,10 @@ class FUSION:
 
         print(channel_colors)
         print(channels)
+        print(butt_click)
+        print(ctx.triggered)
         print(f'length of current overlays {len(self.current_overlays)}')
-        if not butt_click:
+        if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
 
         channel_colors = channel_colors[0]
@@ -5603,18 +5605,24 @@ class FUSION:
         # Updating the color for this channel
         self.current_channels[channels]['color'] = channel_colors
 
-        overlaid_channels = [
-            dl.LayerGroup([
-                dl.TileLayer(
-                    id = {'type': 'codex-overlay','index':c_idx},
-                    url = self.wsi.update_url_style(channel,self.current_channels[channel]['color']),
-                    tileSize = self.wsi.tile_dims[0]
-                )
-                for c_idx,channel in enumerate(list(self.current_channels.keys()))
-            ])
-        ]
+        print(self.current_channels)
 
-        return self.current_overlays + overlaid_channels
+        overlaid_channels = []
+        for c_idx,channel in enumerate(list(self.current_channels.keys())):
+
+            updated_url = self.wsi.update_url_style(channel,self.current_channels[channel]['color'])
+            overlaid_channels.append(
+                dl.Overlay(
+                    dl.TileLayer(
+                        id = {'type': 'codex-overlay','index':c_idx},
+                        url = updated_url,
+                        tileSize = self.wsi.tile_dims[0]
+                    )
+                )
+            )
+        
+
+        return self.current_overlays + dl.LayerGroup(overlaid_channels)
 
 
 

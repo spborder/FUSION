@@ -397,12 +397,12 @@ class CODEXSlide(DSASlide):
                  ftu_colors:dict,
                  manual_rois:list,
                  marked_ftus:list,
-                 channel_names:dict):
+                 channel_names:list):
         super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
 
         # Updating tile_url so that it includes the different frames
         self.channel_names = channel_names
-        if self.channel_names == {}:
+        if self.channel_names == []:
             # Fill in with dummy channel_names (test case with 16 or 17 channels)
             self.channel_names = [f'Channel_{i}' for i in range(0,self.n_frames)]
 
@@ -457,12 +457,14 @@ class CODEXSlide(DSASlide):
             channel_index = channel
         elif type(channel)==str:
             channel_index = self.channel_names.index(channel)
+        
+        print(channel_index)
 
         if not channel_index is None:
             if not color_options == {}:
-                styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/fzxy/{str(channel_index)}'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands":[{"band":1,"palette":["rgba(0,0,0,0)"',+f'"{color_options}"'+']}]}'
+                styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/fzxy/{channel_index}'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands":[{"band":1,"palette":["rgba(0,0,0,0)"'+f'"{color_options}"'+']}]}'
             else:
-                styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/fzxy/{str(channel_index)}'+'/{z}/{x}/{y}?token='+self.user_token+'&style={}'
+                styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/fzxy/{channel_index}'+'/{z}/{x}/{y}?token='+self.user_token+'&style={}'
 
             return styled_url
         else:
