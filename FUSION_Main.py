@@ -802,7 +802,8 @@ class FUSION:
 
         # Special overlay populating
         self.app.callback(
-            Output({'type':'channel-overlay-select-div','index': ALL},'children'),
+            [Output({'type':'channel-overlay-select-div','index': ALL},'children'),
+             Output({'type':'channel-overlay-butt','index':ALL},'disabled')],
             Input({'type':'channel-overlay-drop','index': ALL},'value'),
             prevent_initial_call = True,
         )(self.add_channel_color_select)
@@ -810,8 +811,9 @@ class FUSION:
         # Adding CODEX channel overlay
         self.app.callback(
             Output('layer-control','children'),
-            Input({'type':'overlay-channel-color','index':ALL},'value'),
-            State({'type':'overlay-channel-tab','index':ALL},'label'),
+            Input({'type':'channel-overlay-butt','index':ALL},'n_clicks')
+            [State({'type':'overlay-channel-color','index':ALL},'value'),
+            State({'type':'overlay-channel-tab','index':ALL},'label')],
             prevent_initial_call = True
         )(self.add_channel_overlay)
 
@@ -2480,6 +2482,8 @@ class FUSION:
 
                 # Returning options for special-overlays div
                 # For CODEX, this can be adding colorful channel overlays
+                self.current_channels = {}
+
                 special_overlays_opts.extend([
                     html.H6('Select Additional Channel Overlay(s)'),
                     self.layout_handler.gen_info_button('Select Channel and adjust color for combined view of multiple channels.'),
@@ -3483,8 +3487,10 @@ class FUSION:
                         self.wsi.marked_ftus = []
 
                         if not self.wsi.spatial_omics_type=='CODEX':
+                            # This is starting off only with the FTU annotations for Visium and Regular slides
                             self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
                         else:
+                            # This is for CODEX images where each frame is added as a BaseLayer
                             self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
 
                         for geo in new_geojson['features']:
@@ -5535,11 +5541,23 @@ class FUSION:
                 if len(channel_opts[0])>0:
                     channel_opts = channel_opts[0]
                     active_tab = channel_opts[0]
+                    disable_butt = False
                 else:
                     active_tab = None
+                    disable_butt = True
 
             channel_tab_list = []
             for c_idx,channel in enumerate(channel_opts):
+                
+                if channel in self.current_channels:
+                    channel_color = self.current_channels[channel]['color']
+                else:
+                    channel_color = 'rgba(255,255,255,255)'
+
+                    self.current_channels[channel] = {
+                        'index': c_idx,
+                        'color': channel_color
+                    }
 
                 channel_tab_list.append(
                     dbc.Tab(
@@ -5551,7 +5569,7 @@ class FUSION:
                             dmc.ColorPicker(
                                 id =  {'type':'overlay-channel-color','index':c_idx},
                                 format = 'rgba',
-                                value = 'rgba(255,255,255,255)',
+                                value = channel_color,
                                 fullWidth=True,
                             ),
                         ]
@@ -5564,18 +5582,39 @@ class FUSION:
                 active_tab = active_tab
             )
 
-            return [channel_tabs]
+            return [channel_tabs],[disable_butt]
         else:
             raise exceptions.PreventUpdate
     
-    def add_channel_overlay(self,channel_colors,channels):
+    def add_channel_overlay(self,butt_click,channel_colors,channels):
 
         # Adding an overlay for channel with a TileLayer containing stylized grayscale info
 
         print(channel_colors)
         print(channels)
+        print(f'length of current overlays {len(self.current_overlays)}')
+        if not butt_click:
+            raise exceptions.PreventUpdate
 
-        return self.current_overlays
+        channel_colors = channel_colors[0]
+        channels = channels[0]
+        
+        # self.current_channels contains a list of all the currently overlaid channels
+        # Updating the color for this channel
+        self.current_channels[channels]['color'] = channel_colors
+
+        overlaid_channels = [
+            dl.LayerGroup([
+                dl.TileLayer(
+                    id = {'type': 'codex-overlay','index':c_idx},
+                    url = self.wsi.update_url_style(channel,self.current_channels[channel]['color']),
+                    tileSize = self.wsi.tile_dims[0]
+                )
+                for c_idx,channel in enumerate(list(self.current_channels.keys()))
+            ])
+        ]
+
+        return self.current_overlays + overlaid_channels
 
 
 
