@@ -1751,7 +1751,7 @@ class LayoutHandler:
                                                     value='Overlaid',inline=True,id={'type':'ex-ftu-view','index':0}),
                                             html.B(),
                                             dbc.Label('Overlaid Mask Transparency:',html_for={'type':'ex-ftu-slider','index':0},style={'marginTop':'10px'}),
-                                            dcc.Slider(0,1,0.05,value=0,marks=None,vertical=False,tooltip={'placement':'bottom'},id={'type':'ex-ftu-slider'}),
+                                            dcc.Slider(0,1,0.05,value=0,marks=None,vertical=False,tooltip={'placement':'bottom'},id={'type':'ex-ftu-slider','index':0}),
                                             html.B(),
                                             dbc.Row([
                                                 dbc.Col(dbc.Button('Previous',id={'type':'prev-butt','index':0},outline=True,color='secondary',className='d-grid gap-2 col-6 mx-auto')),

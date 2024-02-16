@@ -1000,7 +1000,7 @@ class CODEXPrep(Prepper):
         self.initial_segmentation_parameters = [
             {
                 'name':'Nuclei',
-                'threshold':200,
+                'threshold':100,
                 'min_size':20,
                 'color':[0,0,255],
                 'marks_color':'rgb(0,0,255)'

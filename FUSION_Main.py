@@ -4734,11 +4734,19 @@ class FUSION:
     
     def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state):
 
-        new_ex_ftu = go.Figure()
-        feature_extract_children = []
-        go_to_feat_disabled = go_to_feat_state[0]
-        disable_slider = go_to_feat_state[0]
-        disable_method = go_to_feat_state[0]
+        new_ex_ftu = [go.Figure()]
+        feature_extract_children = [[]]
+        go_to_feat_disabled = [go_to_feat_state[0]]
+        disable_slider = [go_to_feat_state[0]]
+        disable_method = [go_to_feat_state[0]]
+        select_ftu = select_ftu[0]
+        prev = prev[0]
+        next = next[0]
+        go_to_feat = go_to_feat[0]
+        ex_ftu_view = ex_ftu_view[0]
+        thresh_slider = thresh_slider[0]
+        sub_method = sub_method[0]
+        ftu_slider = ftu_slider[0]
 
         try:
             ctx_triggered_id = ctx.triggered_id['type']
@@ -4747,10 +4755,10 @@ class FUSION:
 
         if not self.layer_ann is None:
 
-            slider_marks = {
+            slider_marks = [{
                 val:{'label':f'{sub_comp["name"]}: {val}','style':{'color':sub_comp["marks_color"]}}
                 for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
-            }
+            }]
 
             for idx,ftu,thresh in zip(list(range(len(self.sub_compartment_params))),self.sub_compartment_params,thresh_slider[::-1]):
                 ftu['threshold'] = thresh
@@ -4794,37 +4802,34 @@ class FUSION:
                 
                 sub_compartment_image = self.prep_handler.sub_segment_image(self.layer_ann['current_image'],self.layer_ann['current_mask'],self.sub_compartment_params,ex_ftu_view,ftu_slider)
 
-                new_ex_ftu = go.Figure(
+                new_ex_ftu = [go.Figure(
                     data = px.imshow(sub_compartment_image)['data'],
                     layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-                )
+                )]
             else:
-                go_to_feat_disabled = True
-                disable_slider = True
-                disable_method = True
+                go_to_feat_disabled = [True]
+                disable_slider = [True]
+                disable_method = [True]
 
-                new_ex_ftu = go.Figure(
+                new_ex_ftu = [go.Figure(
                     data = px.imshow(self.prep_handler.current_sub_comp_image)['data'],
                     layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-                )
+                )]
 
-                feature_extract_children = self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)
+                feature_extract_children = [self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)]
 
-            if go_to_feat_state:
-                return new_ex_ftu, slider_marks, no_update, disable_slider, disable_method, go_to_feat_disabled
-            else:
                 return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
         else:
-            slider_marks = {
+            slider_marks = [{
                 val:{'label':f'{sub_comp["name"]}: {val}','style':{'color':sub_comp["marks_color"]}}
                 for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
-            }
+            }]
             
-            go_to_feat_disabled = True
-            disable_slider = True
-            disable_method = True
-            new_ex_ftu = go.Figure()
-            feature_extract_children = self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)
+            go_to_feat_disabled = [True]
+            disable_slider = [True]
+            disable_method = [True]
+            new_ex_ftu = [go.Figure()]
+            feature_extract_children = [self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)]
 
             return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
 
