@@ -46,7 +46,7 @@ import time
 
 from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler
-from FUSION_Prep import PrepHandler, CODEXPrep, VisiumPrep, Prepper
+from FUSION_Prep import CODEXPrep, VisiumPrep, Prepper
 
 from upload_component import UploadComponent
 
@@ -817,7 +817,6 @@ class FUSION:
             prevent_initial_call = True
         )(self.add_channel_overlay)
 
-
     def builder_callbacks(self):
 
         # Initializing plot after selecting dataset(s)
@@ -936,10 +935,7 @@ class FUSION:
             output = [
                 Output('post-segment-row','style'),
                 Output('structure-type','disabled'),
-                Output('ftu-select','options'),
-                Output('ftu-select','value'),
-                Output('sub-comp-method','value'),
-                Output('ex-ftu-img','figure')
+                Output({'type':'prep-div','index':ALL},'children')
             ],
             inputs = [
                 Input({'type':'seg-log-interval','index':ALL},'disabled'),
@@ -950,23 +946,51 @@ class FUSION:
 
         # Updating sub-compartment segmentation
         self.app.callback(
-            [Input('ftu-select','value'),
-             Input('prev-butt','n_clicks'),
-             Input('next-butt','n_clicks'),
-             Input('go-to-feat','n_clicks'),
-             Input('ex-ftu-view','value'),
-             Input('ex-ftu-slider','value'),
-             Input('sub-thresh-slider','value'),
-             Input('sub-comp-method','value')],
-             State('go-to-feat','disabled'),
-             [Output('ex-ftu-img','figure'),
-              Output('sub-thresh-slider','marks'),
-              Output('feature-items','children'),
-              Output('sub-thresh-slider','disabled'),
-              Output('sub-comp-method','disabled'),
-              Output('go-to-feat','disabled')],
+            [Input({'type':'ftu-select','index':ALL},'value'),
+             Input({'type':'prev-butt','index':ALL},'n_clicks'),
+             Input({'type':'next-butt','index':ALL},'n_clicks'),
+             Input({'type':'go-to-feat','index':ALL},'n_clicks'),
+             Input({'type':'ex-ftu-view','index':ALL},'value'),
+             Input({'type':'ex-ftu-slider','index':ALL},'value'),
+             Input({'type':'sub-thresh-slider','index':ALL},'value'),
+             Input({'type':'sub-comp-method','index':ALL},'value')],
+             State({'type':'go-to-feat','index':ALL},'disabled'),
+             [Output({'type':'ex-ftu-img','index':ALL},'figure'),
+              Output({'type':'sub-thresh-slider','index':ALL},'marks'),
+              Output({'type':'feature-items','index':ALL},'children'),
+              Output({'type':'sub-thresh-slider','index':ALL},'disabled'),
+              Output({'type':'sub-comp-method','index':ALL},'disabled'),
+              Output({'type':'go-to-feat','index':ALL},'disabled')],
             prevent_initial_call = True
         )(self.update_sub_compartment)
+
+        # Grabbing new frame slide thumbnail for nucleus segmentation
+        self.app.callback(
+            [
+                Input({'type':'frame-thumbnail','index':ALL},'clickData'),
+                Input({'type':'frame-select','index':ALL},'value')
+            ],
+            [
+                Output({'type':'frame-thumbnail','index':ALL},'figure'),
+                Output({'type':'ex-nuc-img','index':ALL},'figure')
+            ],
+            prevent_initial_call = True
+        )(self.grab_nuc_region)
+
+        # Updating nucleus segmentation parameters for CODEX prep
+        self.app.callback(
+            [
+                Input({'type':'nuc-seg-method','index':ALL},'value'),
+                Input({'type':'nuc-thresh-slider','index':ALL},'value'),
+                Input({'type':'ex-nuc-view','index':ALL},'value'),
+                Input({'type':'go-to-feat','index':ALL},'n_clicks')
+            ],
+            [
+                Output({'type':'ex-nuc-img','index':ALL},'figure'),
+                Output({'type':'nuc-thresh-slider','index':ALL},'marks')
+            ],
+            prevent_initial_call = True
+        )(self.update_nuc_segmentation)
 
         # Running feature extraction plugin
         self.app.callback(
@@ -4024,6 +4048,9 @@ class FUSION:
         }    
 
         if upload_type == 'Visium':
+
+            self.prep_handler = VisiumPrep(self.dataset_handler)
+
             upload_reqs = html.Div([
                 dbc.Row([
                     html.Div(
@@ -4066,6 +4093,9 @@ class FUSION:
         
         elif upload_type =='Regular':
             # Regular slide with no --omics
+
+            self.prep_handler = Prepper(self.dataset_handler)
+
             upload_reqs = html.Div([
                 dbc.Row([
                     html.Div(
@@ -4090,8 +4120,10 @@ class FUSION:
             self.current_upload_type = 'Regular'
 
         elif upload_type == 'CODEX':
-
             # CODEX uploads include histology and multi-frame CODEX image (or just CODEX?)
+
+            self.prep_handler = CODEXPrep(self.dataset_handler)
+
             upload_reqs = html.Div([
                 dbc.Row([
                     html.Div(
@@ -4638,95 +4670,80 @@ class FUSION:
 
     def post_segmentation(self, seg_log_disable, continue_butt):
 
-        print(f'seg_log_disable: {seg_log_disable}')
-        print(ctx.triggered_id)
-        print(ctx.triggered)
         if ctx.triggered[0]['value']:
-            #if seg_log_disable[0]:
             # post-segment-row stuff
             sub_comp_style = {'display':'flex'}
             disable_organ = True
 
-            if not self.upload_omics_id is None:
-                # Generating spot annotations based on cell types
-                spot_annotation_info = self.prep_handler.run_spot_annotation(self.upload_wsi_id,self.upload_omics_id)
-                # Aggregating spot-level cell composition information to intersecting FTUs
-                spot_aggregation_info = self.prep_handler.run_spot_aggregation(self.upload_wsi_id)
+            if self.current_upload_type == 'Regular':
+                # Extracting annotations and initilaiz sub-compartment mask
+                self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
 
-            # Extracting annotations and initial sub-compartment mask
-            self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
+                # Running post-segmentation worfklow from Prepper
+                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(self.upload_wsi_id,self.upload_annotations)
+
+            if self.current_upload_type == 'Visium':
+                # Extracting annotations and initial sub-compartment mask
+                self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
+                
+                # Running post-segmentation workflowfrom VisiumPrep
+                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(self.upload_wsi_id, self.upload_omics_id, self.upload_annotations)
+
+            elif self.current_upload_type == 'CODEX':
+
+                # Running post-segmentation workflow from CODEX Prep
+                frame_names, current_frame = self.prep_handler.post_segmentation(self.upload_wsi_id) 
 
             # Populate with default sub-compartment parameters
             self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
 
-            # Adding options to FTU options dropdown menu
-            ftu_names = []
-            for idx,i in enumerate(self.upload_annotations):
-                if 'annotation' in i:
-                    if 'elements' in i['annotation']:
-                        if not 'interstitium' in i['annotation']['name']:
-                            if len(i['annotation']['elements'])>0:
-                                ftu_names.append({
-                                    'label':i['annotation']['name'],
-                                    'value':idx,
-                                    'disabled':False
-                                })
-                            else:
-                                ftu_names.append({
-                                    'label':i['annotation']['name']+' (None detected in slide)',
-                                    'value':idx,
-                                    'disabled':True
-                                })
-                        else:
-                            ftu_names.append({
-                                'label':i['annotation']['name']+' (Not implemented for interstitium)',
-                                'value':idx,
-                                'disabled':True
-                            })
-
             sub_comp_method = 'Manual'
 
-            if not all([i['disabled'] for i in ftu_names]):
-                # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
-                self.layer_ann = {
-                    'current_layer':[i['value'] for i in ftu_names if not i['disabled']][0],
-                    'current_annotation':0,
-                    'previous_annotation':0,
-                    'max_layers':[len(i['annotation']['elements']) for i in self.upload_annotations if 'annotation' in i]
+            if self.current_upload_type in ['Visium','Regular']:
+
+                if not self.layer_ann is None:
+
+                    ftu_value = self.feature_extract_ftus[self.layer_ann['current_layer']]
+                    image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+
+                    self.layer_ann['current_image'] = image
+                    self.layer_ann['current_mask'] = mask
+ 
+                else:
+                    ftu_value = ''
+
+                prep_values = {
+                    'ftu_names': self.feature_extract_ftus,
+                    'image': image
                 }
 
-                self.feature_extract_ftus = ftu_names
-                ftu_value = ftu_names[self.layer_ann['current_layer']]
-                image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+            elif self.current_upload_type == 'CODEX':
+                self.feature_extract_ftus = None
 
-                self.layer_ann['current_image'] = image
-                self.layer_ann['current_mask'] = mask
+                prep_values = {
+                    'frames': frame_names
+                }
 
-                image_figure = go.Figure(
-                    data = px.imshow(image)['data'],
-                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-                )           
-            else:
-                self.layer_ann = None
-                self.feature_extract_ftus = [{'label':'No FTUs for Feature Extraction','value':1,'disabled':False}]
-                image_figure = go.Figure()
-                ftu_value = ''
-                    
-
-            return sub_comp_style, disable_organ, ftu_names, ftu_value, sub_comp_method, image_figure
-            #else:
-            #return no_update, no_update, no_update, no_update,no_update, no_update
+            # Generating upload preprocessing row
+            prep_row = self.layout_handler.gen_uploader_prep_type(self.current_upload_type,prep_values)
+                
+            print(ctx.outputs_list)
+            return sub_comp_style, disable_organ, [prep_row]
         else:
-            
-            return no_update, no_update, no_update, no_update, no_update, no_update
+            return no_update, no_update, [no_update]
     
     def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state):
 
         new_ex_ftu = go.Figure()
         feature_extract_children = []
-        go_to_feat_disabled = go_to_feat_state
-        disable_slider = go_to_feat_state
-        disable_method = go_to_feat_state
+        go_to_feat_disabled = go_to_feat_state[0]
+        disable_slider = go_to_feat_state[0]
+        disable_method = go_to_feat_state[0]
+
+        try:
+            ctx_triggered_id = ctx.triggered_id['type']
+        except KeyError:
+            ctx_triggered_id = ctx.triggered_id
 
         if not self.layer_ann is None:
 
@@ -4739,7 +4756,7 @@ class FUSION:
                 ftu['threshold'] = thresh
                 self.sub_compartment_params[idx] = ftu
 
-            if ctx.triggered_id=='next-butt':
+            if ctx_triggered_id=='next-butt':
                 # Moving to next annotation in current layer
                 self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
 
@@ -4748,7 +4765,7 @@ class FUSION:
                 else:
                     self.layer_ann['current_annotation'] += 1
 
-            elif ctx.triggered_id=='prev-butt':
+            elif ctx_triggered_id=='prev-butt':
                 # Moving back to previous annotation in current layer
                 self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
 
@@ -4757,7 +4774,7 @@ class FUSION:
                 else:
                     self.layer_ann['current_annotation'] -= 1
             
-            elif ctx.triggered_id=='ftu-select':
+            elif ctx_triggered_id=='ftu-select':
                 # Moving to next annotation layer, restarting annotation count
                 if type(select_ftu)==dict:
                     self.layer_ann['current_layer']=select_ftu['value']
@@ -4767,13 +4784,13 @@ class FUSION:
                 self.layer_ann['current_annotation'] = 0
                 self.layer_ann['previous_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]
 
-            if ctx.triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
+            if ctx_triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
                 
                 new_image, new_mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
                 self.layer_ann['current_image'] = new_image
                 self.layer_ann['current_mask'] = new_mask
 
-            if ctx.triggered_id not in ['go-to-feat']:
+            if ctx_triggered_id not in ['go-to-feat']:
                 
                 sub_compartment_image = self.prep_handler.sub_segment_image(self.layer_ann['current_image'],self.layer_ann['current_mask'],self.sub_compartment_params,ex_ftu_view,ftu_slider)
 
@@ -4810,6 +4827,34 @@ class FUSION:
             feature_extract_children = self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)
 
             return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
+
+    def grab_nuc_region(self, thumb_fig_click, frame):
+
+        # Get a new region of the full image, or update the frame thumbnail.
+        print(thumb_fig_click)
+        print(frame)
+        print(ctx.triggered)
+
+        print(ctx.outputs_list)
+
+        raise exceptions.PreventUpdate
+
+        pass
+
+    def update_nuc_segmentation(self,nuc_method,nuc_thresh,view_type,go_to_feat):
+
+        # Generating nucleus segmentation image from user inputs
+        print(ctx.triggered)
+        print(nuc_method)
+        print(nuc_thresh)
+        print(view_type)
+        print(go_to_feat)
+
+        print(ctx.outputs_list)
+
+        raise exceptions.PreventUpdate
+
+        pass
 
     def run_feature_extraction(self,feat_butt):
 
@@ -5612,17 +5657,19 @@ class FUSION:
 
             updated_url = self.wsi.update_url_style(channel,self.current_channels[channel]['color'])
             overlaid_channels.append(
-                dl.Overlay(
+                dl.Pane(
                     dl.TileLayer(
-                        id = {'type': 'codex-overlay','index':c_idx},
+                        id = {'type': 'codex-overlay-tile','index':c_idx},
                         url = updated_url,
                         tileSize = self.wsi.tile_dims[0]
-                    )
+                    ),
+                    id = {'type':'codex-overlay','index':c_idx},
+                    name = "upper"
                 )
             )
         
 
-        return self.current_overlays + dl.LayerGroup(overlaid_channels)
+        return self.current_overlays + overlaid_channels
 
 
 
@@ -5709,11 +5756,11 @@ def app(*args):
         cli_list
         )
     layout_handler.gen_builder_layout(dataset_handler)
-    layout_handler.gen_uploader_layout(dataset_handler)
+    layout_handler.gen_uploader_layout()
 
     download_handler = DownloadHandler(dataset_handler)
 
-    prep_handler = PrepHandler(dataset_handler)
+    prep_handler = Prepper(dataset_handler)
     
     print('Ready to rumble!')
     main_app = DashProxy(__name__,

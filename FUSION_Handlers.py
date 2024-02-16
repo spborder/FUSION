@@ -1694,7 +1694,286 @@ class LayoutHandler:
         self.layout_dict['dataset-builder'] = builder_layout
         self.description_dict['dataset-builder'] = builder_description
 
-    def gen_uploader_layout(self,dataset_handler):
+    def gen_uploader_prep_type(self,upload_type,components_values):
+
+        # Getting specific layouts for different types of pre-processing.
+        if upload_type in ['Visium','Regular']:
+            # Sub-compartment segmentation card:
+            sub_comp_methods_list = [
+                {'label':'Manual','value':'Manual','disabled':False},
+                {'label':'Use Plugin','value':'plugin','disabled':True}
+            ]
+            sub_comp_card = dbc.Card([
+                dbc.CardHeader([
+                    'Sub-Compartment Segmentation',
+                    self.gen_info_button('This step allows for specific morphometric calculation for major sub-compartments on all FTUs in a dataset')
+                    ]),
+                dbc.CardBody([
+                    dbc.Row([
+                        dbc.Col(
+                            html.Div([
+                                dbc.Label('Select FTU',html_for={'type':'ftu-select','index':0}),
+                                dcc.Dropdown(
+                                    options = components_values['ftu_names'],
+                                    placeholder='FTU Options',
+                                    id={'type':'ftu-select','index':0}
+                                )
+                            ]),md=12)
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        dbc.Col(
+                            html.Div(
+                                children = [
+                                    dcc.Graph(
+                                        figure=go.Figure(
+                                            data = px.imshow(components_values['image'])['data'],
+                                            layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                                        ),
+                                        id={'type':'ex-ftu-img','index':0})
+                                ]
+                            ),md=12)
+                    ]),
+                    dbc.Row([
+                        dbc.Col(
+                            html.Div(
+                                children = [
+                                    dbc.Label('Example FTU Segmentation Options',html_for={'type':'ex-ftu-opts','index':0}),
+                                    html.Hr(),
+                                    html.Div(
+                                        id={'type':'ex-ftu-opts','index':0},
+                                        children = [
+                                            dcc.RadioItems(
+                                                [
+                                                    {'label':html.Span('Overlaid',style={'marginBottom':'5px','marginLeft':'5px','marginRight':'10px'}),'value':'Overlaid'},
+                                                    {'label':html.Span('Side-by-side',style={'marginLeft':'5px'}),'value':'Side-by-side'}
+                                                ],
+                                                    value='Overlaid',inline=True,id={'type':'ex-ftu-view','index':0}),
+                                            html.B(),
+                                            dbc.Label('Overlaid Mask Transparency:',html_for={'type':'ex-ftu-slider','index':0},style={'marginTop':'10px'}),
+                                            dcc.Slider(0,1,0.05,value=0,marks=None,vertical=False,tooltip={'placement':'bottom'},id={'type':'ex-ftu-slider'}),
+                                            html.B(),
+                                            dbc.Row([
+                                                dbc.Col(dbc.Button('Previous',id={'type':'prev-butt','index':0},outline=True,color='secondary',className='d-grid gap-2 col-6 mx-auto')),
+                                                dbc.Col(dbc.Button('Next',id={'type':'next-butt','index':0},outline=True,color='secondary',className='d-grid gap-2 col-6 mx-auto'))
+                                            ],style={'marginBottom':'15px','display':'flex'}),
+                                            html.Hr(),
+                                            dbc.Row([
+                                                dbc.Col(dbc.Button('Go to Feature Extraction',id={'type':'go-to-feat','index':0},color='success',className='d-grid gap-2 col-12 mx-auto'))
+                                            ])
+                                        ]
+                                    )
+                                ]
+                            ),md=12)
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        dbc.Col(
+                            html.Div(
+                                children = [
+                                    dbc.Label('Sub-compartment Segmentation Method:',html_for={'type':'sub-comp-method','index':0})
+                                ]
+                            ),md=4),
+                        dbc.Col(
+                            html.Div(
+                                children = [
+                                    dcc.Dropdown(sub_comp_methods_list,placeholder='Available Methods',id={'type':'sub-comp-method','index':0})
+                                ]
+                            ),md=8
+                        ),
+                        dbc.Col(
+                            self.gen_info_button('Choose whether to use manual thresholds or a pre-loaded sub-compartment segmentation plugin')
+                        )
+                    ]),
+                    dbc.Row([
+                        dbc.Col(
+                            html.Div(
+                                id='sub-comp-tabs',
+                                children = [
+                                    dbc.Label('Sub-Compartment Thresholds',html_for={'type':'sub-thresh-slider','index':0}),
+                                    dcc.RangeSlider(
+                                        id = {'type':'sub-thresh-slider','index':0},
+                                        min = 0.0,
+                                        max = 255.0,
+                                        step = 5.0,
+                                        value = [0.0,50.0,120.0],
+                                        marks = {
+                                            0.0:{'label':'Luminal Space: 0','style':'rgb(0,255,0)'},
+                                            50.0:{'label':'Eosinophilic: 50','style':'rgb(255,0,0)'},
+                                            120.0:{'label':'Nuclei: 120','style':'rgb(0,0,255)'}
+                                        },
+                                        tooltip = {'placement':'top','always_visible':False},
+                                        allowCross=False
+                                    )
+                                ]
+                            ),md=11, style = {'marginLeft':'20px','marginRight':'20px'}
+                        ),
+                        dbc.Col(
+                            self.gen_info_button('Adjust thresholds here to include/exclude pixels from each sub-compartment'),
+                            md = 1
+                        )
+                    ])
+                ])
+            ])
+
+            # Feature extraction card:
+            feat_extract_card = dbc.Card([
+                dbc.CardHeader([
+                    'Morphometric Feature Extraction',
+                    self.gen_info_button('Select which morphometrics and which FTUs to quantify and then hit the extract features button. These features are used for high-dimensional clustering and visualization.')
+                    ]),
+                dbc.CardBody(
+                    dbc.Row([
+                        dbc.Col(html.Div(id={'type':'feature-items','index':0}))
+                    ])
+                )
+            ])
+
+            prep_div_children = dbc.Row([
+                dbc.Col(sub_comp_card,md=6),
+                dbc.Col(feat_extract_card,md=6)
+            ])
+
+        elif upload_type == 'CODEX':
+
+            sub_comp_methods_list = [
+                {'label':'Manual','value':'Manual','disabled':False},
+                {'label':'Use Plugin','value':'plugin','disabled':True}
+            ]
+            # Nuclei segmentation card
+            nuc_seg_card = dbc.Card([
+                dbc.CardHeader([
+                    'Nuclei Segmentation',
+                    self.gen_info_button('Click on the thumbnail to see different regions of the tissue at high resolution. Select the frame you want to use for nuclei segmentation and optimize parameters below')
+                ]),
+                dbc.CardBody([
+                    dbc.Row([
+                        dbc.Col(
+                            html.Div([
+                                dbc.Label('Select Frame/Channel to use for nuclei segmentation',html_for={'type':'frame-select','index':0}),
+                                dcc.Dropdown(
+                                    options = components_values['frames'],
+                                    placeholder = 'Frame Options',
+                                    id = {'type':'frame-select','index':0}
+                                )
+                            ]),md=12
+                        )
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        dbc.Col(
+                            html.Div(
+                                children = [
+                                    dcc.Graph(figure = go.Figure(), id = {'type':'frame-thumbnail','index':0})
+                                ]
+                            ),md = 6
+                        ),
+                        dbc.Col(
+                            html.Div(
+                                children = [
+                                    dcc.Graph(figure = go.Figure(), id = {'type':'ex-nuc-img','index':0})
+                                ]
+                            ), md = 6
+                        )
+                    ]),
+                    dbc.Row([
+                        dbc.Col(
+                            html.Div(
+                                children = [
+                                    dbc.Label('Example Nuclei Segmentation Options',html_for={'type':'ex-nuc-opts','index':0}),
+                                    html.Hr(),
+                                    html.Div(
+                                        id = {'type':'ex-nuc-opts','index':0},
+                                        children = [
+                                            dcc.RadioItems(
+                                                [
+                                                    {'label':html.Span('Overlaid',style={'marginBottom':'5px','marginLeft':'5px','marginRight':'10px'}),'value':'Overlaid'},
+                                                    {'label':html.Span('Side-by-side',style={'marginLeft':'5px'}),'value':'Side-by-side'}                                                
+                                                ],
+                                                    value = 'Overlaid',inline = True, id = {'type':'ex-nuc-view','index':0}
+                                            ),
+                                            html.B(),
+                                            dbc.Label('Overlaid Mask Transparency:', html_for = {'type':'ex-nuc-slider','index':0},style = {'marginTop':'10px'}),
+                                            dcc.Slider(0,1,0.05, value = 0, marks = None, vertical = False, tooltip = {'placement':'bottom'},id = {'type':'ex-nuc-slider','index':0}),
+                                            html.Hr(),
+                                            dbc.Row([
+                                                dbc.Col(dbc.Button('Go to Feature Extraction',id = {'type':'go-to-feat','index':0},color = 'success',className = 'd-grid gap-2 col-12 mx-auto'))
+                                            ])
+                                        ]
+                                    )
+                                ]
+                            ),md=12
+                        )
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        dbc.Col(
+                            html.Div(
+                                children = [
+                                    dbc.Label('Nuclei Segmentation Method', html_for = {'type':'nuc-seg-method','index':0})
+                                ]
+                            ), md = 4
+                        ),
+                        dbc.Col(
+                            html.Div(
+                                children = [
+                                    dcc.Dropdown(
+                                        sub_comp_methods_list, placeholder= "Available Methods",id = {'type':'nuc-method','index': 0}
+                                    )
+                                ]
+                            ), md = 8
+                        ),
+                        self.gen_info_button('Choose whether to set thresholds manually or use another method')
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div(
+                                id = {'type':'nuc-thresh-div','index':0},
+                                children = [
+                                    dbc.Label('Set Nuclei Threshold',html_for={'type':'nuc-thresh-slider','index':0}),
+                                    dcc.Slider(
+                                        id = {'type':'nuc-thresh-slider','index':0},
+                                        min = 0.0,
+                                        max = 255.0,
+                                        step = 5,
+                                        value = 128.0,
+                                        marks = {
+                                            128.0: {'label':'Nuclei: 128','style':'rgb(0,0,255)'}
+                                        },
+                                        tooltip = {'placement': 'top','always_visible':False}
+                                    )
+                                ]
+                            ),
+                            self.gen_info_button('Adjust threshold to include more or fewer pixels in the nuclei segmentation')
+                        ])
+                    ])
+                ])
+            ])
+
+            # Feature extraction card:
+            feat_extract_card = dbc.Card([
+                dbc.CardHeader([
+                    'Morphometric Feature Extraction (CODEX)',
+                    self.gen_info_button('Select which morphometrics and which FTUs to quantify and then hit the extract features button. These features are used for high-dimensional clustering and visualization.')
+                    ]),
+                dbc.CardBody(
+                    dbc.Row([
+                        dbc.Col(html.Div(id={'type':'feature-items','index':0}))
+                    ])
+                )
+            ])
+
+            prep_div_children = dbc.Row([
+                dbc.Col(nuc_seg_card,md=6),
+                dbc.Col(feat_extract_card,md=6)
+            ])
+
+        else:
+            raise ValueError
+
+        return prep_div_children
+
+    def gen_uploader_layout(self):
 
         # This builds the layout for the Dataset Uploader functionality,
         # allowing users to upload their own data to be incorporated into the 
@@ -1713,8 +1992,7 @@ class LayoutHandler:
             {'label':'CosMx','value':'CosMx','disabled':True},
             {'label':'GeoMx','value':'GeoMx','disabled':True}
         ]
-        collection_list = [i['name'] for i in dataset_handler.get_collections()]
-        collection_list += ['New Collection']
+
         file_upload_card = dbc.Card([
             dbc.CardHeader([
                 'File Uploads',
@@ -1796,6 +2074,7 @@ class LayoutHandler:
                 self.gen_info_button('Selecting structures here determines which model(s) to use to extract FTUs')
                 ]),
             dbc.CardBody([
+                html.Div(id = {'type':'codex-segmentation-frame-div','index':0}),
                 dbc.Row([
                     dbc.Col(
                         html.Div([
@@ -1839,129 +2118,6 @@ class LayoutHandler:
             ])
         ])
 
-        # Sub-compartment segmentation card:
-        sub_comp_methods_list = [
-            {'label':'Manual','value':'Manual','disabled':False},
-            {'label':'Use Plugin','value':'plugin','disabled':True}
-        ]
-        sub_comp_card = dbc.Card([
-            dbc.CardHeader([
-                'Sub-Compartment Segmentation',
-                self.gen_info_button('This step allows for specific morphometric calculation for major sub-compartments on all FTUs in a dataset')
-                ]),
-            dbc.CardBody([
-                dbc.Row([
-                    dbc.Col(
-                        html.Div([
-                            dbc.Label('Select FTU',html_for='ftu-select'),
-                            dcc.Dropdown(placeholder='FTU Options',id='ftu-select')
-                        ]),md=12)
-                ]),
-                html.Hr(),
-                dbc.Row([
-                    dbc.Col(
-                        html.Div(
-                            children = [
-                                dcc.Graph(figure=go.Figure(),id='ex-ftu-img')
-                            ]
-                        ),md=12)
-                ]),
-                dbc.Row([
-                    dbc.Col(
-                        html.Div(
-                            children = [
-                                dbc.Label('Example FTU Segmentation Options',html_for='ex-ftu-opts'),
-                                html.Hr(),
-                                html.Div(
-                                    id='ex-ftu-opts',
-                                    children = [
-                                        dcc.RadioItems(
-                                            [
-                                                {'label':html.Span('Overlaid',style={'marginBottom':'5px','marginLeft':'5px','marginRight':'10px'}),'value':'Overlaid'},
-                                                {'label':html.Span('Side-by-side',style={'marginLeft':'5px'}),'value':'Side-by-side'}
-                                            ],
-                                                value='Overlaid',inline=True,id='ex-ftu-view'),
-                                        html.B(),
-                                        dbc.Label('Overlaid Mask Transparency:',html_for='ex-ftu-slider',style={'marginTop':'10px'}),
-                                        dcc.Slider(0,1,0.05,value=0,marks=None,vertical=False,tooltip={'placement':'bottom'},id='ex-ftu-slider'),
-                                        html.B(),
-                                        dbc.Row([
-                                            dbc.Col(dbc.Button('Previous',id='prev-butt',outline=True,color='secondary',className='d-grid gap-2 col-6 mx-auto')),
-                                            dbc.Col(dbc.Button('Next',id='next-butt',outline=True,color='secondary',className='d-grid gap-2 col-6 mx-auto'))
-                                        ],style={'marginBottom':'15px','display':'flex'}),
-                                        html.Hr(),
-                                        dbc.Row([
-                                            dbc.Col(dbc.Button('Go to Feature Extraction',id='go-to-feat',color='success',className='d-grid gap-2 col-12 mx-auto'))
-                                        ])
-
-                                    ]
-                                )
-                            ]
-                        ),md=12)
-                ]),
-                html.Hr(),
-                dbc.Row([
-                    dbc.Col(
-                        html.Div(
-                            children = [
-                                dbc.Label('Sub-compartment Segmentation Method:',html_for='sub-comp-method')
-                            ]
-                        ),md=4),
-                    dbc.Col(
-                        html.Div(
-                            children = [
-                                dcc.Dropdown(sub_comp_methods_list,placeholder='Available Methods',id='sub-comp-method')
-                            ]
-                        ),md=8
-                    ),
-                    dbc.Col(
-                        self.gen_info_button('Choose whether to use manual thresholds or a pre-loaded sub-compartment segmentation plugin')
-                    )
-                ]),
-                dbc.Row([
-                    dbc.Col(
-                        html.Div(
-                            id='sub-comp-tabs',
-                            children = [
-                                dbc.Label('Sub-Compartment Thresholds',html_for='sub-thresh-slider'),
-                                dcc.RangeSlider(
-                                    id = 'sub-thresh-slider',
-                                    min = 0.0,
-                                    max = 255.0,
-                                    step = 5.0,
-                                    value = [0.0,50.0,120.0],
-                                    marks = {
-                                        0.0:{'label':'Luminal Space: 0','style':'rgb(0,255,0)'},
-                                        50.0:{'label':'Eosinophilic: 50','style':'rgb(255,0,0)'},
-                                        120.0:{'label':'Nuclei: 120','style':'rgb(0,0,255)'}
-                                    },
-                                    tooltip = {'placement':'top','always_visible':False},
-                                    allowCross=False
-                                )
-                            ]
-                        ),md=11, style = {'marginLeft':'20px','marginRight':'20px'}
-                    ),
-                    dbc.Col(
-                        self.gen_info_button('Adjust thresholds here to include/exclude pixels from each sub-compartment'),
-                        md = 1
-                    )
-                ])
-            ])
-        ])
-
-        # Feature extraction card:
-        feat_extract_card = dbc.Card([
-            dbc.CardHeader([
-                'Morphometric Feature Extraction',
-                self.gen_info_button('Select which morphometrics and which FTUs to quantify and then hit the extract features button. These features are used for high-dimensional clustering and visualization.')
-                ]),
-            dbc.CardBody(
-                dbc.Row([
-                    dbc.Col(html.Div(id='feature-items'))
-                ])
-            )
-        ])
-
         uploader_layout = dbc.Row(
             children = [
                 html.H1('Dataset Uploader'),
@@ -1994,8 +2150,7 @@ class LayoutHandler:
                             html.Div(
                                 dbc.Row(
                                     children = [
-                                        dbc.Col(html.Div(sub_comp_card),md=6),
-                                        dbc.Col(html.Div(feat_extract_card),md=6)
+                                        html.Div(id = {'type':'prep-div','index':0})
                                     ]
                                 )
                             ),md=12
