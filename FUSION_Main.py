@@ -4748,6 +4748,7 @@ class FUSION:
         sub_method = sub_method[0]
         ftu_slider = ftu_slider[0]
 
+
         try:
             ctx_triggered_id = ctx.triggered_id['type']
         except KeyError:
@@ -4818,6 +4819,9 @@ class FUSION:
 
                 feature_extract_children = [self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)]
 
+            if go_to_feat_state[0]:
+                return new_ex_ftu, slider_marks, [no_update], disable_slider, disable_method, go_to_feat_disabled
+            else:
                 return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
         else:
             slider_marks = [{
