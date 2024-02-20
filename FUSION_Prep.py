@@ -422,7 +422,7 @@ class PrepHandler:
 
 class Prepper:
     def __init__(self, girder_handler):
-        pass
+
         self.girder_handler = girder_handler
 
         # Dictionary containing model and item id's
@@ -800,6 +800,53 @@ class Prepper:
 
         return annotation_info
 
+    def post_segmentation(self, upload_wsi_id, upload_annotations):
+
+        # What to do after segmentation for a Regular upload
+
+        # Getting annotations and returning layer_anns
+        ftu_names = []
+        for idx, i in enumerate(upload_annotations):
+            if 'annotation' in i:
+                if 'elements' in i['annotation']:
+                    if not 'interstitium' in i['annotation']['name']:
+                        if len(i['annotation']['elements'])>0:
+                            ftu_names.append({
+                                'label':i['annotation']['name'],
+                                'value':idx,
+                                'disabled':False
+                            })
+                        else:
+                            ftu_names.append({
+                                'label': i['annotation']['name']+ ' (None detected in slide)',
+                                'value':idx,
+                                'disabled': True
+                            })
+                    else:
+                        ftu_names.append({
+                            'label': i['annotation']['name'] + ' (Not implemented for interstitium)',
+                            'value': idx,
+                            'disabled': True
+                        })
+
+        if not all([i['disabled'] for i in ftu_names]):
+            # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+            layer_ann = {
+                'current_layer': [i['value'] for i in ftu_names if not i['disabled']][0],
+                'current_annotation': 0,
+                'previous_annotation': 0,
+                'max_layers': [len(i['annotation']['elements']) for i in upload_annotations if 'annotation' in i]
+            }
+        else:
+            layer_ann = None
+            ftu_names = [{
+                'label': 'No FTUs for Feature Extraction',
+                'value':1,
+                'disabled':False
+            }]
+
+        return ftu_names, layer_ann
+
 
 class VisiumPrep(Prepper):
     def __init__(self, girder_handler):
@@ -894,19 +941,92 @@ class VisiumPrep(Prepper):
         else:
             return 'No output found :/'
 
+    def post_segmentation(self, upload_wsi_id, upload_omics_id, upload_annotations):
 
+        # What to do after segmentation for a Visium upload
 
+        # Generate spot annotations and aggregate --omics info
+        spot_annotation = self.run_spot_annotation(upload_wsi_id,upload_omics_id)
+        spot_aggregation = self.run_spot_aggregation(upload_wsi_id)
 
+        # Getting annotations and returning layer_anns
+        ftu_names = []
+        for idx, i in enumerate(upload_annotations):
+            if 'annotation' in i:
+                if 'elements' in i['annotation']:
+                    if not 'interstitium' in i['annotation']['name']:
+                        if len(i['annotation']['elements'])>0:
+                            ftu_names.append({
+                                'label':i['annotation']['name'],
+                                'value':idx,
+                                'disabled':False
+                            })
+                        else:
+                            ftu_names.append({
+                                'label': i['annotation']['name']+ ' (None detected in slide)',
+                                'value':idx,
+                                'disabled': True
+                            })
+                    else:
+                        ftu_names.append({
+                            'label': i['annotation']['name'] + ' (Not implemented for interstitium)',
+                            'value': idx,
+                            'disabled': True
+                        })
 
+        if not all([i['disabled'] for i in ftu_names]):
+            # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+            layer_ann = {
+                'current_layer': [i['value'] for i in ftu_names if not i['disabled']][0],
+                'current_annotation': 0,
+                'previous_annotation': 0,
+                'max_layers': [len(i['annotation']['elements']) for i in upload_annotations if 'annotation' in i]
+            }
+        else:
+            layer_ann = None
+            ftu_names = [{
+                'label': 'No FTUs for Feature Extraction',
+                'value':1,
+                'disabled':False
+            }]
 
+        return ftu_names, layer_ann
 
 
 class CODEXPrep(Prepper):
     def __init__(self, girder_handler):
         super().__init__(girder_handler)
-        pass
 
+        self.initial_segmentation_parameters = [
+            {
+                'name':'Nuclei',
+                'threshold':100,
+                'min_size':20,
+                'color':[0,0,255],
+                'marks_color':'rgb(0,0,255)'
+            }           
+        ]
 
+    def post_segmentation(self,upload_wsi_id):
+
+        # Getting the frames present for an image
+        image_metadata = self.girder_handler.get_tile_metadata(upload_wsi_id)
+
+        frame_labels = [
+            {
+                'label': f'Frame_{idx}',
+                'value': idx,
+                'disabled': False
+            }
+            for idx in range(len(image_metadata['frames']))
+        ]
+
+        current_frame = {
+            'index': 0,
+            'region': []
+        }
+
+        return frame_labels, current_frame
 
 
 

@@ -396,18 +396,26 @@ class CODEXSlide(DSASlide):
                  girder_handler,
                  ftu_colors:dict,
                  manual_rois:list,
-                 marked_ftus:list,
-                 channel_names:dict):
+                 marked_ftus:list
+                 ):
         super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
 
         # Updating tile_url so that it includes the different frames
-        self.channel_names = channel_names
-        if self.channel_names == {}:
+        self.channel_names = []
+        
+        # Getting image metadata which might contain frame names
+        image_metadata = self.girder_handler.get_tile_metadata(self.item_id)
+        if 'frames' in image_metadata:
+            for f in image_metadata['frames']:
+                if 'Channel' in f:
+                    self.channel_names.append(f['Channel'])
+
+        if self.channel_names == []:
             # Fill in with dummy channel_names (test case with 16 or 17 channels)
             self.channel_names = [f'Channel_{i}' for i in range(0,self.n_frames)]
 
         self.channel_tile_url = [
-            self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/fzxy/'+str(i)+'/{z}/{x}/{y}?token='+self.user_token
+            self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(i)+'}]}'
             for i in range(len(self.channel_names))
         ]
 
@@ -448,10 +456,21 @@ class CODEXSlide(DSASlide):
         
         return frame_properties
 
-    def update_url_style(self,channel,color_options):
+    def update_url_style(self,color_options: dict):
 
-        #TODO: Updating style parameter of the frames endpoint
-        # Define what the "color_options" input should be, 
-        
-        return ''
+        # Color options is a dict containing "bands" followed by each styled frame
+        # Assembling the style dict 
+        style_dict = {
+            "bands": [
+                {
+                    "palette": ["rgba(0,0,0,0)",color_options[c]],
+                    "framedelta": c
+                }
+                for c in color_options
+            ]
+        }
+
+        styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style='+json.dumps(style_dict)
+
+        return styled_url
 
