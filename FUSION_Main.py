@@ -2501,8 +2501,7 @@ class FUSION:
                     self.dataset_handler,
                     self.ftu_colors,
                     manual_rois=[],
-                    marked_ftus=[],
-                    channel_names = []
+                    marked_ftus=[]
                 )
 
                 # Returning options for special-overlays div
@@ -5592,6 +5591,7 @@ class FUSION:
     def add_channel_color_select(self,channel_opts):
 
         # Creating a new color selector thing for overlaid channels?
+
         if not channel_opts is None:
             if type(channel_opts)==list:
                 if len(channel_opts[0])>0:
@@ -5602,12 +5602,18 @@ class FUSION:
                     active_tab = None
                     disable_butt = True
                     channel_opts = channel_opts[0]
+                    self.current_channels = {}
+            
+            # Removing any channels which aren't included from self.current_channels
+            intermediate_dict = self.current_channels.copy()
+            current_channels = list(self.current_channels.keys())
 
+            self.current_channels = {}
             channel_tab_list = []
             for c_idx,channel in enumerate(channel_opts):
                 
-                if channel in self.current_channels:
-                    channel_color = self.current_channels[channel]['color']
+                if channel in intermediate_dict:
+                    channel_color = intermediate_dict[channel]['color']
                 else:
                     channel_color = 'rgba(255,255,255,255)'
 
@@ -5641,6 +5647,8 @@ class FUSION:
 
             return [channel_tabs],[disable_butt]
         else:
+            self.current_channels = {}
+
             raise exceptions.PreventUpdate
     
     def add_channel_overlay(self,butt_click,channel_colors,channels):
@@ -5703,14 +5711,20 @@ def app(*args):
     dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
 
     # Initial collection
-    initial_collection = '/collection/10X_Visium'
-    path_type = 'collection'
+    initial_collection = ['/collection/10X_Visium']
+    path_type = ['collection','collection']
     print(f'initial collection: {initial_collection}')
-    initial_collection_id = dataset_handler.gc.get('resource/lookup',parameters={'path':initial_collection})
+
+    if isinstance(initial_collection,str):
+        initial_collection_id = [dataset_handler.gc.get('resource/lookup',parameters={'path':initial_collection})]
+    elif isinstance(initial_collection,list):
+        initial_collection_id = [dataset_handler.gc.get('resource/lookup',parameters={'path':i}) for i in initial_collection]
 
     print(f'loading initial slide(s)')
     # Contents of folder (used for testing to initialize with one slide)
-    initial_collection_contents = dataset_handler.gc.get(f'resource/{initial_collection_id["_id"]}/items',parameters={'type':path_type})
+    initial_collection_contents = []
+    for p_type,i in zip(path_type,initial_collection_id):
+        initial_collection_contents.extend(dataset_handler.gc.get(f'resource/{i["_id"]}/items',parameters={'type':p_type}))
     initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
 
     # For testing, setting initial slide

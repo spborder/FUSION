@@ -396,12 +396,20 @@ class CODEXSlide(DSASlide):
                  girder_handler,
                  ftu_colors:dict,
                  manual_rois:list,
-                 marked_ftus:list,
-                 channel_names:list):
+                 marked_ftus:list
+                 ):
         super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
 
         # Updating tile_url so that it includes the different frames
-        self.channel_names = channel_names
+        self.channel_names = []
+        
+        # Getting image metadata which might contain frame names
+        image_metadata = self.girder_handler.get_tile_metadata(self.item_id)
+        if 'frames' in image_metadata:
+            for f in image_metadata['frames']:
+                if 'Channel' in f:
+                    self.channel_names.append(f['Channel'])
+
         if self.channel_names == []:
             # Fill in with dummy channel_names (test case with 16 or 17 channels)
             self.channel_names = [f'Channel_{i}' for i in range(0,self.n_frames)]
