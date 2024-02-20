@@ -407,7 +407,7 @@ class CODEXSlide(DSASlide):
             self.channel_names = [f'Channel_{i}' for i in range(0,self.n_frames)]
 
         self.channel_tile_url = [
-            self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/fzxy/'+str(i)+'/{z}/{x}/{y}?token='+self.user_token+'&style={}'
+            self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(i)+'}]}'
             for i in range(len(self.channel_names))
         ]
 
@@ -448,31 +448,21 @@ class CODEXSlide(DSASlide):
         
         return frame_properties
 
-    def update_url_style(self,color_options):
+    def update_url_style(self,color_options: dict):
 
-        # Color options in this case is just the "rgba(#,#,#,#)" string
-        print(color_options)
-
-        if not channel_index is None:
-            if not color_options == {}:
-                styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/fzxy/{channel_index}'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands":[{"band":1,"palette":["rgba(0,0,0,0)"'+f'"{color_options}"'+']}]}'
-            else:
-
-                # Assembling the style dict 
-                style_dict = {
-                    "bands": [
-                        {
-                            "palette": ["rgba(0,0,0,0)",color_options[c]],
-                            "framedelta": c
-                        }
-                        for c in color_options
-                    ]
+        # Color options is a dict containing "bands" followed by each styled frame
+        # Assembling the style dict 
+        style_dict = {
+            "bands": [
+                {
+                    "palette": ["rgba(0,0,0,0)",color_options[c]],
+                    "framedelta": c
                 }
+                for c in color_options
+            ]
+        }
 
-                styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style='+json.dumps(style_dict)
+        styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style='+json.dumps(style_dict)
 
-            return styled_url
-        else:
-            return ""
-        
-    
+        return styled_url
+

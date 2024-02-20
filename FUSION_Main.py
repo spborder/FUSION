@@ -810,7 +810,8 @@ class FUSION:
 
         # Adding CODEX channel overlay
         self.app.callback(
-            Output('layer-control','children'),
+            [Output({'type':'codex-tile-layer','index':ALL},'url'),
+             Output({'type':'overlay-channel-tab','index':ALL},'label_style')],
             Input({'type':'channel-overlay-butt','index':ALL},'n_clicks'),
             [State({'type':'overlay-channel-color','index':ALL},'value'),
             State({'type':'overlay-channel-tab','index':ALL},'label')],
@@ -5600,6 +5601,7 @@ class FUSION:
                 else:
                     active_tab = None
                     disable_butt = True
+                    channel_opts = channel_opts[0]
 
             channel_tab_list = []
             for c_idx,channel in enumerate(channel_opts):
@@ -5609,10 +5611,10 @@ class FUSION:
                 else:
                     channel_color = 'rgba(255,255,255,255)'
 
-                    self.current_channels[channel] = {
-                        'index': c_idx,
-                        'color': channel_color
-                    }
+                self.current_channels[channel] = {
+                    'index': self.wsi.channel_names.index(channel),
+                    'color': channel_color
+                }
 
                 channel_tab_list.append(
                     dbc.Tab(
@@ -5644,42 +5646,43 @@ class FUSION:
     def add_channel_overlay(self,butt_click,channel_colors,channels):
 
         # Adding an overlay for channel with a TileLayer containing stylized grayscale info
-
-        print(channel_colors)
-        print(channels)
-        print(butt_click)
-        print(ctx.triggered)
-        print(f'length of current overlays {len(self.current_overlays)}')
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
-
-        channel_colors = channel_colors[0]
-        channels = channels[0]
         
         # self.current_channels contains a list of all the currently overlaid channels
         # Updating the color for this channel
-        self.current_channels[channels]['color'] = channel_colors
+        for ch, co in zip(channels,channel_colors):
+            self.current_channels[ch]['color'] = co
 
-        print(self.current_channels)
+        updated_channel_idxes = [self.current_channels[i]['index'] for i in self.current_channels]
+        updated_channel_colors = [self.current_channels[i]['color'] for i in self.current_channels]
 
-        overlaid_channels = []
-        for c_idx,channel in enumerate(list(self.current_channels.keys())):
+        update_style = {
+            c_idx: color
+            for c_idx,color in zip(updated_channel_idxes,updated_channel_colors)
+        }
 
-            updated_url = self.wsi.update_url_style(channel,self.current_channels[channel]['color'])
-            overlaid_channels.append(
-                dl.Pane(
-                    dl.TileLayer(
-                        id = {'type': 'codex-overlay-tile','index':c_idx},
-                        url = updated_url,
-                        tileSize = self.wsi.tile_dims[0]
-                    ),
-                    id = {'type':'codex-overlay','index':c_idx},
-                    name = "upper"
-                )
-            )
-        
+        updated_urls = []
+        for c_idx, old_style in enumerate(self.wsi.channel_tile_url):
+            if c_idx not in updated_channel_idxes:
+                base_style = {
+                    c_idx: "rgba(255,255,255,255)"
+                }
 
-        return self.current_overlays + overlaid_channels
+                new_url = self.wsi.update_url_style(base_style | update_style)
+            else:
+
+                new_url = self.wsi.update_url_style(update_style)
+
+            updated_urls.append(new_url)
+
+        # Adding label style to tabs, just adding the overlay color to the text for that tab:
+        tab_label_style = [
+            {'color': co}
+            for co in channel_colors
+        ]
+
+        return updated_urls, tab_label_style
 
 
 
