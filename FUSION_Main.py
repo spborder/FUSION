@@ -2541,7 +2541,8 @@ class FUSION:
                     dl.BaseLayer(
                         dl.TileLayer(
                             url = new_slide.channel_tile_url[c_idx],
-                            tileSize = 240
+                            tileSize = 240,
+                            id = {'type':'codex-tile-layer','index':c_idx}
                         ),
                         name = c_name,
                         checked = c_name=='Channel_0'

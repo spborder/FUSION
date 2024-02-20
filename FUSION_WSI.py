@@ -448,24 +448,31 @@ class CODEXSlide(DSASlide):
         
         return frame_properties
 
-    def update_url_style(self,channel,color_options):
+    def update_url_style(self,color_options):
 
         # Color options in this case is just the "rgba(#,#,#,#)" string
-        # Channel can be the name of the channel or the index of the frame
-        channel_index = None
-        if type(channel)==int:
-            channel_index = channel
-        elif type(channel)==str:
-            channel_index = self.channel_names.index(channel)
-        
-        print(channel_index)
+        print(color_options)
 
         if not channel_index is None:
             if not color_options == {}:
                 styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/fzxy/{channel_index}'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands":[{"band":1,"palette":["rgba(0,0,0,0)"'+f'"{color_options}"'+']}]}'
             else:
-                styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/fzxy/{channel_index}'+'/{z}/{x}/{y}?token='+self.user_token+'&style={}'
+
+                # Assembling the style dict 
+                style_dict = {
+                    "bands": [
+                        {
+                            "palette": ["rgba(0,0,0,0)",color_options[c]],
+                            "framedelta": c
+                        }
+                        for c in color_options
+                    ]
+                }
+
+                styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style='+json.dumps(style_dict)
 
             return styled_url
         else:
             return ""
+        
+    
