@@ -2467,7 +2467,7 @@ class FUSION:
                 # Returning options for special-overlays div
                 # For Visium, this can be that change-level plugin
                 special_overlays_opts.extend([
-                    html.H6('Add Cell Subtypes'),
+                    html.H6('Add Cell Subtypes',style={'marginTop':'5px'}),
                     self.layout_handler.gen_info_button('Select a cell type below to add the cell subtypes of that cell type to the list of overlaid visualizations'),
                     dbc.Row([
                         dbc.Col(
@@ -5460,7 +5460,7 @@ class FUSION:
                             #### Principle Investigator: Pinaki Sarder, Ph.D.
 
                             Please read the information below carefully before you decide to participate in this research study.
-                            *Your participation is voluntary. You can decide not to participate or later decide to stop participating at any time without penalty or lose any benefits that would normally be expected.*
+                            **Your participation is voluntary. You can decide not to participate or later decide to stop participating at any time without penalty or lose any benefits that would normally be expected.**
 
                             1. **Purpose of the Study:** The purpose of this research study is to assess the usability of _FUSION_.
                             2. **What will you be asked to do:** You will be asked to answer a number of questions using tools within _FUSION_ assessing histology and spatial -omics data.
