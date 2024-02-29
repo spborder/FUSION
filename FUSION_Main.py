@@ -2479,7 +2479,7 @@ class FUSION:
                                 ],
                                 value = [],
                                 multi = True,
-                                disabled = False
+                                disabled = True
                             ),
                             md = 8
                         ),
@@ -2488,7 +2488,7 @@ class FUSION:
                                 'Add Sub-Types!',
                                 id = {'type':'cell-subtype-butt','index':0},
                                 className = 'd-grid col-12 mx-auto',
-                                disabled = False
+                                disabled = True
                             ),
                             md = 4
                         )
@@ -5497,8 +5497,6 @@ class FUSION:
                         )
                     ])
                 )
-
-
 
             else:
                 # Comments tab
