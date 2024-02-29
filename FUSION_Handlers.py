@@ -1336,8 +1336,13 @@ class LayoutHandler:
                         dbc.CardHeader(
                             dbc.Tabs(
                                 id = {'type':'questions-tabs','index':0},
-                                active_tab = 'level-1-tab',
+                                active_tab = 'consent-tab',
                                 children = [
+                                    dbc.Tab(
+                                        tab_id = 'consent-tab',
+                                        label = 'Study Consent',
+                                        activeTabClassName='fw-bold fst-italic'
+                                    ),
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
                                         label = 'Task 1: Histology',
@@ -1382,8 +1387,13 @@ class LayoutHandler:
                         dbc.CardHeader(
                             dbc.Tabs(
                                 id = {'type':'questions-tabs','index':0},
-                                active_tab = 'level-1-tab',
+                                active_tab = 'consent-tab',
                                 children = [
+                                    dbc.Tab(
+                                        tab_id = 'consent-tab',
+                                        label = 'Study Consent',
+                                        activeTabClassName='fw-bold fst-italic'
+                                    ),
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
                                         label = 'Task 1: Spatial -Omics',
@@ -1428,8 +1438,13 @@ class LayoutHandler:
                         dbc.CardHeader(
                             dbc.Tabs(
                                 id = {'type':'questions-tabs','index':0},
-                                active_tab = 'level-1-tab',
+                                active_tab = 'consent-tab',
                                 children = [
+                                    dbc.Tab(
+                                        tab_id = 'consent-tab',
+                                        label = 'Study Consent',
+                                        activeTabClassName='fw-bold fst-italic'
+                                    ),
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
                                         label = 'Task 1: Histology',
