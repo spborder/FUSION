@@ -563,6 +563,13 @@ class FUSION:
             Output({'type':'question-div','index':ALL},'children'),
         )(self.update_question_div)
 
+        # Consenting to participate in the study, activating other question tabs
+        self.app.callback(
+            Input({'type':'study-consent-butt','index':ALL},'n_clicks'),
+            Output({'type':'question-tab','index':ALL},'disabled'),
+            prevent_initial_call = True
+        )(self.consent_to_usability_study)
+
         # Posting question responses to usability info file
         self.app.callback(
             Input({'type':'questions-submit','index':ALL},'n_clicks'),
@@ -5491,11 +5498,19 @@ class FUSION:
                             Participation in the research implies that you have read the information in this form and 
                             consent to take part in the research. Please save a copy of this form for your records or 
                             for future reference.
-
+                            
+                            If you want to participate in this research study, click the "I agree to participate" button below.
                             If you do not want to participate, you may simply close this window.
-                            '''
+                            ''',
+                            style = {'font-size':'0.8rem'}
+                        ),
+                        dbc.Button(
+                            'I agree to participate',
+                            className = 'd-grid col-12 mx-auto',
+                            id = {'type':'study-consent-butt','index':0},
+                            style = {'marginTop':'10px','marginBottom':'10px'}
                         )
-                    ])
+                    ],style={'maxHeight':'55vh','overflow':'scroll'})
                 )
 
             else:
@@ -5508,7 +5523,7 @@ class FUSION:
                             dcc.Textarea(
                                 id = {'type':'question-input','index':0},
                                 placeholder = 'Comments',
-                                style = {'width':'100%'},
+                                style = {'width':'100%','marginBottom':'10px'},
                                 maxLength = 10000
                             )
                         )
@@ -5519,13 +5534,13 @@ class FUSION:
                 question_list.append(html.Div([
                     dbc.Button(
                         'Save Responses',
-                        className = 'd-grid mx-auto',
+                        className = 'd-grid col-12 mx-auto',
                         id = {'type':'questions-submit','index':level_index},
                         style = {'marginBottom':'15px'}
                     ),
                     dbc.Button(
                         'Submit Recording',
-                        className = 'd-grid mx-auto',
+                        className = 'd-grid col-12 mx-auto',
                         id = {'type':'recording-upload','index':0},
                         target='_blank',
                         href = 'https://trailblazer.app.box.com/f/f843d7b1da204b538dd3173c81ce66cf',
@@ -5538,9 +5553,19 @@ class FUSION:
         else:
             question_list = ['What did you do fool?']
 
-        question_return = dbc.Form(question_list)
+        question_return = dbc.Form(question_list,style = {'maxHeight':'55vh','overflow':'scroll'})
 
         return [question_return]
+
+    def consent_to_usability_study(self,butt_click):
+        
+        # Enabling all the question tabs after user clicks the I agree to participate button
+        if not ctx.triggered[0]['value']:
+            raise exceptions.PreventUpdate
+        
+        n_outputs = len(ctx.outputs_list)
+
+        return [False]*n_outputs
 
     def post_usability_response(self,butt_click,questions_inputs):
 

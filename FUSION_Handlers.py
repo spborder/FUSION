@@ -1341,32 +1341,44 @@ class LayoutHandler:
                                     dbc.Tab(
                                         tab_id = 'consent-tab',
                                         label = 'Study Consent',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':0}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
                                         label = 'Task 1: Histology',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':1}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-2-tab',
                                         label = 'Task 2: Spatial -Omics',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':2}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-3-tab',
                                         label = 'Task 3: Answer Hypothesis',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':3}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-4-tab',
                                         label = 'Task 4: Generate Hypothesis',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':4}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'comments-tab',
                                         label = 'Comments',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':5}
                                     )
                                 ]
                             )
@@ -1392,32 +1404,44 @@ class LayoutHandler:
                                     dbc.Tab(
                                         tab_id = 'consent-tab',
                                         label = 'Study Consent',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':0}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
                                         label = 'Task 1: Spatial -Omics',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':1}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-2-tab',
                                         label = 'Task 2: Histology',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':2}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-3-tab',
                                         label = 'Task 3: Answer Hypothesis',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':3}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-4-tab',
                                         label = 'Task 4: Generate Hypothesis',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':4}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'comments-tab',
                                         label = 'Comments',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':5}
                                     )
                                 ]
                             )
@@ -1443,32 +1467,44 @@ class LayoutHandler:
                                     dbc.Tab(
                                         tab_id = 'consent-tab',
                                         label = 'Study Consent',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':0}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-1-tab',
                                         label = 'Task 1: Histology',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':1}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-2-tab',
                                         label = 'Task 2: Spatial -Omics',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':2}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-3-tab',
                                         label = 'Task 3: Answer Hypothesis',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':3}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'level-4-tab',
                                         label = 'Task 4: Generate Hypothesis',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':4}
                                     ),
                                     dbc.Tab(
                                         tab_id = 'comments-tab',
                                         label = 'Comments',
-                                        activeTabClassName='fw-bold fst-italic'
+                                        activeTabClassName='fw-bold fst-italic',
+                                        disabled = True,
+                                        id = {'type':'question-tab','index':5}
                                     )
                                 ]
                             )
