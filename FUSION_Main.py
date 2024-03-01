@@ -566,7 +566,8 @@ class FUSION:
         # Consenting to participate in the study, activating other question tabs
         self.app.callback(
             Input({'type':'study-consent-butt','index':ALL},'n_clicks'),
-            Output({'type':'question-tab','index':ALL},'disabled'),
+            [Output({'type':'question-tab','index':ALL},'disabled'),
+             Output({'type':'study-consent-butt','index':ALL},'color')],
             prevent_initial_call = True
         )(self.consent_to_usability_study)
 
@@ -5563,9 +5564,9 @@ class FUSION:
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
         
-        n_outputs = len(ctx.outputs_list)
+        n_outputs = len(ctx.outputs_list[0])
 
-        return [False]*n_outputs
+        return [False]*n_outputs,['success']
 
     def post_usability_response(self,butt_click,questions_inputs):
 
