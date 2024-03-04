@@ -5515,7 +5515,7 @@ class FUSION:
 
             else:
                 # Comments tab
-                level_index = 4
+                level_index = len(list(usability_questions.keys()))
                 question_list.append(
                     html.Div([
                         dbc.Row(dbc.Label('Add any comments here!',size='lg')),
@@ -5581,7 +5581,7 @@ class FUSION:
 
                 # Updating responses for the current user
                 level_idx = ctx.triggered_id['index']
-                if level_idx<=3:
+                if level_idx<=4:
                     level_name = f'Level {level_idx}'
                 else:
                     level_name = 'Comments'
