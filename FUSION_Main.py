@@ -380,7 +380,6 @@ class FUSION:
         elif ctx.triggered_id['type']=='usability-butt':
             if n2:
                 self.dataset_handler.update_usability()
-                user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
                 collapse_children = self.layout_handler.gen_usability_report(self.dataset_handler)
                 if not is_open[-1]:
                     usability_color = ['success']
@@ -5573,7 +5572,7 @@ class FUSION:
         # Updating usability info file in DSA after user clicks "Submit" button
         if butt_click:
             # Checking if all of the responses are not empty
-            responses_check = [True if not i==[] else False for i in questions_inputs]
+            responses_check = [True if not i==[] and not i is None else False for i in questions_inputs]
             if all(responses_check):
                 submit_alert = dbc.Alert('Submitted!',color='success')
 
@@ -5590,6 +5589,8 @@ class FUSION:
 
                 # Posting to DSA
                 self.dataset_handler.update_usability(usability_info)
+            else:
+                submit_alert = dbc.Alert(f'Uh oh! {len([i for i in responses_check if not i])} responses are missing',color='warning')
                 
             return [submit_alert]
         else:

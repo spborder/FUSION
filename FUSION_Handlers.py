@@ -2702,6 +2702,8 @@ class GirderHandler:
             'usability_study_admins':[]
         }
 
+        self.usability_group = '65e5e9ceadb89a58fea146ba'
+
         user_info, user_details = self.authenticate(username, password)
 
         # Name of plugin used for fetching clustering/plotting metadata
@@ -2720,7 +2722,7 @@ class GirderHandler:
             self.username = username.lower()
             self.password = password
             
-            user_details = self.gc.authenticate(username.lower(),password)
+            self.user_details = self.gc.authenticate(username.lower(),password)
 
             user_info = self.check_usability(self.username)
             self.get_token()
@@ -2728,18 +2730,18 @@ class GirderHandler:
             if not self.base_path is None:
                 self.initialize_folder_structure()
 
-            return user_info, user_details
+            return user_info, self.user_details
         
         except girder_client.AuthenticationError:
-            user_details = self.gc.authenticate(self.username.lower(),self.password)
+            self.user_details = self.gc.authenticate(self.username.lower(),self.password)
 
-            user_info = self.check_usability(self.username)
+            user_info = self.check_usability(self.username.lower())
             self.get_token()
 
             if not self.base_path is None:
                 self.initialize_folder_structure()
 
-            return user_info, user_details
+            return user_info, self.user_details
 
     def create_user(self,username,password,email,firstName,lastName):
 
@@ -2756,10 +2758,18 @@ class GirderHandler:
                          'lastName':lastName
                      })
         
-        user_info = self.check_usability(self.username)
-        print(user_info)
-
         user_info, user_details = self.authenticate(self.username,self.password)
+
+        if self.username in self.usability_users['usability_study_users'] or self.username in self.usability_users['usability_study_admins']:
+            # Adding user to usability study group to enable write access to response document:
+            print('Checking if user is in group')
+            self.gc.post(f'/slicer_cli_web/samborder2256_auto_group_add_latest/GroupAdd/run',
+                            parameters={
+                                'user_id': self.user_details["_id"],
+                                'group_id': self.usability_group,
+                                'girderApiUrl': self.apiUrl
+                            })
+
 
         return user_info
 
@@ -3197,7 +3207,7 @@ class GirderHandler:
             }
         elif username in list(self.usability_users['usability_study_users'].keys()):
             user_info = self.usability_users['usability_study_users'][username]
-        
+
         return user_info
 
     def generate_feature_dict(self,slide_list):
