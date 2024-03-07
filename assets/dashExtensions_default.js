@@ -11,8 +11,12 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 if (current_cell) {
                     if (current_cell === 'cluster') {
                         if (current_cell in feature.properties) {
+                            // Truncating number to integer, stored as single-decimal floats initially
                             var cell_value = feature.properties.Cluster;
-                            cell_value = (Number(cell_value)).toFixed(1);
+                            cell_value = Math.trunc(cell_value);
+                        } else if ('Cluster' in feature.properties) {
+                            var cell_value = feature.properties.Cluster;
+                            cell_value = Math.trunc(cell_value);
                         } else {
                             cell_value = Number.Nan;
                         }

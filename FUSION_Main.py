@@ -195,8 +195,12 @@ class FUSION:
             if (current_cell){
                 if (current_cell==='cluster'){
                     if (current_cell in feature.properties){
+                        // Truncating number to integer, stored as single-decimal floats initially
                         var cell_value = feature.properties.Cluster;
-                        cell_value = (Number(cell_value)).toFixed(1);
+                        cell_value = Math.trunc(cell_value);
+                    } else if ('Cluster' in feature.properties){
+                        var cell_value = feature.properties.Cluster;
+                        cell_value = Math.trunc(cell_value);
                     } else {
                         cell_value = Number.Nan;
                     }
@@ -1767,8 +1771,7 @@ class FUSION:
                         morpho_value = g[color_type]
                         raw_values_list.append(morpho_value)
 
-        raw_values_list = np.unique(raw_values_list)
-        
+        raw_values_list = np.unique(raw_values_list).tolist()
         # Converting to RGB
         if len(raw_values_list)>0:
             if max(raw_values_list)<=1:
@@ -1928,7 +1931,7 @@ class FUSION:
                 filter_max_val = 1.0
                 filter_disable = True
 
-            elif cell_val == 'Morphometrics Clusters':
+            elif cell_val == 'Cluster':
                 self.current_cell = 'cluster'
                 self.update_hex_color_key('cluster')
 
@@ -2071,204 +2074,296 @@ class FUSION:
             if 'unique_index' in ftu_click['properties']:
                 ftu_idx = ftu_click['properties']['unique_index']
 
-            if 'Main_Cell_Types' in ftu_click['properties']:
+            if self.wsi.spatial_omics_type=='Visium':
+                if 'Main_Cell_Types' in ftu_click['properties']:
 
-                # Getting the main cell type data (only using top-n)
-                main_cell_types = ftu_click['properties']['Main_Cell_Types']
-                chart_data = [main_cell_types[i] for i in main_cell_types]
+                    # Getting the main cell type data (only using top-n)
+                    main_cell_types = ftu_click['properties']['Main_Cell_Types']
+                    chart_data = [main_cell_types[i] for i in main_cell_types]
 
-                if not len(chart_data)==0:
+                    if not len(chart_data)==0:
 
-                    # Only keeping the first self.plot_cell_n
-                    top_idx = np.argsort(chart_data)[::-1][0:self.plot_cell_types_n]
-                    chart_data = [chart_data[i] for i in top_idx]
-                    chart_labels = [list(main_cell_types.keys())[i] for i in top_idx]
-                    chart_full_labels = [self.cell_graphics_key[i]['full'] for i in chart_labels]
+                        # Only keeping the first self.plot_cell_n
+                        top_idx = np.argsort(chart_data)[::-1][0:self.plot_cell_types_n]
+                        chart_data = [chart_data[i] for i in top_idx]
+                        chart_labels = [list(main_cell_types.keys())[i] for i in top_idx]
+                        chart_full_labels = [self.cell_graphics_key[i]['full'] for i in chart_labels]
 
-                    # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
-                    cell_states = ftu_click['properties']['Cell_States']
-                    cells_for_cell_states = list(cell_states.keys())
+                        # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
+                        cell_states = ftu_click['properties']['Cell_States']
+                        cells_for_cell_states = list(cell_states.keys())
 
-                    # Checking for non-zero cell states
-                    non_zero_list = []
-                    for cs in cells_for_cell_states:
-                        if sum(list(cell_states[cs].values()))>0:
-                            non_zero_list.append(cs)
+                        # Checking for non-zero cell states
+                        non_zero_list = []
+                        for cs in cells_for_cell_states:
+                            if sum(list(cell_states[cs].values()))>0:
+                                non_zero_list.append(cs)
 
-                    cs_df_list = []
-                    for nz_cs in non_zero_list:
-                        cell_state_info = cell_states[nz_cs]
-                        cell_state_df = pd.DataFrame({'States':list(cell_state_info.keys()),'Values':list(cell_state_info.values())})
-                        cs_df_list.append(cell_state_df)
+                        cs_df_list = []
+                        for nz_cs in non_zero_list:
+                            cell_state_info = cell_states[nz_cs]
+                            cell_state_df = pd.DataFrame({'States':list(cell_state_info.keys()),'Values':list(cell_state_info.values())})
+                            cs_df_list.append(cell_state_df)
 
-                    # Getting other FTU/Spot properties
-                    all_properties = list(ftu_click['properties'].keys())
-                    all_properties = [i for i in all_properties if not type(ftu_click['properties'][i])==dict]
-                    all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties'][i] for i in all_properties]}
-                    all_properties_df = pd.DataFrame(all_props_dict)
+                        # Getting other FTU/Spot properties
+                        all_properties = list(ftu_click['properties'].keys())
+                        all_properties = [i for i in all_properties if not type(ftu_click['properties'][i])==dict]
+                        all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties'][i] for i in all_properties]}
+                        all_properties_df = pd.DataFrame(all_props_dict)
 
-                    main_cells_df = pd.DataFrame.from_dict({'Values':chart_data,'Labels':chart_labels,'Full':chart_full_labels})
-                    f_pie = go.Figure(
-                        data = [
-                            go.Pie(
-                                name = '',
-                                values = main_cells_df['Values'],
-                                labels = main_cells_df['Labels'],
-                                customdata = main_cells_df['Full'],
-                                hovertemplate = "Cell: %{customdata}: <br>Proportion: %{value}</br>"
-                            )],
-                        layout = {'autosize':True, 'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,'uniformtext_minsize':12,'uniformtext_mode':'hide'}
-                    )
-                    f_pie.update_traces(textposition='inside')
-
-                    # popup divs
-                    if 'unique_index' in ftu_click['properties']:
-                        add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
-                        accordion_children = [
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dbc.Row([
-                                        dbc.Col(
-                                            dcc.Graph(figure = f_pie),
-                                            md='auto')
-                                        ],style={'height':'100%','width':'100%'})
-                                    ],style = {'height':'250px','width':'250px','display':'inline-block'})
-                                ], title = 'Main Cell Types'),
-                            dbc.AccordionItem([
-                                dbc.Tabs([
-                                    dbc.Tab(
-                                        html.Div(
-                                            dcc.Graph(
-                                                figure = go.Figure(
-                                                    data = [
-                                                        go.Pie(
-                                                            name = '',
-                                                            values = cs_df['Values'],
-                                                            labels = cs_df['States'],
-                                                            hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
-                                                        )
-                                                    ],
-                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
-                                                              'uniformtext_minsize':12,'uniformtext_mode':'hide'}
-                                                )
-                                            )
-                                        ), label = cs
-                                    )
-                                    for cs,cs_df in zip(non_zero_list,cs_df_list)
-                                ])
-                            ], title = 'Cell States'),
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dash_table.DataTable(
-                                        id = 'popup-table',
-                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                        data = all_properties_df.to_dict('records'),
-                                        editable=False,                                        sort_mode='multi',
-                                        page_current=0,
-                                        page_size=5,
-                                        style_cell = {
-                                            'overflow':'hidden',
-                                            'textOverflow':'ellipsis',
-                                            'maxWidth':0
-                                        },
-                                        tooltip_data = [
-                                            {
-                                                column: {'value':str(value),'type':'markdown'}
-                                                for column, value in row.items()
-                                            } for row in all_properties_df.to_dict('records')
-                                        ],
-                                        tooltip_duration = None
-                                    )
-                                ])
-                            ],title = 'Other Properties'),
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dbc.Row([
-                                        dbc.Col(html.Div(
-                                                id={'type':'added-labels-div','index':ftu_idx},
-                                                children = add_labels_children
-                                            ), md=11
-                                        ),
-                                        dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
-                                        dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
-                                    ])
-                                ])
-                            ],title = 'Custom Properties')
-                        ]
-                    else:
-                        accordion_children = [
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dbc.Row([
-                                        dbc.Col(
-                                            dcc.Graph(figure = f_pie),
-                                            md='auto')
-                                        ],style={'height':'100%','width':'100%'})
-                                    ],style = {'height':'250px','width':'250px','display':'inline-block'})
-                                ], title = 'Main Cell Types'),
-                            dbc.AccordionItem([
-                                dbc.Tabs([
-                                    dbc.Tab(
-                                        html.Div(
-                                            dcc.Graph(
-                                                figure = go.Figure(
-                                                    data = [
-                                                        go.Pie(
-                                                            name = '',
-                                                            values = cs_df['Values'],
-                                                            labels = cs_df['States'],
-                                                            hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
-                                                        )
-                                                    ],
-                                                    layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
-                                                              'uniformtext_minsize':12,'uniformtext_mode':'hide'}
-                                                )
-                                            )
-                                        ), label = cs
-                                    )
-                                    for cs,cs_df in zip(non_zero_list,cs_df_list)
-                                ])
-                            ], title = 'Cell States'),
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dash_table.DataTable(
-                                        id = 'popup-table',
-                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                        data = all_properties_df.to_dict('records'),
-                                        editable=False,                                        sort_mode='multi',
-                                        page_current=0,
-                                        page_size=5,
-                                        style_cell = {
-                                            'overflow':'hidden',
-                                            'textOverflow':'ellipsis',
-                                            'maxWidth':0
-                                        },
-                                        tooltip_data = [
-                                            {
-                                                column: {'value':str(value),'type':'markdown'}
-                                                for column, value in row.items()
-                                            } for row in all_properties_df.to_dict('records')
-                                        ],
-                                        tooltip_duration = None
-                                    )
-                                ])
-                            ],title = 'Other Properties')
-                        ]
-                    
-                    popup_div = html.Div([
-                        dbc.Accordion(
-                            children = accordion_children
+                        main_cells_df = pd.DataFrame.from_dict({'Values':chart_data,'Labels':chart_labels,'Full':chart_full_labels})
+                        f_pie = go.Figure(
+                            data = [
+                                go.Pie(
+                                    name = '',
+                                    values = main_cells_df['Values'],
+                                    labels = main_cells_df['Labels'],
+                                    customdata = main_cells_df['Full'],
+                                    hovertemplate = "Cell: %{customdata}: <br>Proportion: %{value}</br>"
+                                )],
+                            layout = {'autosize':True, 'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,'uniformtext_minsize':12,'uniformtext_mode':'hide'}
                         )
-                    ],style={'height':'300px','width':'300px','display':'inline-block'})
+                        f_pie.update_traces(textposition='inside')
 
-                    return popup_div
+                        # popup divs
+                        if 'unique_index' in ftu_click['properties']:
+                            add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
+                            accordion_children = [
+                                dbc.AccordionItem([
+                                    html.Div([
+                                        dbc.Row([
+                                            dbc.Col(
+                                                dcc.Graph(figure = f_pie),
+                                                md='auto')
+                                            ],style={'height':'100%','width':'100%'})
+                                        ],style = {'height':'250px','width':'250px','display':'inline-block'})
+                                    ], title = 'Main Cell Types'),
+                                dbc.AccordionItem([
+                                    dbc.Tabs([
+                                        dbc.Tab(
+                                            html.Div(
+                                                dcc.Graph(
+                                                    figure = go.Figure(
+                                                        data = [
+                                                            go.Pie(
+                                                                name = '',
+                                                                values = cs_df['Values'],
+                                                                labels = cs_df['States'],
+                                                                hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
+                                                            )
+                                                        ],
+                                                        layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
+                                                                'uniformtext_minsize':12,'uniformtext_mode':'hide'}
+                                                    )
+                                                )
+                                            ), label = cs
+                                        )
+                                        for cs,cs_df in zip(non_zero_list,cs_df_list)
+                                    ])
+                                ], title = 'Cell States'),
+                                dbc.AccordionItem([
+                                    html.Div([
+                                        dash_table.DataTable(
+                                            id = 'popup-table',
+                                            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
+                                            data = all_properties_df.to_dict('records'),
+                                            editable=False,                                        sort_mode='multi',
+                                            page_current=0,
+                                            page_size=5,
+                                            style_cell = {
+                                                'overflow':'hidden',
+                                                'textOverflow':'ellipsis',
+                                                'maxWidth':0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value':str(value),'type':'markdown'}
+                                                    for column, value in row.items()
+                                                } for row in all_properties_df.to_dict('records')
+                                            ],
+                                            tooltip_duration = None
+                                        )
+                                    ])
+                                ],title = 'Other Properties'),
+                                dbc.AccordionItem([
+                                    html.Div([
+                                        dbc.Row([
+                                            dbc.Col(html.Div(
+                                                    id={'type':'added-labels-div','index':ftu_idx},
+                                                    children = add_labels_children
+                                                ), md=11
+                                            ),
+                                            dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
+                                        ]),
+                                        dbc.Row([
+                                            dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
+                                            dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
+                                        ])
+                                    ])
+                                ],title = 'Custom Properties')
+                            ]
+                        else:
+                            accordion_children = [
+                                dbc.AccordionItem([
+                                    html.Div([
+                                        dbc.Row([
+                                            dbc.Col(
+                                                dcc.Graph(figure = f_pie),
+                                                md='auto')
+                                            ],style={'height':'100%','width':'100%'})
+                                        ],style = {'height':'250px','width':'250px','display':'inline-block'})
+                                    ], title = 'Main Cell Types'),
+                                dbc.AccordionItem([
+                                    dbc.Tabs([
+                                        dbc.Tab(
+                                            html.Div(
+                                                dcc.Graph(
+                                                    figure = go.Figure(
+                                                        data = [
+                                                            go.Pie(
+                                                                name = '',
+                                                                values = cs_df['Values'],
+                                                                labels = cs_df['States'],
+                                                                hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
+                                                            )
+                                                        ],
+                                                        layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
+                                                                'uniformtext_minsize':12,'uniformtext_mode':'hide'}
+                                                    )
+                                                )
+                                            ), label = cs
+                                        )
+                                        for cs,cs_df in zip(non_zero_list,cs_df_list)
+                                    ])
+                                ], title = 'Cell States'),
+                                dbc.AccordionItem([
+                                    html.Div([
+                                        dash_table.DataTable(
+                                            id = 'popup-table',
+                                            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
+                                            data = all_properties_df.to_dict('records'),
+                                            editable=False,                                        sort_mode='multi',
+                                            page_current=0,
+                                            page_size=5,
+                                            style_cell = {
+                                                'overflow':'hidden',
+                                                'textOverflow':'ellipsis',
+                                                'maxWidth':0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value':str(value),'type':'markdown'}
+                                                    for column, value in row.items()
+                                                } for row in all_properties_df.to_dict('records')
+                                            ],
+                                            tooltip_duration = None
+                                        )
+                                    ])
+                                ],title = 'Other Properties')
+                            ]
+                        
+                        popup_div = html.Div([
+                            dbc.Accordion(
+                                children = accordion_children
+                            )
+                        ],style={'height':'300px','width':'300px','display':'inline-block'})
+
+                        return popup_div
+                    else:
+                        return html.Div([html.P('No cell type information')])
                 else:
-                    return html.Div([html.P('No cell type information')])
+                    return html.Div([html.P('No intersecting spots')])
             else:
-                return html.Div([html.P('No intersecting spots')])
+
+                # Getting other FTU/Spot properties
+                all_properties = list(ftu_click['properties'].keys())
+                all_properties = [i for i in all_properties if not type(ftu_click['properties'][i])==dict]
+                all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties'][i] for i in all_properties]}
+                all_properties_df = pd.DataFrame(all_props_dict)
+
+                # popup divs
+                if 'unique_index' in ftu_click['properties']:
+                    add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
+                    accordion_children = [
+                        dbc.AccordionItem([
+                            html.Div([
+                                dash_table.DataTable(
+                                    id = 'popup-table',
+                                    columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
+                                    data = all_properties_df.to_dict('records'),
+                                    editable=False,                                        
+                                    sort_mode='multi',
+                                    page_current=0,
+                                    page_size=5,
+                                    style_cell = {
+                                        'overflow':'hidden',
+                                        'textOverflow':'ellipsis',
+                                        'maxWidth':0
+                                    },
+                                    tooltip_data = [
+                                        {
+                                            column: {'value':str(value),'type':'markdown'}
+                                            for column, value in row.items()
+                                        } for row in all_properties_df.to_dict('records')
+                                    ],
+                                    tooltip_duration = None
+                                )
+                            ])
+                        ],title = 'Other Properties'),
+                        dbc.AccordionItem([
+                            html.Div([
+                                dbc.Row([
+                                    dbc.Col(html.Div(
+                                            id={'type':'added-labels-div','index':ftu_idx},
+                                            children = add_labels_children
+                                        ), md=11
+                                    ),
+                                    dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
+                                ]),
+                                dbc.Row([
+                                    dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
+                                    dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
+                                ])
+                            ])
+                        ],title = 'Custom Properties')
+                    ]
+                else:
+                    accordion_children = [
+                        dbc.AccordionItem([
+                            html.Div([
+                                dash_table.DataTable(
+                                    id = 'popup-table',
+                                    columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
+                                    data = all_properties_df.to_dict('records'),
+                                    editable=False,                                        
+                                    sort_mode='multi',
+                                    page_current=0,
+                                    page_size=5,
+                                    style_cell = {
+                                        'overflow':'hidden',
+                                        'textOverflow':'ellipsis',
+                                        'maxWidth':0
+                                    },
+                                    tooltip_data = [
+                                        {
+                                            column: {'value':str(value),'type':'markdown'}
+                                            for column, value in row.items()
+                                        } for row in all_properties_df.to_dict('records')
+                                    ],
+                                    tooltip_duration = None
+                                )
+                            ])
+                        ],title = 'Other Properties')
+                    ]
+                
+                popup_div = html.Div([
+                    dbc.Accordion(
+                        children = accordion_children
+                    )
+                ],style={'height':'300px','width':'300px','display':'inline-block'})
+
+                return popup_div
+
         else:
             raise exceptions.PreventUpdate
         
