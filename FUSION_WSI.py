@@ -169,20 +169,23 @@ class DSASlide:
             shutil.rmtree('./assets/slide_annotations/')
 
         # Assigning a unique integer id to each element
+        individual_geojson = {}
         for a in tqdm(self.annotations):
             if 'elements' in a['annotation']:
                 f_name = a['annotation']['name']
-                self.ftu_names.append(f_name)
+                if not f_name in self.ftu_names:
+                    self.ftu_names.append(f_name)
+                    individual_geojson[f_name] = {'type':'FeatureCollection','features':[]}
 
                 if not f_name=='Spots':
-                    self.ftu_polys[f_name] = []
-                    self.ftu_props[f_name] = []
+                    if f_name not in self.ftu_polys and f_name not in self.ftu_props:
+                        self.ftu_polys[f_name] = []
+                        self.ftu_props[f_name] = []
 
                 # Checking if this ftu is in the ftu_colors list
                 if f_name not in self.ftu_colors:
                     self.ftu_colors[f_name] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
 
-                individual_geojson = {'type':'FeatureCollection','features':[]}
                 integer_idx = 0
                 for f in tqdm(a['annotation']['elements']):
                     f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]},'properties':{}}
@@ -222,7 +225,7 @@ class DSASlide:
                         f_dict['properties']['name'] = f_name
                         f_dict['properties']['unique_index'] = integer_idx
                         integer_idx+=1
-                        individual_geojson['features'].append(f_dict)
+                        individual_geojson[f_name]['features'].append(f_dict)
 
                         if not f_name=='Spots':
                             self.ftu_polys[f_name].append(shape(f_dict['geometry']))
@@ -248,12 +251,13 @@ class DSASlide:
 
                                     self.properties_list.extend(f_prop_list)
 
-                self.map_dict['FTUs'][f_name] = {
-                    'id':{'type':'ftu-bounds','index':len(self.ftu_names)-1},
-                    'popup_id':{'type':'ftu-popup','index':len(self.ftu_names)-1},
-                    'color':self.ftu_colors[f_name],
-                    'hover_color':'#9caf00'
-                }
+                if f_name not in self.map_dict['FTUs']:
+                    self.map_dict['FTUs'][f_name] = {
+                        'id':{'type':'ftu-bounds','index':len(self.ftu_names)-1},
+                        'popup_id':{'type':'ftu-popup','index':len(self.ftu_names)-1},
+                        'color':self.ftu_colors[f_name],
+                        'hover_color':'#9caf00'
+                    }
 
                 # Writing annotations to local assets
                 # Emptying current ./assets/slide_annotations/ folder
@@ -261,13 +265,13 @@ class DSASlide:
                     os.makedirs('./assets/slide_annotations/')
                     
                 with open(f'./assets/slide_annotations/{f_name}.json','w') as f:
-                    json.dump(individual_geojson,f)
+                    json.dump(individual_geojson[f_name],f)
         
         self.properties_list = np.unique(self.properties_list).tolist()
         main_cell_types_test = [1 if 'Main_Cell_Types' in i else 0 for i in self.properties_list]
         if any(main_cell_types_test):
             self.properties_list.append('Max Cell Type')
-
+        
         return base_x_scale*x_scale, base_y_scale*y_scale
 
     def check_validity(self,element):
@@ -419,24 +423,25 @@ class CODEXSlide(DSASlide):
             for i in range(len(self.channel_names))
         ]
 
-    def intersecting_frame_intensity(self,box_poly):
+    def intersecting_frame_intensity(self,box_poly,frame_list):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
         
         box_coordinates = np.array(self.convert_map_coords(list(box_poly.exterior.coords)))
-        min_x = np.min(box_coordinates[:,0])
-        min_y = np.min(box_coordinates[:,1])
-        max_x = np.max(box_coordinates[:,0])
-        max_y = np.max(box_coordinates[:,1])
+        min_x = int(np.min(box_coordinates[:,0]))
+        min_y = int(np.min(box_coordinates[:,1]))
+        max_x = int(np.max(box_coordinates[:,0]))
+        max_y = int(np.max(box_coordinates[:,1]))
         
         # Box size then can be determined by (maxx-minx)*(maxy-miny)
         box_size = (max_x-min_x)*(max_y-min_y)
         # Or probably also by multiplying some scale factors by box_poly.area
         # Pulling out those regions of the image
+        frame_indices = [self.channel_names.index(i) for i in frame_list]
 
         # Slide coordinates list should be [minx,miny,maxx,maxy]
         slide_coords_list = [min_x,min_y,max_x,max_y]
         frame_properties = {}
-        for frame in range(0,self.n_frames):
+        for frame in frame_indices:
             print(f'Working on frame {frame} of {self.n_frames}')
             # Get the image region associated with that frame
             # Or just get the histogram for that channel? not sure if this can be for a specific image region
@@ -446,7 +451,9 @@ class CODEXSlide(DSASlide):
                                                             'left': min_x,
                                                             'bottom': max_y,
                                                             'right': max_x,
-                                                            'frame': frame
+                                                            'frame': frame,
+                                                            'roundRange': True, 
+                                                            'density': True
                                                             }
                                                         )
 

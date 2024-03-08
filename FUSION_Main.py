@@ -606,8 +606,11 @@ class FUSION:
         # Updating Cell Composition pie charts
         self.app.callback(
             Output('roi-pie-holder','children'),
-            Input('slide-map','bounds'),
-            State('tools-tabs','active_tab')
+            [Input('slide-map','bounds'),
+             Input({'type':'roi-view-data','index':ALL},'value'),
+             Input({'type':'frame-histogram-drop','index':ALL},'value')],
+            State('tools-tabs','active_tab'),
+            prevent_initial_call = True
         )(self.update_roi_pie)      
 
         # Updating cell hierarchy data
@@ -1058,6 +1061,7 @@ class FUSION:
 
         return new_slides, html.H3(tutorial_name), style_list
 
+    """
     def update_plotting_metadata(self):
 
         # Populating metadata based on current slides selection
@@ -1066,6 +1070,7 @@ class FUSION:
         metadata = self.dataset_handler.get_collection_annotation_meta(select_ids)
 
         return metadata
+    """
 
     def initialize_metadata_plots(self,selected_dataset_list):
 
@@ -1473,7 +1478,7 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
-    def update_roi_pie(self,bounds,current_tab):
+    def update_roi_pie(self,bounds,cell_view_type,frame_list,current_tab):
 
         if not self.wsi is None:
             if not bounds is None:
@@ -1502,8 +1507,16 @@ class FUSION:
                     intersecting_ftus['Spots'] = intersecting_spots
                 elif self.wsi.spatial_omics_type=='CODEX':
                     # Returns dictionary of intersecting tissue frame intensities
-                    intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box)
+                    if len(frame_list)==0:
+                        frame_list = [self.wsi.channel_names[0]]
+                    else:
+                        frame_list = frame_list[0]
+                        if len(frame_list)==0:
+                            frame_list = [self.wsi.channel_names[0]]
+
+                    intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box,frame_list)
                     intersecting_ftus['Tissue'] = intersecting_region
+                    
 
                 for ftu in self.current_ftu_layers:
                     if not ftu=='Spots':
@@ -1541,12 +1554,19 @@ class FUSION:
 
                             first_chart_label = 'Channel Intensity Histogram'
 
-                            if f=='Tissue':
-                                # Getting the first channel
-                                counts_data = intersecting_ftus['Tissue'][self.wsi.channel_names[0]]
-                                # This returns a dictionary with bin_edges and hist
-                                counts_data = pd.DataFrame({'hist':[0]+counts_data['hist'],'bin_edges':counts_data['bin_edges']})
-                            
+                            # Getting all selected frames
+                            counts_data = pd.DataFrame()
+                            if type(intersecting_ftus[f])==dict:
+                                for frame_name in intersecting_ftus[f]:
+                                    frame_data = intersecting_ftus[f][frame_name]
+                                    # This returns a dictionary with bin_edges and hist
+                                    frame_data_df = pd.DataFrame({'Frequency':[0]+frame_data['hist'],'Intensity':frame_data['bin_edges'],'Channel':[frame_name]*len(frame_data['bin_edges'])})
+                                    #frame_data_df['Frequency'] = frame_data_df['Frequency'] / frame_data_df['Frequency'].sum()
+                                    if counts_data.empty:
+                                        counts_data = frame_data_df
+                                    else:
+                                        counts_data = pd.concat([counts_data,frame_data_df],axis=0,ignore_index=True)
+
                         if not counts_data.empty:
                             
                             if self.wsi.spatial_omics_type=='Visium':
@@ -1565,16 +1585,16 @@ class FUSION:
                                 f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
 
                             elif self.wsi.spatial_omics_type=='CODEX':
-                                # For CODEX images, have the tissue tab be one histogram
-                                if f=='Tissue':
+                                # For CODEX images, have the tissue tab be one histogram                                    
+                                # Getting one of the channels. Maybe just the first one
+                                print(f'counts_data shape: {counts_data.shape}')
+                                f_pie = px.bar(
+                                    data_frame = counts_data,
+                                    x = 'Intensity',
+                                    y = 'Frequency',
+                                    color = 'Channel'
+                                )
                                     
-                                    # Getting one of the channels. Maybe just the first one
-                                    f_pie = px.bar(
-                                        data_frame = counts_data,
-                                        x = 'bin_edges',
-                                        y = 'hist'
-                                    )
-
                             if self.wsi.spatial_omics_type=='Visium':
                                 
                                 # Finding cell state proportions per main cell type in the current region
@@ -1623,6 +1643,7 @@ class FUSION:
                                 second_plot_label = 'This is CODEX'
 
                                 self.fusey_data['Tissue'] = {}
+                                print(f'Adding tab for: {f}')
 
                                 f_tab = dbc.Tab([
                                     dbc.Row([
@@ -1633,9 +1654,9 @@ class FUSION:
                                         dbc.Col(
                                             dcc.Dropdown(
                                                 options = self.wsi.channel_names,
-                                                value = self.wsi.channel_names[0],
+                                                value = frame_list,
                                                 multi = True,
-                                                id = {'type':'frame-histogram-drop'}
+                                                id = {'type':'frame-histogram-drop','index':0}
                                             ),
                                             md = 6, align = 'center'
                                         )
@@ -1903,7 +1924,7 @@ class FUSION:
 
                     color_bar = dl.Colorbar(
                         colorscale = list(self.hex_color_key.values()),
-                        width=300,height=10,position='bottomleft',
+                        width=320,height=10,position='bottomleft',
                         id=f'colorbar{random.randint(0,100)}',
                         style = color_bar_style)
 
@@ -1938,7 +1959,7 @@ class FUSION:
                 #TODO: This should probably be a categorical colorbar
                 color_bar = dl.Colorbar(
                     colorscale = list(self.hex_color_key.values()),
-                    width=300,height=10,position='bottomleft',
+                    width=320,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
@@ -5904,7 +5925,7 @@ def app(*args):
     print('Getting initial items metadata')
     dataset_handler.set_default_slides(initial_collection_contents)
     dataset_handler.initialize_folder_structure(initial_collection,path_type)
-    dataset_handler.get_collection_annotation_meta([i['_id'] for i in initial_collection_contents])
+    #dataset_handler.get_collection_annotation_meta([i['_id'] for i in initial_collection_contents])
 
     # Getting graphics_reference.json from the FUSION Assets folder
     print(f'Getting asset items')

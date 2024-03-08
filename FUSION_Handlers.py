@@ -67,6 +67,15 @@ class LayoutHandler:
         self.info_button_idx = -1
         self.cli_list = None
 
+        # Creating figure dictionary for nephron diagram
+        neph_figure = go.Figure(px.imshow(Image.open('./assets/cell_graphics/Edited Nephron Diagram_small.png')))
+        neph_figure.update_traces(hoverinfo='none',hovertemplate=None)
+        neph_figure.update_xaxes(showticklabels=False, showgrid=False)
+        neph_figure.update_yaxes(showticklabels=False, showgrid=False)
+        neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0})
+
+        self.neph_figure = neph_figure
+
         self.gen_welcome_layout()
 
     def gen_info_button(self,text):
@@ -202,7 +211,12 @@ class LayoutHandler:
                     html.P('This tab displays the cell type and state proportions for cell types contained within specific FTU & Spot boundaries')
                 ]),
                 html.Hr(),
-                html.Div(id = 'roi-pie-holder')
+                html.Div(
+                    id = 'roi-pie-holder',
+                    children = [
+                        'Move around on the slide to initialize cell composition view.'
+                    ]
+                )
             ])
         ])
 
@@ -227,13 +241,6 @@ class LayoutHandler:
             }
             }
         ]
-
-        # Creating figure dictionary for nephron diagram
-        neph_figure = go.Figure(px.imshow(Image.open('./assets/cell_graphics/Edited Nephron Diagram_small.png')))
-        neph_figure.update_traces(hoverinfo='none',hovertemplate=None)
-        neph_figure.update_xaxes(showticklabels=False, showgrid=False)
-        neph_figure.update_yaxes(showticklabels=False, showgrid=False)
-        neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0})
 
         cell_graphic_tab = dbc.Card([
             dbc.CardBody([
@@ -309,7 +316,7 @@ class LayoutHandler:
                             html.H2('Nephron Diagram')
                         ]),
                         dbc.Row([
-                            dcc.Graph(id='neph-img',figure=neph_figure),
+                            dcc.Graph(id='neph-img',figure=self.neph_figure),
                             dcc.Tooltip(id='neph-tooltip',loading_text='')
                         ])
                     ],md=5),
