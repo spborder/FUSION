@@ -1511,7 +1511,10 @@ class FUSION:
                         frame_list = [self.wsi.channel_names[0]]
                     else:
                         frame_list = frame_list[0]
-                        if len(frame_list)==0:
+                        if not frame_list is None:
+                            if len(frame_list)==0:
+                                frame_list = [self.wsi.channel_names[0]]
+                        else:
                             frame_list = [self.wsi.channel_names[0]]
 
                     intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box,frame_list)
