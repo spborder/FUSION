@@ -1263,7 +1263,8 @@ class LayoutHandler:
                                     #className = f'{all_users[user]["type"]}-accordion-button'
                                 )
                                 for user in all_users
-                            ])
+                            ]),
+                            style = {'maxHeight':'50vh','overflow':'scroll'}
                         ),
                         html.Hr(),
                         html.Div([
