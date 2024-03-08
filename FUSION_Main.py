@@ -1536,7 +1536,6 @@ class FUSION:
                                 counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
                                 counts_data.columns = [f]
 
-
                         elif self.wsi.spatial_omics_type=='CODEX':
                             counts_dict_list = [intersecting_ftus['Tissue']]
 
@@ -1616,7 +1615,6 @@ class FUSION:
                                         ],md=6)
                                     ]),label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
                                 )
-
 
                             elif self.wsi.spatial_omics_type=='CODEX':
 
@@ -5693,7 +5691,6 @@ class FUSION:
 
     def download_usability_response(self,butt_click):
 
-        print(butt_click)
         if not butt_click:
             raise exceptions.PreventUpdate
 
@@ -5755,7 +5752,7 @@ class FUSION:
                 for sheet in user_type_dict:
                     user_type_dict[sheet].to_excel(writer,sheet_name = sheet, engine = 'openpyxl')
 
-            return dcc.send_file('Usability_Response_Data.xlsx')
+            return [dcc.send_file('Usability_Response_Data.xlsx')]
         else:
             raise exceptions.PreventUpdate
 
