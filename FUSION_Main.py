@@ -5523,149 +5523,146 @@ class FUSION:
         user_type = user_info['type']
 
         # Getting questions for that type
-        if not user_type=='admin':
-            usability_questions = usability_info['usability_study_questions'][user_type]
-            
-            question_list = []
-            # Narrowing down level by the index that the tab is on.
-            if 'level' in question_tab[0]:
-                level_index = int(question_tab[0].split('-')[1])
-                level_questions = usability_questions[f'Level {level_index}']["questions"]
+        usability_questions = usability_info['usability_study_questions'][user_type]
+        
+        question_list = []
+        # Narrowing down level by the index that the tab is on.
+        if 'level' in question_tab[0]:
+            level_index = int(question_tab[0].split('-')[1])
+            level_questions = usability_questions[f'Level {level_index}']["questions"]
 
-                for q_idx,l_q in enumerate(level_questions):
+            for q_idx,l_q in enumerate(level_questions):
 
-                    # Checking if the user has already responded to this question
-                    if f'Level {level_index}' in user_info['responses']:
-                        q_val = user_info['responses'][f'Level {level_index}'][q_idx]
-                    else:
-                        q_val = []
-                    
-                    if not l_q['input_type']=='bool':
-                        question_list.append(
-                            html.Div([
-                                dbc.Label(l_q['text'],size='lg'),
-                                dbc.Input(
-                                    placeholder="Input response",
-                                    type=l_q['input_type'],
-                                    id={'type':'question-input','index':q_idx},
-                                    value = q_val
-                                ),
-                                html.Hr()
-                            ])
-                        )
-                    else:
-                        question_list.append(
-                            html.Div([
-                                dbc.Label(l_q['text'],size='lg'),
-                                dbc.RadioItems(
-                                    options = [
-                                        {'label':dbc.Label('No',size='lg',style={'marginBottom':'15px','marginRight':'10px'}),'value':'No'},
-                                        {'label':dbc.Label('Yes',size='lg',style={'marginBottom':'15px'}),'value':'Yes'}
-                                    ],
-                                    value = q_val,
-                                    id = {'type':'question-input','index':q_idx},
-                                    inline=True,
-                                    labelCheckedClassName="text-success",
-                                    inputCheckedClassName='border border-success bg-success'
-                                )
-                            ])
-                        )
-            
-            elif question_tab[0]=='consent-tab':
-                # Consent tab, holds disclaimers and official study information required by UF
-                question_list.append(
-                    html.Div([
-                        dcc.Markdown(
-                            '''
-                            #### Title of Project: _FUSION_ Usability Study
-                            #### Principle Investigator: Pinaki Sarder, Ph.D.
-
-                            Please read the information below carefully before you decide to participate in this research study.
-                            **Your participation is voluntary. You can decide not to participate or later decide to stop participating at any time without penalty or lose any benefits that would normally be expected.**
-
-                            1. **Purpose of the Study:** The purpose of this research study is to assess the usability of _FUSION_.
-                            2. **What will you be asked to do:** You will be asked to answer a number of questions using tools within _FUSION_ assessing histology and spatial -omics data.
-                            3. **Time Required:** It will take about 1 hour to participate in the research.
-                            4. **Research Benefits:** Participants in this study will be listed as second-tier authors in the _FUSION_ manuscript submission.
-                            5. **Research Risks:** There are no risks or discomforts anticipated.
-                            6. **Statement of Confidentiality:** Your participation in this research is confidential.
-                            Information collected about you will be stored in computers with security passwords or 
-                            in locked filing cabinets. Only certain people have the legal right to review these 
-                            research records, and they will protect the secrecy (confidentiality) of these records 
-                            as much as the law allows. These people include the researchers for this study, certain 
-                            University of Florida officials, and the Institutional Review Board (IRB; an IRB is a 
-                            group of people who are responsible for looking after the rights and welfare of people 
-                            taking part in research). Otherwise your research records will not be released without 
-                            your permission unless required by law or a court order. The researchers will not share 
-                            your name or other identifiable information about you if they publish, present, or share 
-                            the results of this research. 
-                            7. **Who to contact if you have questions or injured:** Please contact Annika Holmstrom at
-                            annika.holmstrom@medicine.ufl.edu with questions or concerns about this study.
-                            8. **Voluntary Participation:** Your decision to be in this research is voluntary. You do 
-                            not have to do any study activities that you do not want to take part in. You can stop at 
-                            any time. If you decide you want to stop participating in the research, you can let the 
-                            research team know or call the Principle Investigator any time at (352) 273-6018. If 
-                            you choose not to take part, this will have no effect on you or your relationships with 
-                            the University of Florida. If you have any questions about your rights as a research subject, 
-                            you can phone the institutional Review Board at (352) 273-9600.
-
-                            Participation in the research implies that you have read the information in this form and 
-                            consent to take part in the research. Please save a copy of this form for your records or 
-                            for future reference.
-                            
-                            If you want to participate in this research study, click the "I agree to participate" button below.
-                            If you do not want to participate, you may simply close this window.
-                            ''',
-                            style = {'font-size':'0.8rem'}
-                        ),
-                        dbc.Button(
-                            'I agree to participate',
-                            className = 'd-grid col-12 mx-auto',
-                            id = {'type':'study-consent-butt','index':0},
-                            style = {'marginTop':'10px','marginBottom':'10px'}
-                        )
-                    ],style={'maxHeight':'55vh','overflow':'scroll'})
-                )
-
-            else:
-                # Comments tab
-                level_index = len(list(usability_questions.keys()))
-                question_list.append(
-                    html.Div([
-                        dbc.Row(dbc.Label('Add any comments here!',size='lg')),
-                        dbc.Row(
-                            dcc.Textarea(
-                                id = {'type':'question-input','index':0},
-                                placeholder = 'Comments',
-                                style = {'width':'100%','marginBottom':'10px'},
-                                maxLength = 10000
+                # Checking if the user has already responded to this question
+                if f'Level {level_index}' in user_info['responses']:
+                    q_val = user_info['responses'][f'Level {level_index}'][q_idx]
+                else:
+                    q_val = []
+                
+                if not l_q['input_type']=='bool':
+                    question_list.append(
+                        html.Div([
+                            dbc.Label(l_q['text'],size='lg'),
+                            dbc.Input(
+                                placeholder="Input response",
+                                type=l_q['input_type'],
+                                id={'type':'question-input','index':q_idx},
+                                value = q_val
+                            ),
+                            html.Hr()
+                        ])
+                    )
+                else:
+                    question_list.append(
+                        html.Div([
+                            dbc.Label(l_q['text'],size='lg'),
+                            dbc.RadioItems(
+                                options = [
+                                    {'label':dbc.Label('No',size='lg',style={'marginBottom':'15px','marginRight':'10px'}),'value':'No'},
+                                    {'label':dbc.Label('Yes',size='lg',style={'marginBottom':'15px'}),'value':'Yes'}
+                                ],
+                                value = q_val,
+                                id = {'type':'question-input','index':q_idx},
+                                inline=True,
+                                labelCheckedClassName="text-success",
+                                inputCheckedClassName='border border-success bg-success'
                             )
-                        )
-                    ])
-                )
+                        ])
+                    )
+        
+        elif question_tab[0]=='consent-tab':
+            # Consent tab, holds disclaimers and official study information required by UF
+            question_list.append(
+                html.Div([
+                    dcc.Markdown(
+                        '''
+                        #### Title of Project: _FUSION_ Usability Study
+                        #### Principle Investigator: Pinaki Sarder, Ph.D.
 
-            if question_tab[0] != 'consent-tab':
-                question_list.append(html.Div([
-                    dbc.Button(
-                        'Save Responses',
-                        className = 'd-grid col-12 mx-auto',
-                        id = {'type':'questions-submit','index':level_index},
-                        style = {'marginBottom':'15px'}
+                        Please read the information below carefully before you decide to participate in this research study.
+                        **Your participation is voluntary. You can decide not to participate or later decide to stop participating at any time without penalty or lose any benefits that would normally be expected.**
+
+                        1. **Purpose of the Study:** The purpose of this research study is to assess the usability of _FUSION_.
+                        2. **What will you be asked to do:** You will be asked to answer a number of questions using tools within _FUSION_ assessing histology and spatial -omics data.
+                        3. **Time Required:** It will take about 1 hour to participate in the research.
+                        4. **Research Benefits:** Participants in this study will be listed as second-tier authors in the _FUSION_ manuscript submission.
+                        5. **Research Risks:** There are no risks or discomforts anticipated.
+                        6. **Statement of Confidentiality:** Your participation in this research is confidential.
+                        Information collected about you will be stored in computers with security passwords or 
+                        in locked filing cabinets. Only certain people have the legal right to review these 
+                        research records, and they will protect the secrecy (confidentiality) of these records 
+                        as much as the law allows. These people include the researchers for this study, certain 
+                        University of Florida officials, and the Institutional Review Board (IRB; an IRB is a 
+                        group of people who are responsible for looking after the rights and welfare of people 
+                        taking part in research). Otherwise your research records will not be released without 
+                        your permission unless required by law or a court order. The researchers will not share 
+                        your name or other identifiable information about you if they publish, present, or share 
+                        the results of this research. 
+                        7. **Who to contact if you have questions or injured:** Please contact Annika Holmstrom at
+                        annika.holmstrom@medicine.ufl.edu with questions or concerns about this study.
+                        8. **Voluntary Participation:** Your decision to be in this research is voluntary. You do 
+                        not have to do any study activities that you do not want to take part in. You can stop at 
+                        any time. If you decide you want to stop participating in the research, you can let the 
+                        research team know or call the Principle Investigator any time at (352) 273-6018. If 
+                        you choose not to take part, this will have no effect on you or your relationships with 
+                        the University of Florida. If you have any questions about your rights as a research subject, 
+                        you can phone the institutional Review Board at (352) 273-9600.
+
+                        Participation in the research implies that you have read the information in this form and 
+                        consent to take part in the research. Please save a copy of this form for your records or 
+                        for future reference.
+                        
+                        If you want to participate in this research study, click the "I agree to participate" button below.
+                        If you do not want to participate, you may simply close this window.
+                        ''',
+                        style = {'font-size':'0.8rem'}
                     ),
                     dbc.Button(
-                        'Submit Recording',
+                        'I agree to participate',
                         className = 'd-grid col-12 mx-auto',
-                        id = {'type':'recording-upload','index':0},
-                        target='_blank',
-                        href = 'https://trailblazer.app.box.com/f/f843d7b1da204b538dd3173c81ce66cf',
-                        disabled = False
-                    ),
-                    html.Div(id = {'type':'questions-submit-alert','index':0})
-                    ])
-                )
+                        id = {'type':'study-consent-butt','index':0},
+                        style = {'marginTop':'10px','marginBottom':'10px'}
+                    )
+                ],style={'maxHeight':'55vh','overflow':'scroll'})
+            )
 
         else:
-            question_list = ['What did you do fool?']
+            # Comments tab
+            level_index = len(list(usability_questions.keys()))
+            question_list.append(
+                html.Div([
+                    dbc.Row(dbc.Label('Add any comments here!',size='lg')),
+                    dbc.Row(
+                        dcc.Textarea(
+                            id = {'type':'question-input','index':0},
+                            placeholder = 'Comments',
+                            style = {'width':'100%','marginBottom':'10px'},
+                            maxLength = 10000
+                        )
+                    )
+                ])
+            )
+
+        if question_tab[0] != 'consent-tab':
+            question_list.append(html.Div([
+                dbc.Button(
+                    'Save Responses',
+                    className = 'd-grid col-12 mx-auto',
+                    id = {'type':'questions-submit','index':level_index},
+                    style = {'marginBottom':'15px'}
+                ),
+                dbc.Button(
+                    'Submit Recording',
+                    className = 'd-grid col-12 mx-auto',
+                    id = {'type':'recording-upload','index':0},
+                    target='_blank',
+                    href = 'https://trailblazer.app.box.com/f/f843d7b1da204b538dd3173c81ce66cf',
+                    disabled = False
+                ),
+                html.Div(id = {'type':'questions-submit-alert','index':0})
+                ])
+            )
+
 
         question_return = dbc.Form(question_list,style = {'maxHeight':'55vh','overflow':'scroll'})
 
