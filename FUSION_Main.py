@@ -1587,7 +1587,7 @@ class FUSION:
                             elif self.wsi.spatial_omics_type=='CODEX':
                                 # For CODEX images, have the tissue tab be one histogram                                    
                                 # Getting one of the channels. Maybe just the first one
-                                print(f'counts_data shape: {counts_data.shape}')
+                                #print(f'counts_data shape: {counts_data.shape}')
                                 f_pie = px.bar(
                                     data_frame = counts_data,
                                     x = 'Intensity',
@@ -1643,7 +1643,6 @@ class FUSION:
                                 second_plot_label = 'This is CODEX'
 
                                 self.fusey_data['Tissue'] = {}
-                                print(f'Adding tab for: {f}')
 
                                 f_tab = dbc.Tab([
                                     dbc.Row([
