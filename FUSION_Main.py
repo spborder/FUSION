@@ -1505,32 +1505,58 @@ class FUSION:
                     # Returns dictionary of intersecting spot properties
                     intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
                     intersecting_ftus['Spots'] = intersecting_spots
+
+                    # Getting intersecting FTU information
+                    for ftu in self.current_ftu_layers:
+                        if not ftu=='Spots':
+                            intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+
+                    for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
+                        intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
+
+                    for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
+                        intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
+                            
                 elif self.wsi.spatial_omics_type=='CODEX':
                     # Returns dictionary of intersecting tissue frame intensities
-                    if len(frame_list)==0:
-                        frame_list = [self.wsi.channel_names[0]]
+                    print(f'cell_view_type: {cell_view_type}')
+                    if len(cell_view_type)==0:
+                        cell_view_type = 'channel_hist'
                     else:
-                        frame_list = frame_list[0]
-                        if not frame_list is None:
-                            if len(frame_list)==0:
-                                frame_list = [self.wsi.channel_names[0]]
-                        else:
+                        cell_view_type = cell_view_type[0]
+                        if cell_view_type is None:
+                            cell_view_type = 'channel_hist'
+
+                    if cell_view_type=='channel_hist':
+                        if len(frame_list)==0:
+                            # For empty list
                             frame_list = [self.wsi.channel_names[0]]
+                        else:
+                            # For first list element
+                            frame_list = frame_list[0]
+                            if not frame_list is None:
+                                if len(frame_list)==0:
+                                    frame_list = [self.wsi.channel_names[0]]
+                                if any([type(i)==list for i in frame_list]):
+                                    # channel histograms are only for general tissue
+                                    frame_list = [self.wsi.channel_names[0]]
+                            else:
+                                frame_list = [self.wsi.channel_names[0]]
+                        intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box,frame_list)
+                        intersecting_ftus['Tissue'] = intersecting_region
 
-                    intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box,frame_list)
-                    intersecting_ftus['Tissue'] = intersecting_region
-                    
+                    elif cell_view_type=='umap' or cell_view_type=='cell':
 
-                for ftu in self.current_ftu_layers:
-                    if not ftu=='Spots':
-                        intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                        for ftu in self.current_ftu_layers:
+                            if not ftu=='Spots':
+                                intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
-                for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
-                    intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
+                        for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
+                            intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
 
-                for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
-                    intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
-                        
+                        for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
+                            intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
+
                 self.current_ftus = intersecting_ftus
                 # Now we have main cell types, cell states, by ftu
                 included_ftus = list(intersecting_ftus.keys())
@@ -1553,22 +1579,73 @@ class FUSION:
                                 counts_data.columns = [f]
 
                         elif self.wsi.spatial_omics_type=='CODEX':
-                            counts_dict_list = [intersecting_ftus['Tissue']]
+                            
+                            if cell_view_type == 'channel_hist':
+                                counts_dict_list = [i for i in intersecting_ftus]
+                                first_chart_label = 'Channel Intensity Histogram'
 
-                            first_chart_label = 'Channel Intensity Histogram'
+                                # Getting all selected frames
+                                counts_data = pd.DataFrame()
+                                if type(intersecting_ftus[f])==dict:
+                                    for frame_name in intersecting_ftus[f]:
+                                        frame_data = intersecting_ftus[f][frame_name]
+                                        # This returns a dictionary with bin_edges and hist
+                                        frame_data_df = pd.DataFrame({'Frequency':[0]+frame_data['hist'],'Intensity':frame_data['bin_edges'],'Channel':[frame_name]*len(frame_data['bin_edges'])})
+                                        if counts_data.empty:
+                                            counts_data = frame_data_df
+                                        else:
+                                            counts_data = pd.concat([counts_data,frame_data_df],axis=0,ignore_index=True)
 
-                            # Getting all selected frames
-                            counts_data = pd.DataFrame()
-                            if type(intersecting_ftus[f])==dict:
-                                for frame_name in intersecting_ftus[f]:
-                                    frame_data = intersecting_ftus[f][frame_name]
-                                    # This returns a dictionary with bin_edges and hist
-                                    frame_data_df = pd.DataFrame({'Frequency':[0]+frame_data['hist'],'Intensity':frame_data['bin_edges'],'Channel':[frame_name]*len(frame_data['bin_edges'])})
-                                    #frame_data_df['Frequency'] = frame_data_df['Frequency'] / frame_data_df['Frequency'].sum()
-                                    if counts_data.empty:
-                                        counts_data = frame_data_df
-                                    else:
-                                        counts_data = pd.concat([counts_data,frame_data_df],axis=0,ignore_index=True)
+                            elif cell_view_type == 'umap':
+                                counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
+                                first_chart_label = 'Cell UMAP'
+
+                                # Getting all clustering information for structures in current viewport
+                                counts_data_list = []
+                                counts_data = pd.DataFrame()
+                                if type(intersecting_ftus[f])==list:
+                                    for ind_ftu in intersecting_ftus[f]:
+                                        
+                                        if 'Cluster' in ind_ftu:
+                                            counts_data_list.append({
+                                                'Structure': f,
+                                                'Cluster': ind_ftu['Cluster'],
+                                                'umap_x': ind_ftu['umap.x'],
+                                                'umap_y': ind_ftu['umap.y']
+                                            })
+                                
+                                if len(counts_data_list)>0:
+                                    counts_data = pd.DataFrame.from_records(counts_data_list)
+                            
+                            elif cell_view_type == 'cell':
+                                counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
+                                first_chart_label = 'Cell Compositions'
+
+                                # Getting all clustering information for structures in current viewport
+                                counts_data_list = []
+                                counts_data = pd.DataFrame()
+                                if type(intersecting_ftus[f])==list:
+                                    for ind_ftu in intersecting_ftus[f]:
+                                        
+                                        if 'Cell' in ind_ftu:
+                                            counts_data_list.append({
+                                                'Cell': ind_ftu['Cell'],
+                                                'Cluster': ind_ftu['Cluster']
+                                            })
+                                        elif 'Cluster' in ind_ftu:
+                                            counts_data_list.append({
+                                                'Cluster': ind_ftu['Cluster'],
+                                                'Cell': 'Unlabeled'
+                                            })
+                                        else:
+                                            counts_data_list.append({
+                                                'Cluster': 'No Cluster',
+                                                'Cell': 'Unlabeled'
+                                            })
+                                
+                                if len(counts_data_list)>0:
+                                    counts_data = pd.DataFrame.from_records(counts_data_list)
+
 
                         if not counts_data.empty:
                             
@@ -1591,12 +1668,36 @@ class FUSION:
                                 # For CODEX images, have the tissue tab be one histogram                                    
                                 # Getting one of the channels. Maybe just the first one
                                 #print(f'counts_data shape: {counts_data.shape}')
-                                f_pie = px.bar(
-                                    data_frame = counts_data,
-                                    x = 'Intensity',
-                                    y = 'Frequency',
-                                    color = 'Channel'
-                                )
+                                if cell_view_type=='channel_hist':
+                                    f_pie = px.bar(
+                                        data_frame = counts_data,
+                                        x = 'Intensity',
+                                        y = 'Frequency',
+                                        color = 'Channel'
+                                    )
+                                elif cell_view_type=='umap':
+                                    f_pie = px.scatter(
+                                        data_frame = counts_data,
+                                        x = 'umap_x',
+                                        y = 'umap_y',
+                                        color = 'Cluster'
+                                    )
+                                elif cell_view_type=='cell':
+
+                                    counts_data = counts_data['Cluster'].value_counts().to_dict()
+                                    pie_chart_data = []
+                                    for key,val in counts_data.items():
+                                        pie_chart_data.append(
+                                            {'Cluster': key, 'Count': val}
+                                        )
+                                    pie_chart_df = pd.DataFrame.from_records(pie_chart_data)
+                                    f_pie = px.pie(
+                                        data_frame = pie_chart_df,
+                                        values = 'Count',
+                                        names = 'Cluster'
+                                    )
+                                    f_pie.update_traces(textposition='inside')
+                                    f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
                                     
                             if self.wsi.spatial_omics_type=='Visium':
                                 
@@ -1651,18 +1752,18 @@ class FUSION:
                                     dbc.Row([
                                         dbc.Col(
                                             dbc.Label('Select a Channel Name to view Histogram:',html_for={'type':'frame-histogram-drop','index':0}),
-                                            md = 6, align = 'center'
+                                            md = 6, align = 'center',
                                         ),
                                         dbc.Col(
                                             dcc.Dropdown(
-                                                options = self.wsi.channel_names,
+                                                options = [i for i in self.wsi.channel_names if not i=='Histology (H&E)'],
                                                 value = frame_list,
                                                 multi = True,
                                                 id = {'type':'frame-histogram-drop','index':0}
                                             ),
                                             md = 6, align = 'center'
                                         )
-                                    ]),
+                                    ], style = {'display':'none'} if not cell_view_type=='channel_hist' else {}),
                                     dbc.Row([
                                         dbc.Col([
                                             dbc.Label(first_chart_label),
@@ -1672,13 +1773,45 @@ class FUSION:
                                             )
                                         ],md=12)
                                     ])],
-                                    label = f+f' ({len(counts_dict_list)})',tab_id = f'tab_{f_idx}'
+                                    label = f+f' ({len(intersecting_ftus[f])})',tab_id = f'tab_{len(tab_list)}'
                                 )
-
 
                             tab_list.append(f_tab)
 
-                    return dbc.Tabs(tab_list,active_tab = 'tab_0')
+                    if self.wsi.spatial_omics_type=='Visium' or self.wsi.spatial_omics_type=='Regular':
+                        return dbc.Tabs(tab_list,active_tab = 'tab_0')
+                    elif self.wsi.spatial_omics_type=='CODEX':
+
+                        return_div = html.Div([
+                            dbc.Row([
+                                dbc.Col(
+                                    children = [
+                                        dbc.Label('Select View Type: '),
+                                        self.layout_handler.gen_info_button('Select different options here to vary how to view information in the current viewport')
+                                    ],
+                                    md = 4
+                                ),
+                                dbc.Col(
+                                    dcc.Dropdown(
+                                        options = [
+                                            {'label':'Channel Intensity Histograms','value':'channel_hist'},
+                                            {'label':'UMAP Clustering','value':'umap'},
+                                            {'label':'Cell Type Composition','value':'cell'}
+                                        ],
+                                        value = cell_view_type,
+                                        multi = False,
+                                        id = {'type':'roi-view-data','index':0}
+                                    )
+                                )
+                            ]),
+                            html.Hr(),
+                            dbc.Row(
+                                dbc.Tabs(tab_list,active_tab=f'tab_0')
+                            )
+                        ])
+
+                        return return_div
+
                 else:
                     return html.P('No FTUs in current view')
             else:
@@ -2668,7 +2801,7 @@ class FUSION:
                             id = {'type':'codex-tile-layer','index':c_idx}
                         ),
                         name = c_name,
-                        checked = c_name=='Channel_0'
+                        checked = c_name== new_slide.channel_names[0]
                     )
                     for c_idx,c_name in enumerate(new_slide.channel_names)
                 ]

@@ -414,12 +414,17 @@ class CODEXSlide(DSASlide):
                 if 'Channel' in f:
                     self.channel_names.append(f['Channel'])
 
+        if 'Histology Id' in self.item_info['meta']:
+            self.channel_names = ['Histology (H&E)'] + self.channel_names
+            self.histology_url = self.girder_handler.gc.urlBase+f'item/{self.item_info["meta"]["Histology Id"]}/tiles/zxy/'+'{z}/{x}/{y}?token='+self.user_token
+
         if self.channel_names == []:
             # Fill in with dummy channel_names (test case with 16 or 17 channels)
             self.channel_names = [f'Channel_{i}' for i in range(0,self.n_frames)]
 
         self.channel_tile_url = [
             self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(i)+'}]}'
+            if not self.channel_names[i] == 'Histology (H&E)' else self.histology_url
             for i in range(len(self.channel_names))
         ]
 
