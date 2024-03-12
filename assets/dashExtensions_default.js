@@ -50,6 +50,10 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                                 cell_value = (cell_value).toFixed(1);
                             } else if (cell_value == 0) {
                                 cell_value = (cell_value).toFixed(1);
+                            } else if (cell_value > 1) {
+                                cell_value = 1.0;
+                            } else if (cell_value < 0) {
+                                cell_value = 0.0;
                             }
                         } else if (current_cell in feature.properties) {
                             var cell_value = feature.properties[current_cell];
@@ -66,6 +70,10 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                                 cell_value = (cell_value).toFixed(1);
                             } else if (cell_value == 0) {
                                 cell_value = (cell_value).toFixed(1);
+                            } else if (cell_value > 1) {
+                                cell_value = 1.0;
+                            } else if (cell_value < 0) {
+                                cell_value = 0.0;
                             }
                         } else {
                             var cell_value = Number.Nan;

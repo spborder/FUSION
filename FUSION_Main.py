@@ -234,6 +234,10 @@ class FUSION:
                             cell_value = (cell_value).toFixed(1);
                         } else if (cell_value==0) {
                             cell_value = (cell_value).toFixed(1);
+                        } else if (cell_value > 1) {
+                            cell_value = 1.0;
+                        } else if (cell_value < 0) {
+                            cell_value = 0.0;
                         }                                                    
                     } else if (current_cell in feature.properties){
                         var cell_value = feature.properties[current_cell];
@@ -250,7 +254,11 @@ class FUSION:
                             cell_value = (cell_value).toFixed(1);
                         } else if (cell_value==0) {
                             cell_value = (cell_value).toFixed(1);
-                        } 
+                        } else if (cell_value > 1) {
+                            cell_value = 1.0;
+                        } else if (cell_value < 0) {
+                            cell_value = 0.0;
+                        }
                     } else {
                         var cell_value = Number.Nan;
                     }
@@ -1479,7 +1487,7 @@ class FUSION:
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
     def update_roi_pie(self,bounds,cell_view_type,frame_list,current_tab):
-
+        
         if not self.wsi is None:
             if not bounds is None:
                 if len(bounds)==2:
@@ -1495,7 +1503,7 @@ class FUSION:
             self.current_slide_bounds = None
 
             raise exceptions.PreventUpdate
-        
+                
         # Making a box-poly from the bounds
         if current_tab=='cell-compositions-tab':
             if not self.wsi is None:
@@ -1519,7 +1527,6 @@ class FUSION:
                             
                 elif self.wsi.spatial_omics_type=='CODEX':
                     # Returns dictionary of intersecting tissue frame intensities
-                    print(f'cell_view_type: {cell_view_type}')
                     if len(cell_view_type)==0:
                         cell_view_type = 'channel_hist'
                     else:
@@ -1542,7 +1549,13 @@ class FUSION:
                                     frame_list = [self.wsi.channel_names[0]]
                             else:
                                 frame_list = [self.wsi.channel_names[0]]
-                        intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box,frame_list)
+                        try:
+                            intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box,frame_list)
+                        except girder_client.HttpError:
+                            print('encountered negative bounds value')
+                            print(f'bounds: {bounds}')
+                            print(f'frame_list: {frame_list}')
+                            raise exceptions.PreventUpdate
                         intersecting_ftus['Tissue'] = intersecting_region
 
                     elif cell_view_type=='umap' or cell_view_type=='cell':
@@ -1818,14 +1831,12 @@ class FUSION:
                 return html.P('Select a slide to get started!')
     
     def update_state_bar(self,cell_click):
-        
         if not cell_click is None:
             self.pie_cell = cell_click['points'][0]['label']
 
             self.pie_ftu = list(self.current_ftus.keys())[ctx.triggered_id['index']]
 
-            pct_states = pd.DataFrame.from_records([i['Cell_States'][self.pie_cell] for i in self.current_ftus[self.pie_ftu] if 'Cell_States' in self.current_ftus[self.pie_ftu]]).sum(axis=0).to_frame()
-    
+            pct_states = pd.DataFrame.from_records([i['Cell_States'][self.pie_cell] for i in self.current_ftus[self.pie_ftu] if 'Cell_States' in i]).sum(axis=0).to_frame()
             pct_states = pct_states.reset_index()
             pct_states.columns = ['Cell State', 'Proportion']
             pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
@@ -1851,16 +1862,16 @@ class FUSION:
                 for g in self.wsi.ftu_props[f]:
                     # Getting main counts for this ftu
                     if 'Main_Cell_Types' in g:
-                        ftu_counts = g['Main_Cell_Types'][self.current_cell]
+                        ftu_counts = np.minimum(g['Main_Cell_Types'][self.current_cell],1.0)
                         raw_values_list.append(ftu_counts)
 
             for f in self.wsi.spot_props:
                 # Getting main counts for spots
-                spot_counts =f['Main_Cell_Types'][self.current_cell]
+                spot_counts = np.minimum(f['Main_Cell_Types'][self.current_cell],1.0)
                 raw_values_list.append(spot_counts)
 
             for f in self.wsi.manual_rois:
-                manual_counts = f['geojson']['features'][0]['properties']['Main_Cell_Types'][self.current_cell]
+                manual_counts = np.minimum(f['geojson']['features'][0]['properties']['Main_Cell_Types'][self.current_cell],1.0)
                 raw_values_list.append(manual_counts)
 
         elif color_type =='cell_sub_value':
@@ -1874,21 +1885,21 @@ class FUSION:
                     if 'Main_Cell_Types' in g:
                         ftu_counts = g['Main_Cell_Types'][main_cell]
                         cell_sub_values = g['Cell_States'][main_cell][sub_cell]
-                        raw_values_list.append(ftu_counts*cell_sub_values)
+                        raw_values_list.append(np.minimum(ftu_counts*cell_sub_values,1.0))
 
 
             # Iterating through spots
             for f in self.wsi.spot_props:
                 spot_counts = f['Main_Cell_Types'][main_cell]
                 spot_sub_counts = f['Cell_States'][main_cell][sub_cell]
-                raw_values_list.append(spot_counts*spot_sub_counts)
+                raw_values_list.append(np.minimum(spot_counts*spot_sub_counts,1.0))
 
             # Iterating through manual ROIs
             for f in self.wsi.manual_rois:
                 if 'Main_Cell_Types' in f['geojson']['features'][0]['properties']:
                     manual_counts = f['geojson']['features'][0]['properties']['Main_Cell_Types'][main_cell]
                     manual_subcounts = f['geojson']['features'][0]['properties']['Cell_States'][main_cell][sub_cell]
-                    raw_values_list.append(manual_counts*manual_subcounts)
+                    raw_values_list.append(np.minimum(manual_counts*manual_subcounts,1.0))
 
         elif color_type == 'max_cell':
 
@@ -1928,11 +1939,8 @@ class FUSION:
         raw_values_list = np.unique(raw_values_list).tolist()
         # Converting to RGB
         if len(raw_values_list)>0:
-            if max(raw_values_list)<=1:
-                rgb_values = np.uint8(255*self.color_map(np.uint8(255*raw_values_list)))[:,0:3]
-            else:
-                scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
-                rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
+            scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
+            rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
 
             hex_list = []
             for row in range(rgb_values.shape[0]):
@@ -1941,7 +1949,7 @@ class FUSION:
             self.hex_color_key = {i:j for i,j in zip(raw_values_list,hex_list)}
         else:
             self.hex_color_key = {}
-
+        
     def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color,cell_sub_val,ftu_bound_tab):
 
         print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
@@ -1986,7 +1994,7 @@ class FUSION:
                 cell_val_parts = cell_val.split(' --> ')
                 m_prop = cell_val_parts[0]
                 cell_val = cell_val_parts[1]
-
+            
             # Updating current_cell property
             if cell_val in self.cell_names_key:
                 if m_prop == 'Main_Cell_Types':
@@ -2845,7 +2853,7 @@ class FUSION:
             new_url = self.wsi.tile_url
             center_point = [0.5*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),0.5*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
 
-            self.current_ftus = self.wsi.ftu_names
+            self.current_ftus = self.wsi.ftu_props
             self.current_ftu_layers = self.wsi.ftu_names
 
             # Adding the layers to be a property for the edit_control callback
