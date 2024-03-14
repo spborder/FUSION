@@ -571,6 +571,7 @@ class FUSION:
         # Updating questions in question tab
         self.app.callback(
             Input({'type':'questions-tabs','index':ALL},'active_tab'),
+            State('logged-in-user','children'),
             Output({'type':'question-div','index':ALL},'children'),
         )(self.update_question_div)
 
@@ -5500,7 +5501,6 @@ class FUSION:
     def start_cluster_markers(self,butt_click):
 
         # Clicked Get Cluster Markers
-        print(ctx.triggered)
         if ctx.triggered[0]['value']:
 
             disable_button = True
@@ -5510,7 +5510,6 @@ class FUSION:
                 'filename':f'marker_features.csv',
                 'content': self.feature_data
             })
-            print(features_for_markering)
 
             # Starting cluster marker job
             cluster_marker_job = self.dataset_handler.gc.post(
@@ -5521,7 +5520,6 @@ class FUSION:
                         'girderToken': self.dataset_handler.user_token,
                     }
                 )
-            print(cluster_marker_job)
             self.cluster_marker_job_id = cluster_marker_job['_id']
 
             # Returning a dcc.Interval object and another div to store the logs
@@ -5658,10 +5656,14 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def update_question_div(self,question_tab):
+    def update_question_div(self,question_tab,logged_in_user):
 
+        logged_in_username = logged_in_user.split(' ')[-1]
+        print(f'logged_in_username: {logged_in_username}')
         # Updating the questions that the user sees in the usability questions tab
         usability_info = self.dataset_handler.update_usability()
+        #TODO: Verify that this value is robust to multiple concurrent users
+        # Username is also present in the welcome div thing
         user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
         user_type = user_info['type']
 
@@ -5677,8 +5679,12 @@ class FUSION:
             for q_idx,l_q in enumerate(level_questions):
 
                 # Checking if the user has already responded to this question
-                if f'Level {level_index}' in user_info['responses']:
-                    q_val = user_info['responses'][f'Level {level_index}'][q_idx]
+                if f'Level {level_index}' in list(user_info['responses'].keys()):
+                    #TODO: Make this more robust, checks for if responses are there but doesn't check that the number is the same or anything
+                    if len(user_info['responses'][f'Level {level_index}'])>q_idx:
+                        q_val = user_info['responses'][f'Level {level_index}'][q_idx]
+                    else:
+                        q_val = []
                 else:
                     q_val = []
                 
@@ -5772,19 +5778,37 @@ class FUSION:
         else:
             # Comments tab
             level_index = len(list(usability_questions.keys()))
-            question_list.append(
-                html.Div([
-                    dbc.Row(dbc.Label('Add any comments here!',size='lg')),
-                    dbc.Row(
-                        dcc.Textarea(
-                            id = {'type':'question-input','index':0},
-                            placeholder = 'Comments',
-                            style = {'width':'100%','marginBottom':'10px'},
-                            maxLength = 10000
+
+            if 'Comments' in list(user_info['responses'].keys()):
+
+                question_list.append(
+                    html.Div([
+                        dbc.Row(dbc.Label('Add any comments here!',size='lg')),
+                        dbc.Row(
+                            dcc.Textarea(
+                                id = {'type':'question-input','index':0},
+                                placeholder = 'Comments',
+                                style = {'width':'100%','marginBottom':'10px'},
+                                maxLength = 10000,
+                                value = user_info['responses']['Comments']
+                            )
                         )
-                    )
-                ])
-            )
+                    ])
+                )
+            else:
+                question_list.append(
+                    html.Div([
+                        dbc.Row(dbc.Label('Add any comments here!',size='lg')),
+                        dbc.Row(
+                            dcc.Textarea(
+                                id = {'type':'question-input','index':0},
+                                placeholder = 'Comments',
+                                style = {'width':'100%','marginBottom':'10px'},
+                                maxLength = 10000
+                            )
+                        )
+                    ])
+                )
 
         if question_tab[0] != 'consent-tab':
             question_list.append(html.Div([
