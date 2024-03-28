@@ -3166,7 +3166,7 @@ class GirderHandler:
                     for sc in mo['subcompartments']:
                         self.morpho_names.append(mo_name.replace('{}',sc))
                 else:
-                    for sc in ['Nuclei','Luminal Space','PAS']:
+                    for sc in ['Nuclei','Luminal Space','Eosinophilic']:
                         self.morpho_names.append(mo_name.replace('{}',sc))
 
         # Getting asct+b table
@@ -3339,7 +3339,7 @@ class GirderHandler:
             for f_i,f in enumerate([i['name'] for i in self.morphometrics_reference['Morphometrics'] if i['group']==g]):
 
                 if '{}' in f:
-                    for sc_i,sub_comp in enumerate(['PAS','Luminal Space','Nuclei']):
+                    for sc_i,sub_comp in enumerate(['Eosinophilic','Luminal Space','Nuclei']):
                         group_dict['children'].append({
                             'title':f.replace('{}',sub_comp),
                             'key':f'0-0-{g_i}-{sub_comp_offset}'

@@ -1069,17 +1069,6 @@ class FUSION:
 
         return new_slides, html.H3(tutorial_name), style_list
 
-    """
-    def update_plotting_metadata(self):
-
-        # Populating metadata based on current slides selection
-        select_ids = [i['_id'] for i in self.current_slides if i['included']]
-
-        metadata = self.dataset_handler.get_collection_annotation_meta(select_ids)
-
-        return metadata
-    """
-
     def initialize_metadata_plots(self,selected_dataset_list):
 
         # Extracting metadata from selected datasets and plotting

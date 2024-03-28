@@ -428,7 +428,7 @@ class Prepper:
         # Dictionary containing model and item id's
         self.model_zoo = {
             'MultiCompartment_Model':{
-                'plugin_name':'samborder2256_multicomp/MultiCompartmentSegment',
+                'plugin_name':'samborder2256_multicomp_latest/MultiCompartmentSegment',
                 'model_id':'648123761019450486d13dce',
                 'structures':['Cortical interstitium','Medullary interstitium','Glomeruli','Sclerotic Glomeruli','Tubules','Arteries and Arterioles']
             },
@@ -444,7 +444,7 @@ class Prepper:
             }
         }
 
-        self.feature_extraction_plugin = 'samborder2256_ftx_test_image_latest/Ftx_sc'
+        self.feature_extraction_plugin = 'samborder2256_ftx_plugin_latest/Ftx_sc'
 
         self.color_map = colormaps['jet']
 
