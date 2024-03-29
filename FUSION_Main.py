@@ -167,7 +167,8 @@ class FUSION:
         # Specifying available properties with visualizations implemented
         self.visualization_properties = [
             'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
-            'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction','Max Cell Type'
+            'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction','Max Cell Type',
+            'Gene Counts'
         ]
 
         # Initializing some parameters
@@ -190,10 +191,18 @@ class FUSION:
         self.hex_color_key = {}
 
         # JavaScript functions for controlling annotation properties
+        #TODO: Add property and value to hideout instead of just current_cell
         self.ftu_style_handle = assign("""function(feature,context){
             const {color_key,current_cell,fillOpacity,ftu_colors,filter_vals} = context.hideout;
             if (current_cell){
-                if (current_cell==='cluster'){
+                if (current_cell=='gene'){
+                    // Flesh this part out
+                    if ("Gene Counts" in feature.properties){
+                        var cell_value = feature.properties["Gene Counts"][value];
+                    } else {
+                        cell_value = Number.Nan;
+                    }
+                } else if (current_cell==='cluster'){
                     if (current_cell in feature.properties){
                         // Truncating number to integer, stored as single-decimal floats initially
                         var cell_value = feature.properties.Cluster;
@@ -294,10 +303,12 @@ class FUSION:
             """
         )
 
+        #TODO: Same edit here, add property and value to hideout and make filter a dict so you can add multiple filters
         self.ftu_filter = assign("""function(feature,context){
                 const {color_key,current_cell,fillOpacity,ftu_colors,filter_vals} = context.hideout;
                 
                 if (current_cell){
+                    
                     if ("Main_Cell_Types" in feature.properties){
                         if (current_cell in feature.properties.Main_Cell_Types){
                             var cell_value = feature.properties.Main_Cell_Types[current_cell];
@@ -4335,12 +4346,24 @@ class FUSION:
                                 baseurl=self.dataset_handler.apiUrl,
                                 girderToken=self.dataset_handler.user_token,
                                 parentId=parentId,
-                                filetypes=['rds','csv']                 
+                                filetypes=['rds','csv','h5ad']                 
                             )
                         ],
                         style = {'marginTop':'10px','display':'inline-block'}
                     )
-                ],align='center')
+                ],align='center'),
+                dbc.Row([
+                    dbc.Col(dbc.Label('Select Organ: ',html_for = {'type':'organ-select','index':0}),md=4),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [
+                                'Kidney', 'Other Organs'
+                            ],
+                            placeholder = 'Organ',
+                            id = {'type':'organ-select','index':0}
+                        )
+                    )
+                ])
             ])
         
             self.upload_check = {'WSI':False,'Omics':False}
@@ -4368,7 +4391,19 @@ class FUSION:
                         ],
                         style={'marginBottom':'10px','display':'inline-block'}
                     )
-                ],align='center')
+                ],align='center'),
+                dbc.Row([
+                    dbc.Col(dbc.Label('Select Organ: ',html_for = {'type':'organ-select','index':0}),md=4),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [
+                                'Kidney', 'Other Organs'
+                            ],
+                            placeholder = 'Organ',
+                            id = {'type':'organ-select','index':0}
+                        )
+                    )
+                ])
             ])
         
             self.upload_check = {'WSI':False}
@@ -4395,7 +4430,19 @@ class FUSION:
                         ],
                         style = {'marginBottom':'10px','display':'inline-block'}
                     )
-                ],align='center')
+                ],align='center'),
+                dbc.Row([
+                    dbc.Col(dbc.Label('Select Organ: ',html_for = {'type':'organ-select','index':0}),md=4),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [
+                                'Kidney', 'Other Organs'
+                            ],
+                            placeholder = 'Organ',
+                            id = {'type':'organ-select','index':0}
+                        )
+                    )
+                ])
             ])
 
             self.upload_check = {'WSI':False}
@@ -4561,7 +4608,7 @@ class FUSION:
                                     baseurl=self.dataset_handler.apiUrl,
                                     girderToken=self.dataset_handler.user_token,
                                     parentId=self.latest_upload_folder['id'],
-                                    filetypes=['rds','csv']                 
+                                    filetypes=['rds','csv','h5ad']                 
                                     )
                             ]
                     else:
@@ -4707,6 +4754,7 @@ class FUSION:
                     print(f'Running segmentation!')
                     self.segmentation_job_info = self.prep_handler.segment_image(self.upload_wsi_id,structure_selection)
                     print(f'Running spot annotation!')
+                    #TODO: Make it so you don't have to run segmentation to access cell deconvolution/spot stuff
                     if not self.upload_omics_id is None:
                         self.cell_deconv_job_info = self.prep_handler.run_cell_deconvolution(self.upload_wsi_id,self.upload_omics_id)
 
