@@ -967,14 +967,20 @@ class FUSION:
 
         # Populating the post-segmentation sub-compartment segmentation and feature extraction row
         self.app.callback(
-            output = [
+            [
                 Output('post-segment-row','style'),
                 Output('structure-type','disabled'),
                 Output({'type':'prep-div','index':ALL},'children')
             ],
-            inputs = [
+            [
                 Input({'type':'seg-log-interval','index':ALL},'disabled'),
                 Input({'type':'seg-continue-butt','index':ALL},'n_clicks')
+            ],
+            [
+                State({'type':'organ-select','index':ALL},'value'),
+                State({'type':'gene-selection-method','index':ALL},'value'),
+                State({'type':'gene-selection-n','index':ALL},'value'),
+                State({'type':'gene-selection-list','index':ALL},'value')
             ],
             prevent_initial_call = True
         )(self.post_segmentation)
@@ -4971,7 +4977,7 @@ class FUSION:
         print(f'disabling interval: {seg_log_disable}')
         return [seg_logs_div], [seg_log_disable], [continue_disable]
 
-    def post_segmentation(self, seg_log_disable, continue_butt):
+    def post_segmentation(self, seg_log_disable, continue_butt, organ, gene_method, gene_n, gene_list):
 
         if ctx.triggered[0]['value']:
             # post-segment-row stuff
@@ -4990,7 +4996,15 @@ class FUSION:
                 self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
                 
                 # Running post-segmentation workflowfrom VisiumPrep
-                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(self.upload_wsi_id, self.upload_omics_id, self.upload_annotations)
+                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(
+                    self.upload_wsi_id, 
+                    self.upload_omics_id, 
+                    self.upload_annotations,
+                    organ,
+                    gene_method,
+                    gene_n,
+                    gene_list
+                )
 
             elif self.current_upload_type == 'CODEX':
 
@@ -5030,7 +5044,6 @@ class FUSION:
             # Generating upload preprocessing row
             prep_row = self.layout_handler.gen_uploader_prep_type(self.current_upload_type,prep_values)
                 
-            print(ctx.outputs_list)
             return sub_comp_style, disable_organ, [prep_row]
         else:
             return no_update, no_update, [no_update]

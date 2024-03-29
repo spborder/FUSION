@@ -886,10 +886,8 @@ class VisiumPrep(Prepper):
 
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
-        print(f'image_item: {image_item}')
         fileId = image_item['largeImage']['fileId']
         folderId = image_item['folderId']
-        print(f'folderId: {folderId}')
 
         # Getting fileId for rds item
         rds_item = self.girder_handler.gc.get(f'/item/{rds_id}/files')
@@ -905,48 +903,80 @@ class VisiumPrep(Prepper):
                                                    })
         return cell_deconv_job
 
-    def run_spot_annotation(self,image_id,rds_id):
+    def run_spot_annotation(self,image_id,omics_id, organ, gene_method, gene_n, gene_list):
 
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
-        print(f'image_item: {image_item}')
         fileId = image_id
         folderId = image_item['folderId']
-        print(f'folderId: {folderId}')
 
-        # Getting fileId for rds item
-        # Looking for output_cell_types.RDS file
-        output_folder_contents = self.girder_handler.gc.get(f'/resource/{folderId}/items',parameters={'limit':10000,'type':'folder'})
-        output_folder_names = [i['name'] for i in output_folder_contents]
-        if 'output_cell_types.RDS' in output_folder_names:
-            rds_item = output_folder_contents[output_folder_names.index('output_cell_types.RDS')]
-            rds_file_id = rds_item['_id']
+        omics_info = self.girder_handler.gc.get(f'/item/{omics_id}')
+        omics_name = omics_info['name']
 
+        if omics_name.split('.')[-1]=='rds':
+
+            # Getting fileId for rds item
+            # Looking for output_cell_types.RDS file
+            output_folder_contents = self.girder_handler.gc.get(f'/resource/{folderId}/items',parameters={'limit':10000,'type':'folder'})
+            output_folder_names = [i['name'] for i in output_folder_contents]
+            if 'output_cell_types.RDS' in output_folder_names:
+                rds_item = output_folder_contents[output_folder_names.index('output_cell_types.RDS')]
+                rds_file_id = rds_item['_id']
+
+                # Getting fileId for definitions file
+                def_file_id = self.spot_annotation_info['definitions_file']
+
+                # Generating spot annotations
+                spot_ann_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.spot_annotation_info["plugin_name"]}/run',
+                                                parameters = {
+                                                    'counts_file':rds_file_id,
+                                                    'definitions_file':def_file_id,
+                                                    'input_files':fileId,
+                                                    'organ': 'kidney',
+                                                    'gene_selection_method': '',
+                                                    'n': 0,
+                                                    'list': '',
+                                                    'girderApiUrl':self.girder_handler.apiUrl,
+                                                    'girderToken':self.girder_handler.user_token
+                                                })
+                
+
+                return spot_ann_job
+        
+            else:
+                return 'No output found :/'
+            
+        elif omics_name.split('.')[-1]=='h5ad':
+
+            # Generating spot annotations using gene-selection-method stuff
             # Getting fileId for definitions file
+            #omics_file_id = self.girder_handler.gc.get(f'/item/{omics_id}/files')[0]['_id']
+
             def_file_id = self.spot_annotation_info['definitions_file']
 
             # Generating spot annotations
             spot_ann_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.spot_annotation_info["plugin_name"]}/run',
                                             parameters = {
-                                                'rds_file':rds_file_id,
+                                                'counts_file':omics_id,
                                                 'definitions_file':def_file_id,
                                                 'input_files':fileId,
-                                                'basedir':folderId,
+                                                'organ': organ,
+                                                'gene_selection_method': gene_method,
+                                                'n': gene_n,
+                                                'list': gene_list,
                                                 'girderApiUrl':self.girder_handler.apiUrl,
                                                 'girderToken':self.girder_handler.user_token
                                             })
             
-
-            return spot_ann_job
         else:
-            return 'No output found :/'
+            print(f'Invalid omics type: {omics_name}')
 
-    def post_segmentation(self, upload_wsi_id, upload_omics_id, upload_annotations):
+    def post_segmentation(self, upload_wsi_id, upload_omics_id, upload_annotations, organ, gene_method, gene_n, gene_list):
 
         # What to do after segmentation for a Visium upload
 
         # Generate spot annotations and aggregate --omics info
-        spot_annotation = self.run_spot_annotation(upload_wsi_id,upload_omics_id)
+        spot_annotation = self.run_spot_annotation(upload_wsi_id,upload_omics_id, organ, gene_method, gene_n, gene_list)
         spot_aggregation = self.run_spot_aggregation(upload_wsi_id)
 
         # Getting annotations and returning layer_anns

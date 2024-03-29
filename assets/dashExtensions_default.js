@@ -9,7 +9,14 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     filter_vals
                 } = context.hideout;
                 if (current_cell) {
-                    if (current_cell === 'cluster') {
+                    if (current_cell == 'gene') {
+                        // Flesh this part out
+                        if ("Gene Counts" in feature.properties) {
+                            var cell_value = feature.properties["Gene Counts"][value];
+                        } else {
+                            cell_value = Number.Nan;
+                        }
+                    } else if (current_cell === 'cluster') {
                         if (current_cell in feature.properties) {
                             // Truncating number to integer, stored as single-decimal floats initially
                             var cell_value = feature.properties.Cluster;
@@ -119,6 +126,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 } = context.hideout;
 
                 if (current_cell) {
+
                     if ("Main_Cell_Types" in feature.properties) {
                         if (current_cell in feature.properties.Main_Cell_Types) {
                             var cell_value = feature.properties.Main_Cell_Types[current_cell];
