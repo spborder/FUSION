@@ -565,7 +565,7 @@ class FUSION:
         # Updating GeoJSON fill/color/filter
         self.app.callback(
             [Output({'type':'ftu-bounds','index':ALL},'hideout'),Output('colorbar-div','children'),
-             Output('filter-slider','max'),Output('filter-slider','disabled'),
+             Output('filter-slider','min'),Output('filter-slider','max'),Output('filter-slider','disabled'),
              Output('cell-sub-select-div','children')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
              Input('filter-slider','value'),Input({'type':'ftu-bound-color','index':ALL},'value'),
@@ -573,6 +573,15 @@ class FUSION:
             State('ftu-bound-opts','active_tab'),
             prevent_initial_call = True
         )(self.update_overlays)
+
+        # Adding filter to apply to structures in the image
+        """
+        self.app.callback(
+            [Output('filter-div','children')],
+            [Input('add-filter','n_clicks')],
+            prevent_initial_call = True
+        )(self.add_filter)
+        """
 
         # Updating Cell Composition pie charts
         self.app.callback(
@@ -1958,6 +1967,7 @@ class FUSION:
                         id=f'colorbar{random.randint(0,100)}',
                         style = color_bar_style)
                     
+                    filter_min_val = np.min(list(self.hex_color_key.keys()))
                     filter_max_val = np.max(list(self.hex_color_key.keys()))
                     filter_disable = False
                 
@@ -1976,6 +1986,7 @@ class FUSION:
                         id=f'colorbar{random.randint(0,100)}',
                         style = color_bar_style)
                     
+                    filter_min_val = np.min(list(self.hex_color_key.keys()))
                     filter_max_val = np.max(list(self.hex_color_key.keys()))
                     filter_disable = False
                 
@@ -1995,6 +2006,7 @@ class FUSION:
                         id=f'colorbar{random.randint(0,100)}',
                         style = color_bar_style)
 
+                    filter_min_val = np.min(list(self.hex_color_key.keys()))
                     filter_max_val = np.max(list(self.hex_color_key.keys()))
                     filter_disable = False
             
@@ -2015,6 +2027,7 @@ class FUSION:
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
                 
+                filter_min_val = np.min(list(self.hex_color_key.keys()))
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
                 filter_disable = False
 
@@ -2038,6 +2051,7 @@ class FUSION:
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
+                filter_min_val = 0.0
                 filter_max_val = 1.0
                 filter_disable = True
 
@@ -2060,6 +2074,7 @@ class FUSION:
                 )
                 cell_sub_select_children = []
 
+                filter_min_val = 0.0
                 filter_max_val = 1.0
                 filter_disable = True
                 
@@ -2082,6 +2097,7 @@ class FUSION:
                     style = color_bar_style
                 )
 
+                filter_min_val = 0.0
                 filter_max_val = 1.0
                 filter_disable = True
             
@@ -2102,6 +2118,7 @@ class FUSION:
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
+                filter_min_val = np.min(list(self.hex_color_key.keys()))
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
                 filter_disable = False
             
@@ -2122,6 +2139,7 @@ class FUSION:
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
+                filter_min_val = np.min(list(self.hex_color_key.keys()))
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
                 filter_disable = False
             
@@ -2149,6 +2167,7 @@ class FUSION:
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
+                filter_min_val = np.min(list(self.hex_color_key.keys()))
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
                 filter_disable = False
 
@@ -2164,6 +2183,7 @@ class FUSION:
 
             color_bar = no_update
             filter_disable = True
+            filter_min_val = 0
             filter_max_val = 1
 
 
@@ -2193,7 +2213,7 @@ class FUSION:
             for i in range(0,n_layers)
         ]
 
-        return geojson_hideout, color_bar, filter_max_val, filter_disable, cell_sub_select_children
+        return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children
 
     def update_cell_hierarchy(self,cell_clickData):
         # Loading the cell-graphic and hierarchy image
