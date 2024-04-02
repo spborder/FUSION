@@ -47,6 +47,7 @@ import time
 from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler
 from FUSION_Prep import CODEXPrep, VisiumPrep, Prepper
+from FUSION_Utils import get_pattern_matching_value, extract_overlay_value, gen_violin_plot
 
 from upload_component import UploadComponent
 
@@ -172,7 +173,7 @@ class FUSION:
         ]
 
         # Initializing some parameters
-        self.current_cell = None
+        self.overlay_prop = None
 
         # Cell Hierarchy related properties
         self.node_cols = {
@@ -187,103 +188,66 @@ class FUSION:
         # Colormap settings (customize later)
         self.color_map = colormaps['jet']
         self.cell_vis_val = 0.5
-        self.filter_vals = [0,1]
+        self.filter_vals = None
+        self.overlap_prop = None
         self.hex_color_key = {}
 
         # JavaScript functions for controlling annotation properties
-        #TODO: Add property and value to hideout instead of just current_cell
         self.ftu_style_handle = assign("""function(feature,context){
-            const {color_key,current_cell,fillOpacity,ftu_colors,filter_vals} = context.hideout;
-            if (current_cell){
-                if (current_cell=='gene'){
-                    // Flesh this part out
-                    if ("Gene Counts" in feature.properties){
-                        var cell_value = feature.properties["Gene Counts"][value];
-                    } else {
-                        cell_value = Number.Nan;
-                    }
-                } else if (current_cell==='cluster'){
-                    if (current_cell in feature.properties){
-                        // Truncating number to integer, stored as single-decimal floats initially
-                        var cell_value = feature.properties.Cluster;
-                        cell_value = Math.trunc(cell_value);
-                    } else if ('Cluster' in feature.properties){
-                        var cell_value = feature.properties.Cluster;
-                        cell_value = Math.trunc(cell_value);
-                    } else {
-                        cell_value = Number.Nan;
-                    }
-                } else if (current_cell==='max'){
-                    // Extracting all the cell values for a given FTU/Spot
-                    if ("Main_Cell_Types" in feature.properties){       
-                        var cell_values = feature.properties.Main_Cell_Types;
-                        // Initializing some comparison values
-                        var cell_value = 0.0;
-                        var use_cell_value = 0.0;
-                        var cell_idx = -1.0;
-                        // Iterating through each cell type in cell values
-                        for (var key in cell_values){
-                            cell_idx += 1.0;
-                            var test_val = cell_values[key];
-                            // If the test value is greater than the cell_value, replace cell value with that test value
-                            if (test_val > cell_value) {
-                                cell_value = test_val;
-                                use_cell_value = cell_idx;
+            const {color_key,overlay_prop,fillOpacity,ftu_colors,filter_vals} = context.hideout;
+                                       
+            var overlay_value = Number.Nan;
+            if (overlay_prop) {
+                if (overlay_prop.name) {
+                    if (overlay_prop.name in feature.properties) {
+                        if (overlay_prop.value) {
+                            if (overlay_prop.value in feature.properties[overlay_prop.name]) {
+                                if (overlay_prop.sub_value) {
+                                    if (overlay_prop.sub_value in feature.properties[overlay_prop.name][overlay_prop.value]) {
+                                        var overlay_value = feature.properties[overlay_prop.name][overlay_prop.value][overlay_prop.sub_value];
+                                    } else {
+                                        var overlay_value = Number.Nan;
+                                    }
+                                } else {
+                                    var overlay_value = feature.properties[overlay_prop.name][overlay_prop.value];
+                                }
+                            } else if (overlay_prop.value==="max") {
+                                // Finding max represented sub-value
+                                var overlay_value = Number.Nan;
+                                var test_value = 0.0;
+                                var overlay_idx = -1.0;
+                                for (var key in feature.properties[overlay_prop.name]) {
+                                    var tester = feature.properties[overlay_prop.name][key];
+                                    overlay_idx += 1.0;
+                                    if (tester > test_value) {
+                                        test_value = tester;
+                                        overlay_value = overlay_idx;
+                                    }
+                                } 
+                            } else {
+                                var overlay_value = Number.Nan;
                             }
-                        }
-                        cell_value = (use_cell_value).toFixed(1);
-                    } else {
-                        cell_value = Number.Nan;
-                    }
-                } else if ('Main_Cell_Types' in feature.properties){
-                    if (current_cell in feature.properties.Main_Cell_Types){
-                                        
-                        var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                        if (cell_value==1) {
-                            cell_value = (cell_value).toFixed(1);
-                        } else if (cell_value==0) {
-                            cell_value = (cell_value).toFixed(1);
-                        } else if (cell_value > 1) {
-                            cell_value = 1.0;
-                        } else if (cell_value < 0) {
-                            cell_value = 0.0;
-                        }                                                    
-                    } else if (current_cell in feature.properties){
-                        var cell_value = feature.properties[current_cell];
-                    } else if (current_cell.includes('_')){
-                        
-                        var split_cell_value = current_cell.split("_");
-                        var main_cell_value = split_cell_value[0];
-                        var sub_cell_value = split_cell_value[1];
-                        
-                        var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
-                        cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
-                        
-                        if (cell_value==1) {
-                            cell_value = (cell_value).toFixed(1);
-                        } else if (cell_value==0) {
-                            cell_value = (cell_value).toFixed(1);
-                        } else if (cell_value > 1) {
-                            cell_value = 1.0;
-                        } else if (cell_value < 0) {
-                            cell_value = 0.0;
+                        } else {
+                            var overlay_value = feature.properties[overlay_prop.name];
                         }
                     } else {
-                        var cell_value = Number.Nan;
+                        var overlay_value = Number.Nan;
                     }
                 } else {
-                    var cell_value = Number.Nan;
+                    var overlay_value = Number.Nan;
                 }
             } else {
-                var cell_value = Number.Nan;
+                var overlay_value = Number.Nan;
             }
 
             var style = {};
-            if (cell_value == cell_value) {
-                const fillColor = color_key[cell_value];
-
-                style.fillColor = fillColor;
-                style.fillOpacity = fillOpacity;
+            if (overlay_value == overlay_value) {
+                if (overlay_value in color_key) {
+                    const fillColor = color_key[overlay_value];
+                    style.fillColor = fillColor;
+                    style.fillOpacity = fillOpacity;        
+                } 
+                                       
                 if (feature.properties.name in ftu_colors){
                     style.color = ftu_colors[feature.properties.name];
                 } else {
@@ -296,78 +260,65 @@ class FUSION:
                 } else {
                     style.color = 'white';
                 }
+                style.fillColor = "f00";
             }           
                                                                               
             return style;
-            }
+        }
             """
         )
 
-        #TODO: Same edit here, add property and value to hideout and make filter a dict so you can add multiple filters
         self.ftu_filter = assign("""function(feature,context){
-                const {color_key,current_cell,fillOpacity,ftu_colors,filter_vals} = context.hideout;
-                
-                if (current_cell){
-                    
-                    if ("Main_Cell_Types" in feature.properties){
-                        if (current_cell in feature.properties.Main_Cell_Types){
-                            var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                            if (cell_value >= filter_vals[0]){
-                                if (cell_value <= filter_vals[1]){
-                                    return true;
+                const {color_key,overlay_prop,fillOpacity,ftu_colors,filter_vals} = context.hideout;
+                var return_feature = true;               
+                if (filter_vals){
+                    // If there are filters, use them
+                    for (let i = 0; i < filter_vals.length; i++) {
+                        // Iterating through filter_vals dict
+                        var filter = filter_vals[i];         
+                                                
+                        if (filter.name) {
+                            // Checking if the filter name is in the feature
+                            if (filter.name in feature.properties) {
+                                
+                                if (filter.value) {
+                                    if (filter.value in feature.properties[filter.name]) {
+                                        if (filter.sub_value) {
+                                            if (filter.sub_value in feature.properties[filter.name][filter.value]) {
+                                                var test_val = feature.properties[filter.name][filter.value][filter.sub_value];
+                                            } else {
+                                                return_feature = return_feature & false;
+                                            }
+                                        } else {
+                                            var test_val = feature.properties[filter.name][filter.value];
+                                        }
+                                    } else if (filter.value==="max") {
+                                        return_feature = return_feature & true;
+                                    } else {
+                                        return_feature = return_feature & false;
+                                    }
                                 } else {
-                                    return false;
+                                    var test_val = feature.properties[filter.name];
                                 }
                             } else {
-                                return false;
+                                return_feature = return_feature & false;
                             }
-                        } else if (current_cell in feature.properties){
-                            var cell_value = feature.properties[current_cell];
-                            if (cell_value >= filter_vals[0]){
-                                if (cell_value <= filter_vals[1]){
-                                    return true;
-                                } else {
-                                    return false;
-                                }
-                            } else {
-                                return false;
-                            }
-                        } else if (current_cell.includes('_')) {
-                            var split_cell_value = current_cell.split("_");
-                            var main_cell_value = split_cell_value[0];
-                            var sub_cell_value = split_cell_value[1];
-                            
-                            var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
-                            cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
-                            if (cell_value >= filter_vals[0]){
-                                if (cell_value <= filter_vals[1]){
-                                    return true;
-                                } else {
-                                    return false;
-                                }
-                            } else {
-                                return false;
-                            }
+                        }
                                  
-                        } else {
-                            return true;
-                        }
-                    } else if (current_cell in feature.properties){
-                        var cell_value = feature.properties[current_cell];
-                        if (cell_value >= filter_vals[0]){
-                            if (cell_value <= filter_vals[1]){
-                                return true;
-                            } else {
-                                return false;
+                        if (filter.range) {
+                            if (test_val < filter.range[0]) {
+                                return_feature = return_feature & false;
                             }
-                        } else {
-                            return false;
+                            if (test_val > filter.range[1]) {
+                                return_feature = return_feature & false;
+                            }         
                         }
-                    } else {
-                        return true;
-                    }        
+                    }
+                    return return_feature;
+                                 
                 } else {
-                    return true;
+                    // If no filters are provided, return true for everything.
+                    return return_feature;
                 }
             }
             """
@@ -1242,15 +1193,17 @@ class FUSION:
             cell_types_options = (no_update,no_update,no_update)
 
         current_slide_count, slide_select_options = self.update_current_slides(slide_rows)
+        #TODO: get_pattern_matching_value test here
         if type(new_meta)==list:
             if len(new_meta)>0:
                 new_meta = new_meta[0]
-        
+
+        #TODO: get_pattern_matching_value test here
         if type(group_type)==list:
             if len(group_type)>0:
                 group_type = group_type[0]
 
-        # For DSA-backend deployment
+        #TODO: get_pattern_matching_value test here
         if not new_meta is None:
             if not len(new_meta)==0:
                 # Filtering out de-selected slides
@@ -1426,7 +1379,7 @@ class FUSION:
         # Updating the current slides
         slide_options = []
         if len(slide_rows)>0:
-            #slide_rows = slide_rows[0]
+            #TODO: get_pattern_matching_value test here
             if type(slide_rows[0])==list:
                 slide_rows = slide_rows[0]
             for s in range(0,len(self.current_slides)):
@@ -1854,7 +1807,7 @@ class FUSION:
         else:
             return go.Figure()
     
-    def update_hex_color_key(self,color_type):
+    def update_hex_color_key(self):
         
         # Iterate through all structures (and spots) in current wsi,
         # concatenate all of their proportions of specific cell types together
@@ -1862,91 +1815,38 @@ class FUSION:
         # convert uint8 RGB colors to hex
         # create look-up table for original value --> hex color
         # add that as get_color() function in style dict (fillColor) along with fillOpacity
+
+        #TODO: Add a scaling/range thing for values used as overlays
         raw_values_list = []
-        if color_type == 'cell_value':
-            # iterating through current ftus
-            for f in self.wsi.ftu_props:
-                for g in self.wsi.ftu_props[f]:
-                    # Getting main counts for this ftu
-                    if 'Main_Cell_Types' in g:
-                        ftu_counts = np.minimum(g['Main_Cell_Types'][self.current_cell],1.0)
-                        raw_values_list.append(ftu_counts)
+        if not self.overlay_prop is None:
+            if not self.overlay_prop['name'] is None:
 
-            for f in self.wsi.spot_props:
-                # Getting main counts for spots
-                spot_counts = np.minimum(f['Main_Cell_Types'][self.current_cell],1.0)
-                raw_values_list.append(spot_counts)
+                # Iterating through each ftu in each group:
+                for f in self.wsi.ftu_props:
+                    # Grabbing values using utils function
+                    f_raw_vals = extract_overlay_value(self.wsi.ftu_props[f],self.overlay_prop)
+                    raw_values_list.extend(f_raw_vals)
 
-            for f in self.wsi.manual_rois:
-                manual_counts = np.minimum(f['geojson']['features'][0]['properties']['Main_Cell_Types'][self.current_cell],1.0)
-                raw_values_list.append(manual_counts)
+                if self.wsi.spatial_omics_type=='Visium':
+                    # Iterating through spots
+                    spot_raw_vals = extract_overlay_value(self.wsi.spot_props,self.overlay_prop)
+                    raw_values_list.extend(spot_raw_vals)
 
-        elif color_type =='cell_sub_value':
-            # Visualizing a main cell type + cell state combination
-            main_cell = self.current_cell.split('_')[0]
-            sub_cell = self.current_cell.split('_')[1]
-            # Iterating through current ftus
-            for f in self.wsi.ftu_props:
-                for g in self.wsi.ftu_props[f]:
-                    # Getting main counts for this ftu
-                    if 'Main_Cell_Types' in g:
-                        ftu_counts = g['Main_Cell_Types'][main_cell]
-                        cell_sub_values = g['Cell_States'][main_cell][sub_cell]
-                        raw_values_list.append(np.minimum(ftu_counts*cell_sub_values,1.0))
+                # Check for manual ROIs
+                if len(self.wsi.manual_rois)>0:
 
-
-            # Iterating through spots
-            for f in self.wsi.spot_props:
-                spot_counts = f['Main_Cell_Types'][main_cell]
-                spot_sub_counts = f['Cell_States'][main_cell][sub_cell]
-                raw_values_list.append(np.minimum(spot_counts*spot_sub_counts,1.0))
-
-            # Iterating through manual ROIs
-            for f in self.wsi.manual_rois:
-                if 'Main_Cell_Types' in f['geojson']['features'][0]['properties']:
-                    manual_counts = f['geojson']['features'][0]['properties']['Main_Cell_Types'][main_cell]
-                    manual_subcounts = f['geojson']['features'][0]['properties']['Cell_States'][main_cell][sub_cell]
-                    raw_values_list.append(np.minimum(manual_counts*manual_subcounts,1.0))
-
-        elif color_type == 'max_cell':
-
-            # Iterating through current ftus
-            for f in self.wsi.ftu_props:
-                for g in self.wsi.ftu_props[f]:
-                    if 'Main_Cell_Types' in g:
-                        all_cell_type_counts = float(np.argmax(list(g['Main_Cell_Types'].values())))
-                        raw_values_list.append(all_cell_type_counts)
-
-            #TODO: For slides without any ftu's, search through the spots for cell names
-            # Also search through manual ROIs
-            for s in self.wsi.spot_props:
-                if 'Main_Cell_Types' in s:
-                    all_cell_type_counts = float(np.argmax(list(s['Main_Cell_Types'].values())))
-                    raw_values_list.append(all_cell_type_counts)
-
-        elif color_type == 'cluster':
-            # iterating through current ftus
-            for f in self.wsi.ftu_props:
-                for g in self.wsi.ftu_props[f]:
-                    if 'Cluster' in g:
-                        cluster_label = int(g['Cluster'])
-                        raw_values_list.append(cluster_label)
-            
-        elif color_type is None:
-            raw_values_list = []
-        
-        else:
-            # For specific morphometrics
-            for f in self.wsi.ftu_props:
-                for g in self.wsi.ftu_props[f]:
-                    if color_type in g:
-                        morpho_value = g[color_type]
-                        raw_values_list.append(morpho_value)
+                    #TODO: Record manual ROI properties in a more sane manner.
+                    manual_props = [i['geojson']['features'][0]['properties'] for i in self.wsi.manual_rois if 'properties' in i['geojson']['features'][0]]
+                    manual_raw_vals = extract_overlay_value(manual_props,self.overlay_props)
+                    raw_values_list.extend(manual_raw_vals)
 
         raw_values_list = np.unique(raw_values_list).tolist()
         # Converting to RGB
         if len(raw_values_list)>0:
-            scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
+            if max(raw_values_list)>0:
+                scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
+            else:
+                scaled_values = raw_values_list
             rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
 
             hex_list = []
@@ -1956,7 +1856,7 @@ class FUSION:
             self.hex_color_key = {i:j for i,j in zip(raw_values_list,hex_list)}
         else:
             self.hex_color_key = {}
-        
+
     def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color,cell_sub_val,ftu_bound_tab):
 
         print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
@@ -1975,16 +1875,20 @@ class FUSION:
 
         }
 
+        """
         if not type(cell_sub_val) is list:
             cell_sub_val = [cell_sub_val]
         if len(cell_sub_val)==0:
             cell_sub_val = [None]
+        """
+        cell_sub_val = get_pattern_matching_value(cell_sub_val)
 
         if type(ctx.triggered_id)==list:
             triggered_id = ctx.triggered_id[0]
         else:
             triggered_id = ctx.triggered_id
 
+        #TODO: Add a button to update FTU/boundary structure colors instead of making it responsive to the color selector
         try:
             if triggered_id['type']=='ftu-bound-color':
                 if not ftu_color is None and not ftu_bound_tab is None:
@@ -1992,26 +1896,38 @@ class FUSION:
         except TypeError:
             # This is for non-pattern matching components so the ctx.triggered_id is just a str
             pass
-
-        self.filter_vals = filter_vals
-
+        
         # Extracting cell val if there are sub-properties
         if not cell_val is None:
             if '-->' in cell_val:
                 cell_val_parts = cell_val.split(' --> ')
                 m_prop = cell_val_parts[0]
                 cell_val = cell_val_parts[1]
+            else:
+                m_prop = ''
             
-            # Updating current_cell property
-            if cell_val in self.cell_names_key:
-                if m_prop == 'Main_Cell_Types':
+            # Updating overlay property
+            if m_prop == 'Main_Cell_Types':
+                
+                #TODO: Find a better way to define cell names, integrate HRA but clean up long nasty names
+                if cell_val in self.cell_names_key:
+                    cell_name = self.cell_names_key[cell_val]
+                else:
+                    cell_name = cell_val
+                
+                # Picking just a Main_Cell_Type
+                if ctx.triggered_id == 'cell-drop':
+                    
+                    cell_sub_val= None
+                    self.overlay_prop = {
+                        'name': m_prop,
+                        'value': cell_name,
+                        'sub_value': None
+                    }
 
-                    if ctx.triggered_id == 'cell-drop':
-                        
-                        cell_sub_val= [None]
-                        self.current_cell = self.cell_names_key[cell_val]
+                    if cell_name in self.cell_graphics_key:
                         # Getting all possible cell states for this cell type:
-                        possible_cell_states = np.unique(self.cell_graphics_key[self.current_cell]['states'])
+                        possible_cell_states = np.unique(self.cell_graphics_key[cell_name]['states'])
                         # Creating dropdown for cell states
                         cell_sub_select_children = [
                             dcc.Dropdown(
@@ -2021,74 +1937,99 @@ class FUSION:
                             )
                         ]
                     else:
-                        cell_sub_select_children = no_update
+                        cell_sub_select_children = []
 
-                    if cell_sub_val[0] is None:
+                else:
+                    cell_sub_select_children = no_update
 
-                        self.current_cell = self.cell_names_key[cell_val]
-                        self.update_hex_color_key('cell_value')
-                        color_bar_style['width'] = '350px'
+                if cell_sub_val is None:
 
-                        color_bar = dl.Colorbar(
-                            colorscale = list(self.hex_color_key.values()),
-                            width=300,height=10,position='bottomleft',
-                            id=f'colorbar{random.randint(0,100)}',
-                            style = color_bar_style)
-                        
-                        filter_max_val = np.max(list(self.hex_color_key.keys()))
-                        filter_disable = False
-                    
-                    elif cell_sub_val[0]=='All':
-                        self.current_cell = self.cell_names_key[cell_val]
-                        self.update_hex_color_key('cell_value')
-                        color_bar_style['width'] = '350px'
-
-                        color_bar = dl.Colorbar(
-                            colorscale = list(self.hex_color_key.values()),
-                            width=300,height=10,position='bottomleft',
-                            id=f'colorbar{random.randint(0,100)}',
-                            style = color_bar_style)
-                        
-                        filter_max_val = np.max(list(self.hex_color_key.keys()))
-                        filter_disable = False
-                    
-                    else:
-                        # Visualizing a sub-property of a main cell type
-                        self.current_cell = self.cell_names_key[cell_val]+'_'+cell_sub_val[0]
-                        self.update_hex_color_key('cell_sub_value')
-                        color_bar_style['width'] = '350px'
-
-                        color_bar = dl.Colorbar(
-                            colorscale = list(self.hex_color_key.values()),
-                            width=300,height=10,position='bottomleft',
-                            id=f'colorbar{random.randint(0,100)}',
-                            style = color_bar_style)
-
-                        filter_max_val = np.max(list(self.hex_color_key.keys()))
-                        filter_disable = False
-                
-                elif m_prop == 'Cell_States':
-                    self.current_cell = self.cell_names_key[cell_val]
-                    self.update_hex_color_key('cell_state')
+                    self.overlap_prop = {
+                        'name': m_prop,
+                        'value': cell_name,
+                        'sub_value': None
+                    }
+                    self.update_hex_color_key()
                     color_bar_style['width'] = '350px'
 
                     color_bar = dl.Colorbar(
                         colorscale = list(self.hex_color_key.values()),
-                        width=320,height=10,position='bottomleft',
+                        width=300,height=10,position='bottomleft',
+                        id=f'colorbar{random.randint(0,100)}',
+                        style = color_bar_style)
+                    
+                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                    filter_disable = False
+                
+                elif cell_sub_val=='All':
+                    self.overlay_prop = {
+                        'name': m_prop,
+                        'value': cell_name,
+                        'sub_value': None
+                    }
+                    self.update_hex_color_key()
+                    color_bar_style['width'] = '350px'
+
+                    color_bar = dl.Colorbar(
+                        colorscale = list(self.hex_color_key.values()),
+                        width=300,height=10,position='bottomleft',
+                        id=f'colorbar{random.randint(0,100)}',
+                        style = color_bar_style)
+                    
+                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                    filter_disable = False
+                
+                else:
+                    # Visualizing a sub-property of a main cell type
+                    self.overlay_prop = {
+                        'name': 'Cell_States',
+                        'value': cell_name,
+                        'sub_value': cell_sub_val
+                    }
+                    self.update_hex_color_key()
+                    color_bar_style['width'] = '350px'
+
+                    color_bar = dl.Colorbar(
+                        colorscale = list(self.hex_color_key.values()),
+                        width=300,height=10,position='bottomleft',
                         id=f'colorbar{random.randint(0,100)}',
                         style = color_bar_style)
 
                     filter_max_val = np.max(list(self.hex_color_key.keys()))
                     filter_disable = False
+            
+            elif m_prop == 'Cell_States':
+                # Selecting a specific cell state value for overlays
+                self.overlay_prop = {
+                    'name': m_prop,
+                    'value': cell_val,
+                    'sub_value': None
+                }
+
+                self.update_hex_color_key()
+                color_bar_style['width'] = '350px'
+
+                color_bar = dl.Colorbar(
+                    colorscale = list(self.hex_color_key.values()),
+                    width=300,height=10,position='bottomleft',
+                    id=f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style)
+                
+                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_disable = False
 
             elif cell_val == 'Max Cell Type':
-                self.current_cell = 'max'
-                self.update_hex_color_key('max_cell')
+                # Getting the maximum cell type present for each structure
+                self.overlay_prop = {
+                    'name': 'Main_Cell_Types',
+                    'value':'max',
+                    'sub_value': None
+                }
+                self.update_hex_color_key()
                 color_bar_style['width'] = '650px'
 
                 cell_sub_select_children = []
 
-                #cell_types = list(self.wsi.geojson_ftus['features'][0]['properties']['Main_Cell_Types'].keys())
                 cell_types = sorted(list(self.cell_graphics_key.keys()))
                 color_bar = dlx.categorical_colorbar(
                     categories = cell_types,
@@ -2101,24 +2042,34 @@ class FUSION:
                 filter_disable = True
 
             elif cell_val == 'Cluster':
-                self.current_cell = 'cluster'
-                self.update_hex_color_key('cluster')
+                # Getting cluster value associated with each structure
+                self.overlay_prop = {
+                    'name': 'Cluster',
+                    'value': None,
+                    'sub_value': None
+                }
+                self.update_hex_color_key()
 
-                cell_sub_select_children = []
-
-                #TODO: This should probably be a categorical colorbar
-                color_bar = dl.Colorbar(
+                cluster_labels = sorted(list(self.hex_color_key.keys()))
+                color_bar = dlx.categorical_colorbar(
+                    categories = cluster_labels,
                     colorscale = list(self.hex_color_key.values()),
-                    width=320,height=10,position='bottomleft',
-                    id=f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style)
+                    width = 600, height = 10, position = 'bottomleft',
+                    id = f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style
+                )
+                cell_sub_select_children = []
 
                 filter_max_val = 1.0
                 filter_disable = True
                 
             elif cell_val == 'FTU Label':
-                self.current_cell = 'name'
-                self.update_hex_color_key(cell_val)
+                self.overlay_prop = {
+                    'name': 'Structure',
+                    'value': None,
+                    'sub_value': None
+                }
+                self.update_hex_color_key()
 
                 cell_sub_select_children = []
 
@@ -2133,10 +2084,62 @@ class FUSION:
 
                 filter_max_val = 1.0
                 filter_disable = True
+            
+            elif m_prop == 'Gene Counts':
+
+                self.overlay_prop = {
+                    'name': 'Gene Counts',
+                    'value': cell_val,
+                    'sub_value': None
+                }
+                self.update_hex_color_key()
+
+                cell_sub_select_children = []
+
+                color_bar = dl.Colorbar(
+                    colorscale = list(self.hex_color_key.values()),
+                    width=300,height=10,position='bottomleft',
+                    id=f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style)
+
+                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_disable = False
+            
+            elif m_prop == 'Morphometrics':
+
+                self.overlay_prop = {
+                    'name': 'Morphometrics',
+                    'value': cell_val,
+                    'sub_value': None
+                }
+                self.update_hex_color_key()
+
+                cell_sub_select_children = []
+
+                color_bar = dl.Colorbar(
+                    colorscale = list(self.hex_color_key.values()),
+                    width=300,height=10,position='bottomleft',
+                    id=f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style)
+
+                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_disable = False
+            
             else:
-                # For other morphometric properties
-                self.current_cell = cell_val
-                self.update_hex_color_key(cell_val)
+                if m_prop=='':
+                    # For other properties
+                    self.overlap_prop = {
+                        'name': cell_val,
+                        'value': None,
+                        'sub_value': None
+                    }
+                else:
+                    self.overlap_prop = {
+                        'name': m_prop,
+                        'value': cell_val,
+                        'sub_value': None
+                    }
+                self.update_hex_color_key()
 
                 cell_sub_select_children = []
 
@@ -2150,8 +2153,12 @@ class FUSION:
                 filter_disable = False
 
         else:
-            self.current_cell = cell_val
-            self.update_hex_color_key(cell_val)
+            self.overlay_prop = {
+                'name': None,
+                'value': None,
+                'sub_value': None
+            }
+            self.update_hex_color_key()
 
             cell_sub_select_children = []
 
@@ -2159,12 +2166,26 @@ class FUSION:
             filter_disable = True
             filter_max_val = 1
 
+
+        #TODO: Add button to update filters and specify property to use as a filter
+        if not filter_disable:
+            self.filter_vals = [
+                {
+                    'name': self.overlay_prop['name'],
+                    'value': self.overlay_prop['value'],
+                    'sub_value': self.overlay_prop['sub_value'],
+                    'range': filter_vals
+                }
+            ]
+        else:
+            self.filter_vals = None
+
         self.cell_vis_val = vis_val/100
         n_layers = len(callback_context.outputs_list[0])
         geojson_hideout = [
             {
                 'color_key':self.hex_color_key,
-                'current_cell':self.current_cell,
+                'overlay_prop':self.overlay_prop,
                 'fillOpacity': self.cell_vis_val,
                 'ftu_colors':self.ftu_colors,
                 'filter_vals':self.filter_vals
@@ -2829,13 +2850,13 @@ class FUSION:
             self.ftu_colors = self.wsi.ftu_colors
 
             # Updating overlays colors according to the current cell
-            self.update_hex_color_key(self.current_cell)
+            self.update_hex_color_key()
 
             new_children += [
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(url = f'./assets/slide_annotations/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
-                                    hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
+                                    hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
                                     hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                                     zoomToBounds=True,children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
                     ), name = struct, checked = True, id = new_slide.item_id+'_'+struct
@@ -2849,7 +2870,7 @@ class FUSION:
                     dl.Overlay(
                         dl.LayerGroup(
                             dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
-                                        hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
+                                        hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
                                         hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')),
                                         children = [dl.Popup(id=man['popup_id'])])
                         ),
@@ -3181,46 +3202,7 @@ class FUSION:
 
                     self.feature_data.loc[:,'Hidden'] = hidden_data
 
-                    figure = go.Figure(data = go.Violin(
-                        x = self.feature_data['label'],
-                        y = self.feature_data[feature_names[0]],
-                        customdata = self.feature_data['Hidden'],
-                        points = 'all',
-                        pointpos=0
-                    ))
-                    figure.update_layout(
-                        legend = dict(
-                            orientation='h',
-                            y = 0,
-                            yanchor='top',
-                            xanchor='left'
-                        ),
-                        title = '<br>'.join(
-                            textwrap.wrap(
-                                f'{feature_names[0]}',
-                                width=30
-                            )
-                        ),
-                        yaxis_title = dict(
-                            text = '<br>'.join(
-                                textwrap.wrap(
-                                    f'{feature_names[0]}',
-                                    width=15
-                                )
-                            ),
-                            font = dict(size = 10)
-                        ),
-                        xaxis_title = dict(
-                            text = '<br>'.join(
-                                textwrap.wrap(
-                                    label,
-                                    width=15
-                                )
-                            ),
-                            font = dict(size = 10)
-                        ),
-                        margin = {'r':0,'b':25}
-                    )
+                    figure = gen_violin_plot(self.feature_data, 'label', label, feature_names[0], 'Hidden')
 
                 else:
                     figure = go.Figure()
@@ -3440,47 +3422,9 @@ class FUSION:
 
                 if feature_number==1:
                     feature_names = self.feature_data.columns.tolist()
-                    figure = go.Figure(data = go.Violin(
-                        x = self.feature_data['label'],
-                        y = self.feature_data[feature_names[0]],
-                        customdata = self.feature_data['Hidden'],
-                        points = 'all',
-                        pointpos=0
-                    ))
-                    figure.update_layout(
-                        legend = dict(
-                            orientation='h',
-                            y = 0,
-                            yanchor='top',
-                            xanchor='left'
-                        ),
-                        title = '<br>'.join(
-                            textwrap.wrap(
-                                f'{feature_names[0]}',
-                                width=30
-                            )
-                        ),
-                        yaxis_title = dict(
-                            text = '<br>'.join(
-                                textwrap.wrap(
-                                    f'{feature_names[0]}',
-                                    width=15
-                                )
-                            ),
-                            font = dict(size = 10)
-                        ),
-                        xaxis_title = dict(
-                            text = '<br>'.join(
-                                textwrap.wrap(
-                                    label,
-                                    width=15
-                                )
-                            ),
-                            font = dict(size = 10)
-                        ),
-                        margin = {'r':0,'b':25}
-                    )
 
+                    figure = gen_violin_plot(self.feature_data, 'label', label, feature_names[0],'Hidden')
+                    
                 elif feature_number==2:
                     
                     feature_columns = self.feature_data.columns.tolist()
@@ -3769,8 +3713,9 @@ class FUSION:
             if triggered_id == 'edit_control':
                 
                 if triggered_id=='edit_control':
-                    print(f'len of new_geojson: {len(new_geojson)}')
-                    print(new_geojson)
+                    #print(f'len of new_geojson: {len(new_geojson)}')
+                    #print(new_geojson)
+                    #TODO: get_pattern_matching_value test here
                     if type(new_geojson)==list:
                         new_geojson = new_geojson[0]    
 
@@ -3830,7 +3775,7 @@ class FUSION:
                                 new_child = dl.Overlay(
                                     dl.LayerGroup(
                                         dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle),
-                                                hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
+                                                hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
                                                 hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
                                                 children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
                                             )
@@ -3909,7 +3854,7 @@ class FUSION:
                             new_child = dl.Overlay(
                                 dl.LayerGroup(
                                     dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), pointToLayer = self.render_marker_handle,
-                                            hideout = dict(color_key = self.hex_color_key, current_cell = self.current_cell, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
+                                            hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
                                             hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
                                             children = []
                                             )
@@ -3927,19 +3872,7 @@ class FUSION:
                         if len(self.wsi.marked_ftus)>0:
                             data_select_options[3]['disabled'] = False
 
-                        if not self.current_cell is None:
-                            if self.current_cell in self.cell_names_key:
-                                self.update_hex_color_key('cell_value')
-                            elif '_' in self.current_cell:
-                                self.update_hex_color_key('cell_sub_value')
-                            elif self.current_cell=='max':
-                                self.update_hex_color_key('max_cell')
-                            elif self.current_cell == 'cluster':
-                                self.update_hex_color_key('cluster')
-                            else:
-                                self.update_hex_color_key(self.current_cell)
-                        else:
-                            self.update_hex_color_key(self.current_cell)
+                        self.update_hex_color_key()
                         
                         if new_roi:
                             user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
@@ -3959,19 +3892,7 @@ class FUSION:
 
                         data_select_options = self.layout_handler.data_options
 
-                        if not self.current_cell is None:
-                            if self.current_cell in self.cell_names_key:
-                                self.update_hex_color_key('cell_value')
-                            elif '_' in self.current_cell:
-                                self.update_hex_color_key('cell_sub_value')
-                            elif self.current_cell=='max':
-                                self.update_hex_color_key('max_cell')
-                            elif self.current_cell == 'cluster':
-                                self.update_hex_color_key('cluster')
-                            else:
-                                self.update_hex_color_key(self.current_cell)
-                        else:
-                            self.update_hex_color_key(self.current_cell)
+                        self.update_hex_color_key()
                         
                         return self.current_overlays, data_select_options, no_update
                 else:
@@ -4345,7 +4266,8 @@ class FUSION:
                     html.Div(
                         id = {'type':'omics-upload-div','index':0},
                         children = [
-                            dbc.Label('Upload your RDS file here!'),
+                            dbc.Label('Upload your counts file here!'),
+                            self.layout_handler.gen_info_button('Upload either an RDS file or h5ad file containing gene counts per-spot.'),
                             UploadComponent(
                                 id = {'type':'omics-upload','index':0},
                                 uploadComplete=False,
@@ -4598,6 +4520,7 @@ class FUSION:
             
             self.upload_omics_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
             if not self.upload_omics_id is None:
+                #TODO: get_pattern_matching_value test here
                 if type(omics_file_flag)==list:
                     if len(omics_file_flag)>0:
                         if not omics_file_flag[0]:
@@ -4979,10 +4902,28 @@ class FUSION:
 
     def post_segmentation(self, seg_log_disable, continue_butt, organ, gene_method, gene_n, gene_list):
 
+
         if ctx.triggered[0]['value']:
             # post-segment-row stuff
             sub_comp_style = {'display':'flex'}
             disable_organ = True
+
+            # Getting values for organ, gene_method, gene_n, and gene_list
+            organ = get_pattern_matching_value(organ)
+            if organ is None:
+                organ = ""
+            
+            gene_method = get_pattern_matching_value(gene_method)
+            if gene_method is None:
+                gene_method = ""
+            
+            gene_n = get_pattern_matching_value(gene_n)
+            if gene_n is None:
+                gene_n = 0
+
+            gene_list = get_pattern_matching_value(gene_list)
+            if gene_list is None:
+                gene_list = ""
 
             if self.current_upload_type == 'Regular':
                 # Extracting annotations and initilaiz sub-compartment mask
@@ -5028,6 +4969,7 @@ class FUSION:
  
                 else:
                     ftu_value = ''
+                    image = np.ones((10,10))
 
                 prep_values = {
                     'ftu_names': self.feature_extract_ftus,
@@ -5994,7 +5936,7 @@ class FUSION:
     def add_channel_color_select(self,channel_opts):
 
         # Creating a new color selector thing for overlaid channels?
-
+        #TODO: get_pattern_matching_value test here
         if not channel_opts is None:
             if type(channel_opts)==list:
                 if len(channel_opts[0])>0:

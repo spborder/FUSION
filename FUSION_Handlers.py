@@ -1758,6 +1758,7 @@ class LayoutHandler:
         # Getting specific layouts for different types of pre-processing.
         if upload_type in ['Visium','Regular']:
             # Sub-compartment segmentation card:
+
             sub_comp_methods_list = [
                 {'label':'Manual','value':'Manual','disabled':False},
                 {'label':'Use Plugin','value':'plugin','disabled':True}
@@ -2428,7 +2429,7 @@ class LayoutHandler:
             ],
             target = {'type':'login-butt','index':0},
             body=True,
-            trigger='click'
+            trigger='legacy'
         )
 
         description = dbc.Card(

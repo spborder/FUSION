@@ -41,7 +41,8 @@ class DSASlide:
 
         self.visualization_properties = [
             'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
-            'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction'
+            'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction',
+            'Gene Counts'
         ]
 
         self.get_slide_map_data(self.item_id)
@@ -245,6 +246,7 @@ class DSASlide:
                                             f_prop_list = [f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}' for i in f_k]
                                         else:
                                             f_prop_list = [f'{p} --> {i}' for i in f_k]
+
                                     else:
                                         included_props.append(p)
                                         f_prop_list = [p]

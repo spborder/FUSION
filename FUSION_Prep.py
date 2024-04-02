@@ -855,7 +855,7 @@ class VisiumPrep(Prepper):
         # Info for spot annotation plugin
         self.spot_annotation_info = {
             'definitions_file':'64fa0f782d82d04be3e5daa3',
-            'plugin_name':'samborder2256_spot_ann_test_latest/SpotAnnotation'
+            'plugin_name':'samborder2256_spot_annotation_latest/SpotAnnotation'
         }
 
         self.cell_deconvolution_plugin = {
@@ -863,7 +863,7 @@ class VisiumPrep(Prepper):
             'atlas':'65159ea82d82d04be3e73f0a'
         }
 
-        self.spot_aggregation_plugin = 'samborder2256_spot_agg_test_image_latest/spot_agg'
+        self.spot_aggregation_plugin = 'samborder2256_spot_aggregation_latest/spot_agg'
 
     def run_spot_aggregation(self,image_id):
         
@@ -950,9 +950,11 @@ class VisiumPrep(Prepper):
 
             # Generating spot annotations using gene-selection-method stuff
             # Getting fileId for definitions file
-            #omics_file_id = self.girder_handler.gc.get(f'/item/{omics_id}/files')[0]['_id']
 
             def_file_id = self.spot_annotation_info['definitions_file']
+            if gene_method=='':
+                gene_method = 'highly_variable'
+                gene_n = 25
 
             # Generating spot annotations
             spot_ann_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.spot_annotation_info["plugin_name"]}/run',

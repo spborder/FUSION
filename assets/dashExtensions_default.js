@@ -3,101 +3,64 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
         function0: function(feature, context) {
                 const {
                     color_key,
-                    current_cell,
+                    overlay_prop,
                     fillOpacity,
                     ftu_colors,
                     filter_vals
                 } = context.hideout;
-                if (current_cell) {
-                    if (current_cell == 'gene') {
-                        // Flesh this part out
-                        if ("Gene Counts" in feature.properties) {
-                            var cell_value = feature.properties["Gene Counts"][value];
-                        } else {
-                            cell_value = Number.Nan;
-                        }
-                    } else if (current_cell === 'cluster') {
-                        if (current_cell in feature.properties) {
-                            // Truncating number to integer, stored as single-decimal floats initially
-                            var cell_value = feature.properties.Cluster;
-                            cell_value = Math.trunc(cell_value);
-                        } else if ('Cluster' in feature.properties) {
-                            var cell_value = feature.properties.Cluster;
-                            cell_value = Math.trunc(cell_value);
-                        } else {
-                            cell_value = Number.Nan;
-                        }
-                    } else if (current_cell === 'max') {
-                        // Extracting all the cell values for a given FTU/Spot
-                        if ("Main_Cell_Types" in feature.properties) {
-                            var cell_values = feature.properties.Main_Cell_Types;
-                            // Initializing some comparison values
-                            var cell_value = 0.0;
-                            var use_cell_value = 0.0;
-                            var cell_idx = -1.0;
-                            // Iterating through each cell type in cell values
-                            for (var key in cell_values) {
-                                cell_idx += 1.0;
-                                var test_val = cell_values[key];
-                                // If the test value is greater than the cell_value, replace cell value with that test value
-                                if (test_val > cell_value) {
-                                    cell_value = test_val;
-                                    use_cell_value = cell_idx;
+
+                var overlay_value = Number.Nan;
+                if (overlay_prop) {
+                    if (overlay_prop.name) {
+                        if (overlay_prop.name in feature.properties) {
+                            if (overlay_prop.value) {
+                                if (overlay_prop.value in feature.properties[overlay_prop.name]) {
+                                    if (overlay_prop.sub_value) {
+                                        if (overlay_prop.sub_value in feature.properties[overlay_prop.name][overlay_prop.value]) {
+                                            var overlay_value = feature.properties[overlay_prop.name][overlay_prop.value][overlay_prop.sub_value];
+                                        } else {
+                                            var overlay_value = Number.Nan;
+                                        }
+                                    } else {
+                                        var overlay_value = feature.properties[overlay_prop.name][overlay_prop.value];
+                                    }
+                                } else if (overlay_prop.value === "max") {
+                                    // Finding max represented sub-value
+                                    var overlay_value = Number.Nan;
+                                    var test_value = 0.0;
+                                    var overlay_idx = -1.0;
+                                    for (var key in feature.properties[overlay_prop.name]) {
+                                        var tester = feature.properties[overlay_prop.name][key];
+                                        overlay_idx += 1.0;
+                                        if (tester > test_value) {
+                                            test_value = tester;
+                                            overlay_value = overlay_idx;
+                                        }
+                                    }
+                                } else {
+                                    var overlay_value = Number.Nan;
                                 }
-                            }
-                            cell_value = (use_cell_value).toFixed(1);
-                        } else {
-                            cell_value = Number.Nan;
-                        }
-                    } else if ('Main_Cell_Types' in feature.properties) {
-                        if (current_cell in feature.properties.Main_Cell_Types) {
-
-                            var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                            if (cell_value == 1) {
-                                cell_value = (cell_value).toFixed(1);
-                            } else if (cell_value == 0) {
-                                cell_value = (cell_value).toFixed(1);
-                            } else if (cell_value > 1) {
-                                cell_value = 1.0;
-                            } else if (cell_value < 0) {
-                                cell_value = 0.0;
-                            }
-                        } else if (current_cell in feature.properties) {
-                            var cell_value = feature.properties[current_cell];
-                        } else if (current_cell.includes('_')) {
-
-                            var split_cell_value = current_cell.split("_");
-                            var main_cell_value = split_cell_value[0];
-                            var sub_cell_value = split_cell_value[1];
-
-                            var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
-                            cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
-
-                            if (cell_value == 1) {
-                                cell_value = (cell_value).toFixed(1);
-                            } else if (cell_value == 0) {
-                                cell_value = (cell_value).toFixed(1);
-                            } else if (cell_value > 1) {
-                                cell_value = 1.0;
-                            } else if (cell_value < 0) {
-                                cell_value = 0.0;
+                            } else {
+                                var overlay_value = feature.properties[overlay_prop.name];
                             }
                         } else {
-                            var cell_value = Number.Nan;
+                            var overlay_value = Number.Nan;
                         }
                     } else {
-                        var cell_value = Number.Nan;
+                        var overlay_value = Number.Nan;
                     }
                 } else {
-                    var cell_value = Number.Nan;
+                    var overlay_value = Number.Nan;
                 }
 
                 var style = {};
-                if (cell_value == cell_value) {
-                    const fillColor = color_key[cell_value];
+                if (overlay_value == overlay_value) {
+                    if (overlay_value in color_key) {
+                        const fillColor = color_key[overlay_value];
+                        style.fillColor = fillColor;
+                        style.fillOpacity = fillOpacity;
+                    }
 
-                    style.fillColor = fillColor;
-                    style.fillOpacity = fillOpacity;
                     if (feature.properties.name in ftu_colors) {
                         style.color = ftu_colors[feature.properties.name];
                     } else {
@@ -110,6 +73,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     } else {
                         style.color = 'white';
                     }
+                    style.fillColor = "f00";
                 }
 
                 return style;
@@ -119,73 +83,60 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
         function1: function(feature, context) {
                 const {
                     color_key,
-                    current_cell,
+                    overlay_prop,
                     fillOpacity,
                     ftu_colors,
                     filter_vals
                 } = context.hideout;
+                var return_feature = true;
+                if (filter_vals) {
+                    // If there are filters, use them
+                    for (let i = 0; i < filter_vals.length; i++) {
+                        // Iterating through filter_vals dict
+                        var filter = filter_vals[i];
 
-                if (current_cell) {
+                        if (filter.name) {
+                            // Checking if the filter name is in the feature
+                            if (filter.name in feature.properties) {
 
-                    if ("Main_Cell_Types" in feature.properties) {
-                        if (current_cell in feature.properties.Main_Cell_Types) {
-                            var cell_value = feature.properties.Main_Cell_Types[current_cell];
-                            if (cell_value >= filter_vals[0]) {
-                                if (cell_value <= filter_vals[1]) {
-                                    return true;
+                                if (filter.value) {
+                                    if (filter.value in feature.properties[filter.name]) {
+                                        if (filter.sub_value) {
+                                            if (filter.sub_value in feature.properties[filter.name][filter.value]) {
+                                                var test_val = feature.properties[filter.name][filter.value][filter.sub_value];
+                                            } else {
+                                                return_feature = return_feature & false;
+                                            }
+                                        } else {
+                                            var test_val = feature.properties[filter.name][filter.value];
+                                        }
+                                    } else if (filter.value === "max") {
+                                        return_feature = return_feature & true;
+                                    } else {
+                                        return_feature = return_feature & false;
+                                    }
                                 } else {
-                                    return false;
+                                    var test_val = feature.properties[filter.name];
                                 }
                             } else {
-                                return false;
+                                return_feature = return_feature & false;
                             }
-                        } else if (current_cell in feature.properties) {
-                            var cell_value = feature.properties[current_cell];
-                            if (cell_value >= filter_vals[0]) {
-                                if (cell_value <= filter_vals[1]) {
-                                    return true;
-                                } else {
-                                    return false;
-                                }
-                            } else {
-                                return false;
-                            }
-                        } else if (current_cell.includes('_')) {
-                            var split_cell_value = current_cell.split("_");
-                            var main_cell_value = split_cell_value[0];
-                            var sub_cell_value = split_cell_value[1];
-
-                            var cell_value = feature.properties.Main_Cell_Types[main_cell_value];
-                            cell_value *= feature.properties.Cell_States[main_cell_value][sub_cell_value];
-                            if (cell_value >= filter_vals[0]) {
-                                if (cell_value <= filter_vals[1]) {
-                                    return true;
-                                } else {
-                                    return false;
-                                }
-                            } else {
-                                return false;
-                            }
-
-                        } else {
-                            return true;
                         }
-                    } else if (current_cell in feature.properties) {
-                        var cell_value = feature.properties[current_cell];
-                        if (cell_value >= filter_vals[0]) {
-                            if (cell_value <= filter_vals[1]) {
-                                return true;
-                            } else {
-                                return false;
+
+                        if (filter.range) {
+                            if (test_val < filter.range[0]) {
+                                return_feature = return_feature & false;
                             }
-                        } else {
-                            return false;
+                            if (test_val > filter.range[1]) {
+                                return_feature = return_feature & false;
+                            }
                         }
-                    } else {
-                        return true;
                     }
+                    return return_feature;
+
                 } else {
-                    return true;
+                    // If no filters are provided, return true for everything.
+                    return return_feature;
                 }
             }
 
