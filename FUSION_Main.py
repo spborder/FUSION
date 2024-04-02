@@ -2462,7 +2462,94 @@ class FUSION:
                     else:
                         return html.Div([html.P('No cell type information')])
                 else:
-                    return html.Div([html.P('No intersecting spots')])
+                    # Getting other FTU/Spot properties
+                    all_properties = list(ftu_click['properties'].keys())
+                    all_properties = [i for i in all_properties if not type(ftu_click['properties'][i])==dict]
+                    all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties'][i] for i in all_properties]}
+                    all_properties_df = pd.DataFrame(all_props_dict)
+
+                    # popup divs
+                    if 'unique_index' in ftu_click['properties']:
+                        add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
+                        accordion_children = [
+                            dbc.AccordionItem([
+                                html.Div([
+                                    dash_table.DataTable(
+                                        id = 'popup-table',
+                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
+                                        data = all_properties_df.to_dict('records'),
+                                        editable=False,                                        
+                                        sort_mode='multi',
+                                        page_current=0,
+                                        page_size=5,
+                                        style_cell = {
+                                            'overflow':'hidden',
+                                            'textOverflow':'ellipsis',
+                                            'maxWidth':0
+                                        },
+                                        tooltip_data = [
+                                            {
+                                                column: {'value':str(value),'type':'markdown'}
+                                                for column, value in row.items()
+                                            } for row in all_properties_df.to_dict('records')
+                                        ],
+                                        tooltip_duration = None
+                                    )
+                                ])
+                            ],title = 'Other Properties'),
+                            dbc.AccordionItem([
+                                html.Div([
+                                    dbc.Row([
+                                        dbc.Col(html.Div(
+                                                id={'type':'added-labels-div','index':ftu_idx},
+                                                children = add_labels_children
+                                            ), md=11
+                                        ),
+                                        dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
+                                    ]),
+                                    dbc.Row([
+                                        dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
+                                        dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
+                                    ])
+                                ])
+                            ],title = 'Custom Properties')
+                        ]
+                    else:
+                        accordion_children = [
+                            dbc.AccordionItem([
+                                html.Div([
+                                    dash_table.DataTable(
+                                        id = 'popup-table',
+                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
+                                        data = all_properties_df.to_dict('records'),
+                                        editable=False,                                        
+                                        sort_mode='multi',
+                                        page_current=0,
+                                        page_size=5,
+                                        style_cell = {
+                                            'overflow':'hidden',
+                                            'textOverflow':'ellipsis',
+                                            'maxWidth':0
+                                        },
+                                        tooltip_data = [
+                                            {
+                                                column: {'value':str(value),'type':'markdown'}
+                                                for column, value in row.items()
+                                            } for row in all_properties_df.to_dict('records')
+                                        ],
+                                        tooltip_duration = None
+                                    )
+                                ])
+                            ],title = 'Other Properties')
+                        ]
+                    
+                    popup_div = html.Div([
+                        dbc.Accordion(
+                            children = accordion_children
+                        )
+                    ],style={'height':'300px','width':'300px','display':'inline-block'})
+
+                    return popup_div
             else:
 
                 # Getting other FTU/Spot properties
