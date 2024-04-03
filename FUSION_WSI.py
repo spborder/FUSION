@@ -124,7 +124,10 @@ class DSASlide:
 
         # Step 6: Getting user token and tile url
         self.user_token = self.girder_handler.get_token()
-        self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token
+        if not 'frames' in tile_metadata:
+            self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token
+        else:
+            self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"frame":0,"palette":"#f00"},{"frame":1,"palette":"#0f0"},{"frame":2,"palette":"#00f"}]}'
 
         # Step 7: Converting Histomics/large-image annotations to GeoJSON
         self.x_scale, self.y_scale = self.convert_json()
@@ -418,7 +421,14 @@ class CODEXSlide(DSASlide):
 
         if 'Histology Id' in self.item_info['meta']:
             self.channel_names = ['Histology (H&E)'] + self.channel_names
-            self.histology_url = self.girder_handler.gc.urlBase+f'item/{self.item_info["meta"]["Histology Id"]}/tiles/zxy/'+'{z}/{x}/{y}?token='+self.user_token
+
+            # Checking if histology image is multi-frame
+            histo_id = self.item_info["meta"]["Histology Id"]
+            histo_img_info = self.girder_handler.get_tile_metadata(histo_id)
+            if not 'frames' in histo_img_info:
+                self.histology_url = self.girder_handler.gc.urlBase+f'item/{histo_id}/tiles/zxy/'+'{z}/{x}/{y}?token='+self.user_token
+            else:
+                self.histology_url = self.girder_handler.gc.urlBase+f'item/{histo_id}/tiles/zxy/'+'{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"frame":0, "palette": "#f00"},{"frame":1, "palette": "#0f0"},{"frame":2, "palette": "#00f"}]}'
 
         if self.channel_names == []:
             # Fill in with dummy channel_names (test case with 16 or 17 channels)
