@@ -3001,25 +3001,47 @@ class GirderHandler:
 
         # Checking to make sure coords are within the slide boundaries
         slide_metadata = self.gc.get(f'/item/{item_id}/tiles')
+        slide_bounds = np.array([0,0,slide_metadata['sizeX'],slide_metadata['sizeY']])
+        coords_list = np.minimum(np.array(coords_list),slide_bounds).tolist()
+        coords_list[0] = np.maximim(0,coords_list[0])
+        coords_list[1] = np.maximum(0,coords_list[1])
 
         if frame_index is None:
-            # coords_list is organized: [min_x, min_y, max_x, max_y]
-            if coords_list[0]>=0 and coords_list[1]>=0 and coords_list[2]<=slide_metadata['sizeX'] and coords_list[3]<=slide_metadata['sizeY']:
-                # Pulling specific region from an image using provided coordinates
-                image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
-            else:
-                # Wish there was a shorter way to write this
-                if coords_list[0]<0:
-                    coords_list[0] = 0
-                if coords_list[1]<0:
-                    coords_list[1] = 0
-                if coords_list[2]>slide_metadata['sizeX']:
-                    coords_list[2] = slide_metadata['sizeX']
-                if coords_list[3]>slide_metadata['sizeY']:
-                    coords_list[3] = slide_metadata['sizeY']
+            # Pulling specific region from an image using provided coordinates            
+            try:
+                if not 'frames' in slide_metadata:
+                    image_region = Image.open(
+                        BytesIO(
+                            requests.get(
+                                self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
+                            ).content
+                        )
+                    )
+                else:
 
+                    style_string = '&style={"bands": [{"frame":0,"palette":"#f00"},{"frame":1,"palette":"#0f0"},{"frame":2,"palette":"#00f"}]}'
+                    image_region = Image.open(
+                        BytesIO(
+                            requests.get(
+                                self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'+style_string
+                            ).content
+                        )
+                    )
+            
+            except:
+                print('-------------------------------------------------')
+                print(f'Error reading image region from item: {item_id}')
+                print(f'Provided coordinates: {coords_list}')
+                print(f'------------------------------------------------')
+
+                return np.zeros((100,100))
+
+        else:
+            # Hoping that all the frames of each image are the same size. They should be.
+            # coords_list is organized: [min_x, min_y, max_x, max_y]
+            if frame_index<len(slide_metadata['frames']):
                 try:
-                    image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}').content))
+                    image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}&frame={frame_index}').content))
                 except:
                     print('-------------------------------------------------')
                     print(f'Error reading image region from item: {item_id}')
@@ -3027,34 +3049,6 @@ class GirderHandler:
                     print(f'------------------------------------------------')
 
                     return np.zeros((100,100))
-
-        else:
-            # Hoping that all the frames of each image are the same size. They should be.
-            # coords_list is organized: [min_x, min_y, max_x, max_y]
-            if frame_index<len(slide_metadata['frames']):
-                if coords_list[0]>=0 and coords_list[1]>=0 and coords_list[2]<=slide_metadata['sizeX'] and coords_list[3]<=slide_metadata['sizeY']:
-                    # Pulling specific region from an image using provided coordinates
-                    image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}&frame={frame_index}').content))
-                else:
-                    # Wish there was a shorter way to write this
-                    if coords_list[0]<0:
-                        coords_list[0] = 0
-                    if coords_list[1]<0:
-                        coords_list[1] = 0
-                    if coords_list[2]>slide_metadata['sizeX']:
-                        coords_list[2] = slide_metadata['sizeX']
-                    if coords_list[3]>slide_metadata['sizeY']:
-                        coords_list[3] = slide_metadata['sizeY']
-
-                    try:
-                        image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}&frame={frame_index}').content))
-                    except:
-                        print('-------------------------------------------------')
-                        print(f'Error reading image region from item: {item_id}')
-                        print(f'Provided coordinates: {coords_list}')
-                        print(f'------------------------------------------------')
-
-                        return np.zeros((100,100))
             else:
                 # This is if the requested frame index is greater than the number of frames for this image
                 # Hopefully we never come here.
