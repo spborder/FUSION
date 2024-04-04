@@ -51,6 +51,8 @@ from tqdm import tqdm
 from timeit import default_timer as timer
 import textwrap
 
+from typing_extensions import Union
+
 from scipy import stats
 from sklearn.metrics import silhouette_score, silhouette_samples
 
@@ -3002,8 +3004,8 @@ class GirderHandler:
         # Checking to make sure coords are within the slide boundaries
         slide_metadata = self.gc.get(f'/item/{item_id}/tiles')
         slide_bounds = np.array([0,0,slide_metadata['sizeX'],slide_metadata['sizeY']])
-        coords_list = np.minimum(np.array(coords_list),slide_bounds).tolist()
-        coords_list[0] = np.maximim(0,coords_list[0])
+        coords_list = coords_list[0:2]+np.minimum(np.array(coords_list[2:]),slide_bounds[2:]).tolist()
+        coords_list[0] = np.maximum(0,coords_list[0])
         coords_list[1] = np.maximum(0,coords_list[1])
 
         if frame_index is None:
@@ -3101,17 +3103,21 @@ class GirderHandler:
         else:
             return None
 
-    def get_job_status(self,job_id:str):
-
-        job_info = self.gc.get(f'/job/{job_id}')
-        #print(f'job_info: {job_info}')
-        if 'log' in job_info:
-
-            #print(f"most recent log: {job_info['log'][-1]}")
-            most_recent_log = job_info['log'][-1]
+    def get_job_status(self,job_id: Union[str,None]):
+        """
+        Returns status of job (3=complete, 2 = started/in-progress), and most recent log (if applicable)
+        """
+        if not job_id is None:
+            job_info = self.gc.get(f'/job/{job_id}')
+            if 'log' in job_info:
+                #print(f"most recent log: {job_info['log'][-1]}")
+                most_recent_log = job_info['log'][-1]
+            else:
+                most_recent_log = ''
+            return job_info['status'], most_recent_log
         else:
-            most_recent_log = ''
-        return job_info['status'], most_recent_log
+            # Return complete, no logs
+            return 3, ''
     
     def get_slide_thumbnail(self,item_id:str):
 

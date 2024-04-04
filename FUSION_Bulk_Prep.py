@@ -21,7 +21,7 @@ from dash import dcc, ctx, MATCH, ALL, exceptions, no_update
 from dash_extensions.enrich import DashProxy, html, Input, Output, State, MultiplexerTransform
 
 from FUSION_Handlers import GirderHandler, LayoutHandler
-from FUSION_Prep import PrepHandler
+from FUSION_Prep import Prepper
 
 
 class BulkProcessApp:
@@ -91,6 +91,8 @@ class BulkProcessApp:
             Input({'type':'start-feat','index':ALL},'n_clicks'),
             [Output({'type':'feat-logs','index':ALL},'children'),
              Output('slide-drop','options')],
+             [State({'type': 'include-ftu-drop','index':ALL},'value'),
+              State({'type': 'include-feature-drop','index':ALL},'value')],
             prevent_initial_call=True
         )(self.run_feature_extraction)
 
@@ -246,14 +248,20 @@ class BulkProcessApp:
         else:
             return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
 
-    def run_feature_extraction(self,feat_butt):
+    def run_feature_extraction(self,feat_butt,include_ftu,include_feature):
         
         if not ctx.triggered_id is None:
             if type(feat_butt) == list:
                 if len(feat_butt)>0:
                     if feat_butt[0]>0:
-
-                        feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
+                        
+                        include_feature = ','.join(include_feature[0])
+                        include_ftu = [self.feature_extract_ftus[i]['label'] for i in include_ftu[0]]
+                        ignore_ftus = ','.join([i['label'] for i in self.feature_extract_ftus if i['label'] not in include_ftu or '(' in i['label']])
+                        
+                        # Getting the file to send to feature extraction
+                        #file_id = self.dataset_handler.gc.get(f'/item/{self.upload_wsi_id}/files')[0]["_id"]
+                        feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params,include_feature,ignore_ftus)
                         
                         self.done_slides.append(self.upload_wsi_id)
 
@@ -472,7 +480,7 @@ def main():
 
     dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
 
-    dataset_path = '/user/sam123/Public/Reprocessing'
+    dataset_path = '/user/sam123/Private/Feature Extraction Re-run/Reference'
     path_type = 'folder'
 
     dataset_handler.initialize_folder_structure(dataset_path,path_type)
@@ -489,7 +497,7 @@ def main():
 
     app_layout = layout_handler.gen_single_page_layout('Application for bulk pre-processing of slides in collections',bulk_layout)
 
-    prep_handler = PrepHandler(dataset_handler)
+    prep_handler = Prepper(dataset_handler)
 
     main_app = DashProxy(__name__,
                          external_stylesheets=external_stylesheets,

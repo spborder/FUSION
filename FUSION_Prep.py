@@ -34,6 +34,9 @@ import lxml.etree as ET
 import base64
 import shutil
 
+import matplotlib.pyplot as plt
+
+"""
 class PrepHandler:
     def __init__(self,
                  girder_handler
@@ -60,7 +63,7 @@ class PrepHandler:
             }
         }
 
-        self.feature_extraction_plugin = 'samborder2256_ftx_test_image_latest/Ftx_sc'
+        self.feature_extraction_plugin = 'samborder2256_ftx_plugin/Ftx_sc'
 
         self.color_map = colormaps['jet']
 
@@ -321,28 +324,29 @@ class PrepHandler:
 
         return card_children
 
-    def run_feature_extraction(self,image_id,sub_seg_params):
+    def run_feature_extraction(self,image_id,sub_seg_params,feature_cats,ignore_anns):
         
         # Getting the fileId for the image item
-        image_item = self.girder_handler.gc.get(f'/item/{image_id}')
-        fileId = image_item['largeImage']['fileId']
-        folderId = image_item['folderId']
+        #image_item = self.girder_handler.gc.get(f'/item/{image_id}')
+        #fileId = image_item['largeImage']['fileId']
+        #folderId = image_item['folderId']
 
         # Parsing through sub-seg-params
         _, thresh_nuc, minsize_nuc, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Nuclei'][0].values()))
         _, thresh_pas, minsize_pas, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Eosinophilic'][0].values()))
-        _, thresh_las, minsize_las, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Luminal Space'][0].values()))
+        _, thresh_las, minsize_ls, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Luminal Space'][0].values()))
 
         job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.feature_extraction_plugin}/run',
                                         parameters = {
-                                            'input_image':fileId,
-                                            'basedir':folderId,
+                                            'input_image':image_id,
                                             'threshold_nuclei':thresh_nuc,
                                             'minsize_nuclei':minsize_nuc,
                                             'threshold_PAS':thresh_pas,
                                             'minsize_PAS':minsize_pas,
                                             'threshold_LS':thresh_las,
-                                            'minsize_LS':minsize_las,
+                                            'minsize_LS':minsize_ls,
+                                            'featureCats': feature_cats,
+                                            'ignoreAnns': ignore_anns,
                                             'girderApiUrl':self.girder_handler.apiUrl,
                                             'girderToken':self.girder_handler.user_token
                                         })
@@ -416,6 +420,7 @@ class PrepHandler:
 
         return annotation_info
 
+"""
 
 #TODO: Remove some default settings
 # sub-compartment segmentation and feature extraction should vary
@@ -574,24 +579,24 @@ class Prepper:
         sub_comp_image = np.zeros((np.shape(image)[0],np.shape(image)[1],3))
         remainder_mask = np.ones((np.shape(image)[0],np.shape(image)[1]))
 
-        hsv_image = np.uint8(255*rgb2hsv(image)[:,:,1])
-
-        # Applying adaptive histogram equalization
-        #hsv_image = rank.equalize(hsv_image,footprint=disk(30))
-        hsv_image = np.uint8(255*exposure.equalize_hist(hsv_image))
+        hsv_image = np.uint8(255*rgb2hsv(image))
+        hsv_image = hsv_image[:,:,1]
 
         for idx,param in enumerate(seg_params):
 
-            remaining_pixels = np.multiply(hsv_image,remainder_mask)
-            masked_remaining_pixels = np.multiply(remaining_pixels,mask)
-
-            # Applying manual threshold
-            masked_remaining_pixels[masked_remaining_pixels<=param['threshold']] = 0
-            masked_remaining_pixels[masked_remaining_pixels>0] = 1
-
             # Check for if the current sub-compartment is nuclei
             if param['name'].lower()=='nuclei':
-                
+                # Using the inverse of the value channel for nuclei
+                h_image = 255-np.uint8(255*rgb2hsv(image)[:,:,2])
+                h_image = np.uint8(255*exposure.equalize_hist(h_image, mask = mask))
+
+                remaining_pixels = np.multiply(h_image,remainder_mask)
+                masked_remaining_pixels = np.multiply(remaining_pixels,mask)
+
+                # Applying manual threshold
+                masked_remaining_pixels[masked_remaining_pixels<=param['threshold']] = 0
+                masked_remaining_pixels[masked_remaining_pixels>0] = 1
+
                 # Area threshold for holes is controllable for this
                 sub_mask = remove_small_holes(masked_remaining_pixels>0,area_threshold=10)
                 sub_mask = sub_mask>0
@@ -609,6 +614,14 @@ class Prepper:
                 sub_mask = remove_small_objects(sub_mask,param['min_size'])
 
             else:
+
+                remaining_pixels = np.multiply(hsv_image,remainder_mask)
+                masked_remaining_pixels = np.multiply(remaining_pixels,mask)
+
+                # Applying manual threshold
+                masked_remaining_pixels[masked_remaining_pixels<=param['threshold']] = 0
+                masked_remaining_pixels[masked_remaining_pixels>0] = 1
+
                 # Filtering by minimum size
                 small_object_filtered = (1/255)*np.uint8(remove_small_objects(masked_remaining_pixels>0,param['min_size']))
 
@@ -657,7 +670,7 @@ class Prepper:
                         value = [i['value'] for i in ftu_names if not i['disabled']],
                         multi=True,
                         placeholder = 'Select FTUs for feature extraction',
-                        id = 'include-ftu-drop'
+                        id = {'type':'include-ftu-drop','index':0}
                     )
                 ])
             ],style={'marginBottom':'20px'}),
@@ -672,7 +685,7 @@ class Prepper:
                             value = ['Distance Transform Features','Color Features','Texture Features','Morphological Features'],
                             multi = True,
                             placeholder = 'Select Feature Types to extract',
-                            id = 'include-feature-drop'
+                            id = {'type':'include-feature-drop','index':0}
                         )
                     ])
                 ])
@@ -689,7 +702,18 @@ class Prepper:
                             n_clicks = 0
                         )
                     )
-                ])
+                ],md=6),
+                dbc.Col([
+                    html.Div(
+                        dbc.Button(
+                            'Skip Feature Extraction',
+                            color = 'primary',
+                            className = 'd-grid gap-2 col-12 mx-auto',
+                            id = {'type':'skip-feat','index':0},
+                            n_clicks=0
+                        )
+                    )
+                ],md=6)
             ],style = {'marginBottom':'10px'}),
             html.B(),
             dbc.Row([
@@ -705,32 +729,30 @@ class Prepper:
 
         return card_children
 
-    def run_feature_extraction(self,image_id,sub_seg_params):
-        
-        # Getting the fileId for the image item
-        image_item = self.girder_handler.gc.get(f'/item/{image_id}')
-        fileId = image_item['largeImage']['fileId']
-        folderId = image_item['folderId']
+    def run_feature_extraction(self,image_id,sub_seg_params,feature_cats,ignore_anns):
+
+        # Have to pass the file id to feature extraction
+        file_id = self.girder_handler.gc.get(f'/item/{image_id}/files')[0]['_id']
 
         # Parsing through sub-seg-params
         _, thresh_nuc, minsize_nuc, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Nuclei'][0].values()))
         _, thresh_pas, minsize_pas, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Eosinophilic'][0].values()))
-        _, thresh_las, minsize_las, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Luminal Space'][0].values()))
+        _, thresh_las, minsize_ls, _, _ = tuple(list([i for i in sub_seg_params if i['name']=='Luminal Space'][0].values()))
 
         job_response = self.girder_handler.gc.post(f'/slicer_cli_web/{self.feature_extraction_plugin}/run',
                                         parameters = {
-                                            'input_image':fileId,
-                                            'basedir':folderId,
+                                            'input_image':file_id,
                                             'threshold_nuclei':thresh_nuc,
                                             'minsize_nuclei':minsize_nuc,
                                             'threshold_PAS':thresh_pas,
                                             'minsize_PAS':minsize_pas,
                                             'threshold_LS':thresh_las,
-                                            'minsize_LS':minsize_las,
+                                            'minsize_LS':minsize_ls,
+                                            'featureCats': feature_cats,
+                                            'ignoreAnns': ignore_anns,
                                             'girderApiUrl':self.girder_handler.apiUrl,
                                             'girderToken':self.girder_handler.user_token
                                         })
-        
         return job_response
     
     def process_uploaded_anns(self, filename, annotation_str,item_id):

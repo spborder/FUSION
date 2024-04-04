@@ -995,8 +995,11 @@ class FUSION:
 
         # Running feature extraction plugin
         self.app.callback(
-            Input({'type':'start-feat','index':ALL},'n_clicks'),
+            [Input({'type':'start-feat','index':ALL},'n_clicks'),
+             Input({'type':'skip-feat','index':ALL},'n_clicks')],
             Output({'type':'feat-logs','index':ALL},'children'),
+            [State({'type': 'include-ftu-drop','index':ALL},'value'),
+             State({'type': 'include-feature-drop','index':ALL},'value')],
             prevent_initial_call=True
         )(self.run_feature_extraction)
 
@@ -5230,23 +5233,46 @@ class FUSION:
 
         pass
 
-    def run_feature_extraction(self,feat_butt):
+    def run_feature_extraction(self,feat_butt,skip_feat,include_ftus,include_features):
 
-        self.feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params)
+        if ctx.triggered_id['type']=='start-feat':
+            # Prepping input arguments to feature extraction
+            include_ftus = get_pattern_matching_value(include_ftus)
+            include_features = get_pattern_matching_value(include_features)
+            include_features = ','.join(include_features)
+            ignore_ftus = ','.join([i for i in self.feature_extract_ftus if i not in include_ftus])
 
-        # Returning a dcc.Interval object to check logs for feature extraction
-        feat_log_interval = [
-            dcc.Interval(
-                id = {'type':'feat-interval','index':0},
-                interval = 1000,
-                max_intervals=-1,
-                n_intervals = 0
-            ),
-            html.Div(
-                id = {'type':'feat-log-output','index':0},
-                children = []
-            )
-        ]
+            self.feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params,include_features,ignore_ftus)
+
+            # Returning a dcc.Interval object to check logs for feature extraction
+            feat_log_interval = [
+                dcc.Interval(
+                    id = {'type':'feat-interval','index':0},
+                    interval = 1000,
+                    max_intervals=-1,
+                    n_intervals = 0
+                ),
+                html.Div(
+                    id = {'type':'feat-log-output','index':0},
+                    children = []
+                )
+            ]
+        elif ctx.triggered_id['type']=='skip-feat':
+            
+            self.feat_ext_job = None
+            # Returning a shorty dcc.Interval that should automatically trigger the next step
+            feat_log_interval = [
+                dcc.Interval(
+                    id = {'type':'feat-interval','index':0},
+                    interval = 500,
+                    max_intervals = 1,
+                    n_intervals = 0
+                ),
+                html.Div(
+                    id = {'type': 'feat-log-output','index':0},
+                    children = []
+                )
+            ]
 
         return [feat_log_interval]
     
