@@ -73,6 +73,8 @@ class FUSION:
         self.download_handler = download_handler
         self.prep_handler = prep_handler
 
+        self.gene_handler = GeneHandler()
+
         # Setting some app-related things
         self.app = app
         self.app.title = "FUSION"
@@ -575,6 +577,13 @@ class FUSION:
             prevent_initial_call = True
         )(self.update_overlays)
 
+        # Getting Anatomical Structures and Cell Types that contain a certain biomarker
+        self.app.callback(
+            Output({'type':'asct-gene-table','index':ALL},'children'),
+            Input({'type':'get-asct-butt','index':ALL},'n_clicks'),
+            State({'type':'hgnc-id','index':ALL},'children'),
+            prevent_initial_call = True
+        )(self.get_asct_table)
         # Adding filter to apply to structures in the image
         """
         self.app.callback(
@@ -2113,8 +2122,13 @@ class FUSION:
                 self.update_hex_color_key()
 
                 # Now displaying gene info
-                gene_info_style = [{'display':'inline-block'}]
-                gene_info_components = [GeneHandler.get_layout(cell_val,self.layout_handler)]
+                if triggered_id=='cell-drop':
+                    gene_info_style = [{'display':'inline-block'}]
+                    gene_info_components = [self.gene_handler.get_layout(gene_id=cell_val)]
+                else:
+                    gene_info_style = [no_update]
+                    gene_info_components = [no_update]
+                
 
                 cell_sub_select_children = []
 
@@ -6127,6 +6141,48 @@ class FUSION:
         ]
 
         return updated_urls, tab_label_style
+
+    def get_asct_table(self,butt_click,hgnc_id):
+        """
+        Get AS and CT associated with a given biomarker (hgnc id)
+        """
+
+        if not butt_click:
+            raise exceptions.PreventUpdate
+        
+        hgnc_id = get_pattern_matching_value(hgnc_id)
+        # Getting only the number part of the id
+        hgnc_id = hgnc_id.split(' ')[-1]
+
+        # Getting ASCT part of table from gene_handler
+        asct_table = self.gene_handler.get_asct(hgnc_id)
+        if not asct_table.empty:
+            asct_table = asct_table.loc[:,asct_table.columns.str.contains('_label.value')]
+
+            # Formatting to dash_table
+            return_table = dash_table.DataTable(
+                id = {'type':'asct-dash-table','index':0},
+                columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in asct_table],
+                data = asct_table.to_dict('records'),
+                page_size = 5,
+                style_cell = {
+                    'overflow':'hidden',
+                    'textOverflow':'ellipsis',
+                    'maxWidth':0
+                },
+                tooltip_data = [
+                    {
+                        column: {'value':str(value),'type':'markdown'}
+                        for column, value in row.items()
+                    } for row in asct_table.to_dict('records')
+                ],
+                tooltip_duration = None
+            )
+        else:
+            return_table = "Not in HRA!"
+
+        return [return_table]
+
 
 
 

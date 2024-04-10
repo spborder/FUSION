@@ -70,7 +70,7 @@ class LayoutHandler:
         self.cli_list = None
 
         # Creating figure dictionary for nephron diagram
-        neph_figure = go.Figure(px.imshow(Image.open('./assets/cell_graphics/Edited Nephron Diagram_small.png')))
+        neph_figure = go.Figure(px.imshow(Image.open('./assets/cell_graphics/9 april 10.png')))
         neph_figure.update_traces(hoverinfo='none',hovertemplate=None)
         neph_figure.update_xaxes(showticklabels=False, showgrid=False)
         neph_figure.update_yaxes(showticklabels=False, showgrid=False)
@@ -1545,7 +1545,7 @@ class LayoutHandler:
             special_overlays_opts.extend([
                 html.Div(children = [],id = {'type':'gene-info-div','index':0}),
                 html.H6('Add Cell Subtypes',style={'marginTop':'5px'}),
-                self.layout_handler.gen_info_button('Select a cell type below to add the cell subtypes of that cell type to the list of overlaid visualizations'),
+                self.gen_info_button('Select a cell type below to add the cell subtypes of that cell type to the list of overlaid visualizations'),
                 dbc.Row([
                     dbc.Col(
                         dcc.Dropdown(
@@ -4099,44 +4099,55 @@ class GeneHandler:
         self.info_url = 'https://mygene.info/v3/'
         self.hra_url = 'https://grlc.io/api-git/hubmapconsortium/ccf-grlc/subdir/fusion//?endpoint=https://lod.humanatlas.io/sparql'
 
-    def get_layout(self, gene_id:str, layout_handler):
+    def get_layout(self, gene_id:str):
         """
         Returns list of layout components (buttons and divs) when someone selects an overlay that contains "Gene Counts"
         """
+        # The part after the "." is just the version number for that gene
+        gene_info = self.get_gene_info(gene_id.split('Gene Counts --> ')[-1].split('.')[0])
 
-        gene_info = self.get_gene_info(gene_id)
+        if not gene_info is None:
+            if "alias" in gene_info:
+                if type(gene_info["alias"])==list:
+                    alias = ','.join(gene_info['alias'])
+                elif type(gene_info['alias'])==str:
+                    alias = gene_info['alias']
+            else:
+                alias = 'None Specified'
 
-        gene_info_components = [
-            html.H6('Gene Information',style = {'marginTop':'5px'}),
-            layout_handler.gen_info_button('Information on current gene selected, derived from mygene.info'),
-            dbc.Row([
-                dbc.Col(html.P(f'<b>HGNC Id:</b> {gene_info["HGNC"]}',id = {'type':'hgnc-id','index':0}))
-            ]),
-            html.B(),
-            dbc.Row([
-                dbc.Col(html.P(f'<b>Aliases:</b> {",".join(gene_info["alias"])}'))
-            ]),
-            html.B(),
-            dbc.Row([
-                dbc.Col(html.P(f'<b>Summary:</b> {gene_info["summary"]}'))
-            ]),
-            html.Hr(),
-            dbc.Row([
-                dbc.Col(
-                    dbc.Button(
-                        'Get Anatomical Structures and Cell Types',
-                        className = 'd-grid col-12 mx-auto',
-                        id = {'type':'get-asct-butt','index':0}
+            summary = gene_info['summary'].replace('[','').replace(']','')
+
+            gene_info_components = [
+                html.H6('Gene Information',style = {'marginTop':'5px'}),
+                #layout_handler.gen_info_button('Information on current gene selected, derived from mygene.info'),
+                dbc.Row([
+                    dbc.Col(html.P(f'HGNC Id: {gene_info["HGNC"]}',id = {'type':'hgnc-id','index':0}))
+                ]),
+                dbc.Row([
+                    dcc.Markdown(f'''
+                                **Alias**: {alias}
+
+                                **Summary**: {summary}
+                                 ''')
+                ]),
+                dbc.Row([
+                    dbc.Col(
+                        dbc.Button(
+                            'Get Anatomical Structures and Cell Types',
+                            className = 'd-grid col-12 mx-auto',
+                            id = {'type':'get-asct-butt','index':0}
+                        )
                     )
-                )
-            ]),
-            dbc.Row([
-                html.Div(
-                    children = [],
-                    id = {'type':'asct-gene-table','index':0}
-                )
-            ])
-        ]
+                ]),
+                dbc.Row([
+                    html.Div(
+                        children = [],
+                        id = {'type':'asct-gene-table','index':0}
+                    )
+                ])
+            ]
+        else:
+            gene_info_components = []
 
         return gene_info_components
 
@@ -4148,21 +4159,17 @@ class GeneHandler:
         """
         if isinstance(id,str):
             request_response = requests.get(f'{self.info_url}gene/{id}?fields=HGNC,alias,summary&dotfield=false&size=5')
-            print(request_response)
             if request_response.ok:
-                return request_response.content
+                return request_response.json()
             else:
                 return None
             
         elif isinstance(id,list):
             return_list = []
             for i in id:
-
-                request_repsonse = requests.get(f'{self.info_url}gene/{i}?fields=HGNC,alias,summary&dotfield=false&size=5')
-                print(request_response)
+                request_response = requests.get(f'{self.info_url}gene/{i}?fields=HGNC,alias,summary&dotfield=false&size=5')
                 if request_response.ok:
-                    print(request_response.content)
-                    return_list.append(request_response.content)
+                    return_list.append(request_response.json())
             
             return return_list
 
@@ -4173,12 +4180,12 @@ class GeneHandler:
         # Have to add on the whole iri here:
         # HGNC id is a number but should be interpreted as a string
         id = f'http://identifiers.org/hgnc/{id}'
-        request_response = requests.get(f'{self.hra_url}&biomarker={id}')
-        print(request_response)
+        request_response = requests.get(f'{self.hra_url.replace("fusion//","fusion//asct_by_biomarker")}&biomarker={id}',headers={'Accept':'application/json','Content-Type':'application/json'})
         if request_response.ok:
-            print(request_response.content)
-            return pd.DataFrame(request_response.content)
+            return pd.json_normalize(request_response.json()['results']['bindings'],max_level=1)
         else:
+            print(f'{self.hra_url.replace("fusion//","fusion//asct_by_biomarker")}&biomarker={id}')
+            print('Request not ok!')
             return None
         
     def get_cell(self, id:str):
@@ -4189,7 +4196,7 @@ class GeneHandler:
 
         # Modifiying input id
         id = f'http://purl.odolibrary.org/obo/{id}'
-        request_response = requests.get(f'{self.hra_url}&location={id}')
+        request_response = requests.get(f'{self.hra_url.replace("fusion//","fusion//cell_by_location")}&location={id}',headers={'Accept':'application/json','Content-type':'application/json'})
 
         print(request_response)
         if request_response.ok:
