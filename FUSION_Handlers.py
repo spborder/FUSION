@@ -1535,6 +1535,76 @@ class LayoutHandler:
 
         return dbc.Row(usability_children)
 
+    def gen_special_overlay_opts(self, wsi):
+        """
+        Generate special overlay components depending on the WSI spatial omics type and properties
+        """
+        special_overlays_opts = []
+        if wsi.spatial_omics_type=='Visium':
+
+            special_overlays_opts.extend([
+                html.Div(children = [],id = {'type':'gene-info-div','index':0}),
+                html.H6('Add Cell Subtypes',style={'marginTop':'5px'}),
+                self.layout_handler.gen_info_button('Select a cell type below to add the cell subtypes of that cell type to the list of overlaid visualizations'),
+                dbc.Row([
+                    dbc.Col(
+                        dcc.Dropdown(
+                            id = {'type':'cell-subtype-drop','index':0},
+                            options = [
+                                {'label': i.split(' --> ')[-1], 'value': i.split(' --> ')[-1]}
+                                for i in wsi.properties_list if 'Main_Cell_Types' in i
+                            ],
+                            value = [],
+                            multi = True,
+                            disabled = True
+                        ),
+                        md = 8
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            'Add Sub-Types!',
+                            id = {'type':'cell-subtype-butt','index':0},
+                            className = 'd-grid col-12 mx-auto',
+                            disabled = True
+                        ),
+                        md = 4
+                    )
+                ])
+            ])
+
+        elif wsi.spatial_omics_type=='CODEX':
+
+            special_overlays_opts.extend([
+                html.H6('Select Additional Channel Overlay(s)'),
+                self.layout_handler.gen_info_button('Select Channel and adjust color for combined view of multiple channels.'),
+                dcc.Dropdown(
+                    id = {'type':'channel-overlay-drop','index':0},
+                    options = [
+                        {
+                            'label': i, 'value': i
+                        }
+                        for i in wsi.channel_names
+                        if not i=='Histology (H&E)'
+                    ],
+                    value = [],
+                    multi = True,
+                    disabled = False
+                ),
+                html.Div(
+                    id = {'type':'channel-overlay-select-div','index':0},
+                    children = [],
+                    style = {'marginBottom':'5px','marginTop':'5px'}
+                ),
+                dbc.Button(
+                    'Overlay Channels!',
+                    id = {'type':'channel-overlay-butt','index':0},
+                    className = 'd-grid col-12 mx-auto',
+                    disabled = True
+                )
+            ])
+
+        return special_overlays_opts
+
     def gen_wsi_view(self, wsi):
 
         # Grabbing all the necessary properties to generate the children of the wsi viewer card
@@ -4017,4 +4087,116 @@ class DownloadHandler:
 
 
         return download_data
+
+
+
+class GeneHandler:
+    """
+    Class made to get more information on genes from mygene.info
+    """
+    def __init__(self):
+
+        self.info_url = 'https://mygene.info/v3/'
+        self.hra_url = 'https://grlc.io/api-git/hubmapconsortium/ccf-grlc/subdir/fusion//?endpoint=https://lod.humanatlas.io/sparql'
+
+    def get_layout(self, gene_id:str, layout_handler):
+        """
+        Returns list of layout components (buttons and divs) when someone selects an overlay that contains "Gene Counts"
+        """
+
+        gene_info = self.get_gene_info(gene_id)
+
+        gene_info_components = [
+            html.H6('Gene Information',style = {'marginTop':'5px'}),
+            layout_handler.gen_info_button('Information on current gene selected, derived from mygene.info'),
+            dbc.Row([
+                dbc.Col(html.P(f'<b>HGNC Id:</b> {gene_info["HGNC"]}',id = {'type':'hgnc-id','index':0}))
+            ]),
+            html.B(),
+            dbc.Row([
+                dbc.Col(html.P(f'<b>Aliases:</b> {",".join(gene_info["alias"])}'))
+            ]),
+            html.B(),
+            dbc.Row([
+                dbc.Col(html.P(f'<b>Summary:</b> {gene_info["summary"]}'))
+            ]),
+            html.Hr(),
+            dbc.Row([
+                dbc.Col(
+                    dbc.Button(
+                        'Get Anatomical Structures and Cell Types',
+                        className = 'd-grid col-12 mx-auto',
+                        id = {'type':'get-asct-butt','index':0}
+                    )
+                )
+            ]),
+            dbc.Row([
+                html.Div(
+                    children = [],
+                    id = {'type':'asct-gene-table','index':0}
+                )
+            ])
+        ]
+
+        return gene_info_components
+
+    def get_gene_info(self, id:Union[str,list]):
+        """
+        Get information about a given gene id or list of ids.
+        By default returns HGNC, alias, and summary
+        Can be expanded to include go, pubmed articles, etc.
+        """
+        if isinstance(id,str):
+            request_response = requests.get(f'{self.info_url}gene/{id}?fields=HGNC,alias,summary&dotfield=false&size=5')
+            print(request_response)
+            if request_response.ok:
+                return request_response.content
+            else:
+                return None
+            
+        elif isinstance(id,list):
+            return_list = []
+            for i in id:
+
+                request_repsonse = requests.get(f'{self.info_url}gene/{i}?fields=HGNC,alias,summary&dotfield=false&size=5')
+                print(request_response)
+                if request_response.ok:
+                    print(request_response.content)
+                    return_list.append(request_response.content)
+            
+            return return_list
+
+    def get_asct(self, id:Union[str,int]):
+        """
+        Get Anatomical Structure & Cell Type associated with a given HGNC Id.
+        """
+        # Have to add on the whole iri here:
+        # HGNC id is a number but should be interpreted as a string
+        id = f'http://identifiers.org/hgnc/{id}'
+        request_response = requests.get(f'{self.hra_url}&biomarker={id}')
+        print(request_response)
+        if request_response.ok:
+            print(request_response.content)
+            return pd.DataFrame(request_response.content)
+        else:
+            return None
+        
+    def get_cell(self, id:str):
+        """
+        Get all the cell types available within a given anatomical structure
+        Input has to be an UBERON id "UBERON_######..."
+        """
+
+        # Modifiying input id
+        id = f'http://purl.odolibrary.org/obo/{id}'
+        request_response = requests.get(f'{self.hra_url}&location={id}')
+
+        print(request_response)
+        if request_response.ok:
+            print(request_response.content)
+            return pd.DataFrame(request_response.content)
+        else:
+            return None
+
+
 

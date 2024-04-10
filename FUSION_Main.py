@@ -45,7 +45,7 @@ from timeit import default_timer as timer
 import time
 
 from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
-from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler
+from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler, GeneHandler
 from FUSION_Prep import CODEXPrep, VisiumPrep, Prepper
 from FUSION_Utils import get_pattern_matching_value, extract_overlay_value, gen_violin_plot
 
@@ -566,7 +566,8 @@ class FUSION:
         self.app.callback(
             [Output({'type':'ftu-bounds','index':ALL},'hideout'),Output('colorbar-div','children'),
              Output('filter-slider','min'),Output('filter-slider','max'),Output('filter-slider','disabled'),
-             Output('cell-sub-select-div','children')],
+             Output('cell-sub-select-div','children'),Output({'type':'gene-info-div','index':ALL},'style'),
+             Output({'type':'gene-info-div','index':ALL},'children')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
              Input('filter-slider','value'),Input({'type':'ftu-bound-color','index':ALL},'value'),
              Input({'type':'cell-sub-drop','index':ALL},'value')],
@@ -1875,6 +1876,8 @@ class FUSION:
 
         m_prop = None
         cell_sub_select_children = no_update
+        gene_info_style = [{'display':'none'}]
+        gene_info_components = [[]]
 
         color_bar_style = {
             'visibility':'visible',
@@ -1887,12 +1890,6 @@ class FUSION:
 
         }
 
-        """
-        if not type(cell_sub_val) is list:
-            cell_sub_val = [cell_sub_val]
-        if len(cell_sub_val)==0:
-            cell_sub_val = [None]
-        """
         cell_sub_val = get_pattern_matching_value(cell_sub_val)
 
         if type(ctx.triggered_id)==list:
@@ -1902,9 +1899,11 @@ class FUSION:
 
         #TODO: Add a button to update FTU/boundary structure colors instead of making it responsive to the color selector
         try:
-            if triggered_id['type']=='ftu-bound-color':
+            if triggered_id['type']=='ftu-bound-color-butt':
+                print(triggered_id)
                 if not ftu_color is None and not ftu_bound_tab is None:
                     self.ftu_colors[self.wsi.ftu_names[int(float(ftu_bound_tab.split('-')[-1]))]] = ftu_color[int(float(ftu_bound_tab.split('-')[-1]))]
+        
         except TypeError:
             # This is for non-pattern matching components so the ctx.triggered_id is just a str
             pass
@@ -2113,6 +2112,10 @@ class FUSION:
                 }
                 self.update_hex_color_key()
 
+                # Now displaying gene info
+                gene_info_style = [{'display':'inline-block'}]
+                gene_info_components = [GeneHandler.get_layout(cell_val,self.layout_handler)]
+
                 cell_sub_select_children = []
 
                 color_bar = dl.Colorbar(
@@ -2216,7 +2219,7 @@ class FUSION:
             for i in range(0,n_layers)
         ]
 
-        return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children
+        return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children, gene_info_style, gene_info_components
 
     def update_cell_hierarchy(self,cell_clickData):
         # Loading the cell-graphic and hierarchy image
@@ -2868,34 +2871,8 @@ class FUSION:
 
                 # Returning options for special-overlays div
                 # For Visium, this can be that change-level plugin
-                special_overlays_opts.extend([
-                    html.H6('Add Cell Subtypes',style={'marginTop':'5px'}),
-                    self.layout_handler.gen_info_button('Select a cell type below to add the cell subtypes of that cell type to the list of overlaid visualizations'),
-                    dbc.Row([
-                        dbc.Col(
-                            dcc.Dropdown(
-                                id = {'type':'cell-subtype-drop','index':0},
-                                options = [
-                                    {'label': i.split(' --> ')[-1], 'value': i.split(' --> ')[-1]}
-                                    for i in new_slide.properties_list if 'Main_Cell_Types' in i
-                                ],
-                                value = [],
-                                multi = True,
-                                disabled = True
-                            ),
-                            md = 8
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                'Add Sub-Types!',
-                                id = {'type':'cell-subtype-butt','index':0},
-                                className = 'd-grid col-12 mx-auto',
-                                disabled = True
-                            ),
-                            md = 4
-                        )
-                    ])
-                ])
+                special_overlay_components = self.layout_handler.gen_special_overlay_opts(new_slide)
+                special_overlays_opts.extend(special_overlay_components)
 
             elif slide_type=='CODEX':
                 new_slide = CODEXSlide(
@@ -2910,33 +2887,8 @@ class FUSION:
                 # For CODEX, this can be adding colorful channel overlays
                 self.current_channels = {}
 
-                special_overlays_opts.extend([
-                    html.H6('Select Additional Channel Overlay(s)'),
-                    self.layout_handler.gen_info_button('Select Channel and adjust color for combined view of multiple channels.'),
-                    dcc.Dropdown(
-                        id = {'type':'channel-overlay-drop','index':0},
-                        options = [
-                            {
-                                'label': i, 'value': i
-                            }
-                            for i in new_slide.channel_names
-                        ],
-                        value = [],
-                        multi = True,
-                        disabled = False
-                    ),
-                    html.Div(
-                        id = {'type':'channel-overlay-select-div','index':0},
-                        children = [],
-                        style = {'marginBottom':'5px','marginTop':'5px'}
-                    ),
-                    dbc.Button(
-                        'Overlay Channels!',
-                        id = {'type':'channel-overlay-butt','index':0},
-                        className = 'd-grid col-12 mx-auto',
-                        disabled = True
-                    )
-                ])
+                special_overlay_components = self.layout_handler.gen_special_overlay_opts(new_slide)
+                special_overlays_opts.extend(special_overlay_components)
 
                 # Adding the different frames to the layers control object
                 new_children+=[
@@ -3017,6 +2969,12 @@ class FUSION:
                             format = 'hex',
                             value = combined_colors_dict[struct]['color'],
                             fullWidth=True
+                        ),
+                        dbc.Button(
+                            'Update Structure Boundaries',
+                            className = 'd-grid col-12 md-auto',
+                            id = {'type':'ftu-bound-color-butt','index':idx},
+                            style = {'marginTop':'5px'}
                         )
                     ], label = struct
                 )
