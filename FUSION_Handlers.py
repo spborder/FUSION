@@ -4115,13 +4115,21 @@ class GeneHandler:
             else:
                 alias = 'None Specified'
 
-            summary = gene_info['summary'].replace('[','').replace(']','')
+            if "summary" in gene_info:
+                summary = gene_info['summary'].replace('[','').replace(']','')
+            else:
+                summary = "No summary available"
+
+            if "HGNC" in gene_info:
+                hgnc = gene_info['HGNC']
+            else:
+                hgnc = 'No HGNC found'
 
             gene_info_components = [
                 html.H6('Gene Information',style = {'marginTop':'5px'}),
                 #layout_handler.gen_info_button('Information on current gene selected, derived from mygene.info'),
                 dbc.Row([
-                    dbc.Col(html.P(f'HGNC Id: {gene_info["HGNC"]}',id = {'type':'hgnc-id','index':0}))
+                    dbc.Col(html.P(f'HGNC Id: {hgnc}',id = {'type':'hgnc-id','index':0}))
                 ]),
                 dbc.Row([
                     dcc.Markdown(f'''

@@ -571,9 +571,9 @@ class FUSION:
              Output('cell-sub-select-div','children'),Output({'type':'gene-info-div','index':ALL},'style'),
              Output({'type':'gene-info-div','index':ALL},'children')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
-             Input('filter-slider','value'),Input({'type':'ftu-bound-color','index':ALL},'value'),
+             Input('filter-slider','value'),Input({'type':'ftu-bound-color-butt','index':ALL},'n_clicks'),
              Input({'type':'cell-sub-drop','index':ALL},'value')],
-            State('ftu-bound-opts','active_tab'),
+            State({'type':'ftu-bound-color','index':ALL},'value'),
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -1879,7 +1879,7 @@ class FUSION:
         else:
             self.hex_color_key = {}
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color,cell_sub_val,ftu_bound_tab):
+    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color_butt,cell_sub_val,ftu_bound_color):
 
         print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
 
@@ -1909,9 +1909,8 @@ class FUSION:
         #TODO: Add a button to update FTU/boundary structure colors instead of making it responsive to the color selector
         try:
             if triggered_id['type']=='ftu-bound-color-butt':
-                print(triggered_id)
-                if not ftu_color is None and not ftu_bound_tab is None:
-                    self.ftu_colors[self.wsi.ftu_names[int(float(ftu_bound_tab.split('-')[-1]))]] = ftu_color[int(float(ftu_bound_tab.split('-')[-1]))]
+                if not ftu_bound_color is None:
+                    self.ftu_colors[self.wsi.ftu_names[triggered_id['index']]] = ftu_bound_color[triggered_id['index']]
         
         except TypeError:
             # This is for non-pattern matching components so the ctx.triggered_id is just a str
@@ -6164,6 +6163,7 @@ class FUSION:
                 id = {'type':'asct-dash-table','index':0},
                 columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in asct_table],
                 data = asct_table.to_dict('records'),
+                filter_action='native',
                 page_size = 5,
                 style_cell = {
                     'overflow':'hidden',
