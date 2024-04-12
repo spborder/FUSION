@@ -59,6 +59,10 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                         const fillColor = color_key[overlay_value];
                         style.fillColor = fillColor;
                         style.fillOpacity = fillOpacity;
+                    } else if (Number(overlay_value).toFixed(1) in color_key) {
+                        const fillColor = color_key[Number(overlay_value).toFixed(1)];
+                        style.fillColor = fillColor;
+                        style.fillOpacity = fillOpacity;
                     }
 
                     if (feature.properties.name in ftu_colors) {

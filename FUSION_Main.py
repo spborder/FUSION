@@ -241,15 +241,19 @@ class FUSION:
             } else {
                 var overlay_value = Number.Nan;
             }
-
+                                       
             var style = {};
             if (overlay_value == overlay_value) {
                 if (overlay_value in color_key) {
                     const fillColor = color_key[overlay_value];
                     style.fillColor = fillColor;
                     style.fillOpacity = fillOpacity;        
-                } 
-                                       
+                } else if (Number(overlay_value).toFixed(1) in color_key) {
+                    const fillColor = color_key[Number(overlay_value).toFixed(1)];
+                    style.fillColor = fillColor;
+                    style.fillOpacity = fillOpacity;
+                }
+                                                                              
                 if (feature.properties.name in ftu_colors){
                     style.color = ftu_colors[feature.properties.name];
                 } else {
@@ -643,6 +647,7 @@ class FUSION:
              Output('slide-map','bounds'),
              Output('slide-tile','tileSize'),
              Output('slide-map','maxZoom'),
+             Output('slide-tile','maxNativeZoom'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children')],
@@ -1863,6 +1868,7 @@ class FUSION:
                     raw_values_list.extend(manual_raw_vals)
 
         raw_values_list = np.unique(raw_values_list).tolist()
+
         # Converting to RGB
         if len(raw_values_list)>0:
             if max(raw_values_list)>0:
@@ -1885,8 +1891,13 @@ class FUSION:
 
         m_prop = None
         cell_sub_select_children = no_update
-        gene_info_style = [{'display':'none'}]
-        gene_info_components = [[]]
+
+        if self.wsi.spatial_omics_type=='Visium':
+            gene_info_style = [{'display':'none'}]
+            gene_info_components = [[]]
+        else:
+            gene_info_style = []
+            gene_info_components = []
 
         color_bar_style = {
             'visibility':'visible',
@@ -2275,6 +2286,7 @@ class FUSION:
         color = pt['color']
         tool_bbox = pt['bbox']
 
+        # Color code is assigned in graphics_reference.json
         color_code = [str(color[i]) for i in color]
 
         if not color_code[-1]=='0':
@@ -2994,7 +3006,7 @@ class FUSION:
                 for idx, struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children, special_overlays_opts
+            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels, self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children, special_overlays_opts
 
         else:
             raise exceptions.PreventUpdate

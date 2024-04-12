@@ -186,7 +186,7 @@ class LayoutHandler:
         ]
 
         map_layer = dl.Map(
-            center = center_point, zoom = 3, minZoom = 0, maxZoom = zoom_levels-1, crs='Simple',bounds = map_bounds,
+            center = center_point, zoom = 3, minZoom = 0, crs='Simple',bounds = map_bounds,
             style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             preferCanvas=True,
@@ -1576,7 +1576,7 @@ class LayoutHandler:
 
             special_overlays_opts.extend([
                 html.H6('Select Additional Channel Overlay(s)'),
-                self.layout_handler.gen_info_button('Select Channel and adjust color for combined view of multiple channels.'),
+                self.gen_info_button('Select Channel and adjust color for combined view of multiple channels.'),
                 dcc.Dropdown(
                     id = {'type':'channel-overlay-drop','index':0},
                     options = [
