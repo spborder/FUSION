@@ -45,6 +45,9 @@ class DSASlide:
             'Gene Counts'
         ]
 
+        # Adding ftu hierarchy property. This just stores which structures contain which other structures.
+        self.ftu_hierarchy = {}
+
         self.get_slide_map_data(self.item_id)
     
     def __str__(self):
@@ -370,6 +373,57 @@ class DSASlide:
 
         return return_coords
     
+    def gen_structure_hierarchy(self, structure_name:str):
+        """
+        Determine containment of other structures within a given structure 
+        """
+        if not structure_name in self.ftu_names:
+            print('Structure not present in this slide')
+            raise ValueError
+        else:
+
+            structure_intersect = []
+            if not structure_name=='Spots':
+                for f in self.ftu_names:
+                    if not f==structure_name and f in self.ftu_polys:
+                        for g in self.ftu_polys[f]:
+                            if any([g.intersects(i) for i in self.ftu_polys[structure_name]]):
+                                structure_intersect.append(f)
+                                break
+
+                
+                if 'Spots' in self.ftu_polys:
+                    for g in self.spot_polys:
+                        if any([g.intersects(i) for i in self.ftu_polys[structure_name]]):
+                            structure_intersect.append(f)
+                            break
+            
+            elif structure_name == 'Spots':
+                for f in self.ftu_names:
+                    if not f==structure_name:
+                        for g in self.ftu_polys[f]:
+                            if any([g.intersects(i) for i in self.spot_polys]):
+                                structure_intersect.append(f)
+                                break
+
+                                
+            tree_dict = {
+                'title': structure_name,
+                'key': '0',
+                'children':[
+                    {
+                        'title': i,
+                        'key': f'0-{idx}'
+                    }
+                    for idx,i in enumerate(structure_intersect)
+                ]
+            }
+
+            self.ftu_hierarchy[structure_name] = tree_dict
+
+            return tree_dict
+
+
 
 class VisiumSlide(DSASlide):
     # Additional properties for Visium slides are:

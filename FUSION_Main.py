@@ -40,6 +40,7 @@ import dash_leaflet.express as dlx
 from dash_extensions.javascript import assign, arrow_function
 from dash_extensions.enrich import DashProxy, html, Input, Output, MultiplexerTransform, State
 import dash_mantine_components as dmc
+import dash_treeview_antd as dta
 
 from timeit import default_timer as timer
 import time
@@ -650,7 +651,8 @@ class FUSION:
              Output('slide-tile','maxNativeZoom'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
-             Output('special-overlays','children')],
+             Output('special-overlays','children'),
+             Output('ftu-structure-hierarchy','children')],
             Input('slide-select','value'),
             prevent_initial_call=True,
             suppress_callback_exceptions=True
@@ -826,6 +828,17 @@ class FUSION:
             State({'type':'overlay-channel-tab','index':ALL},'label')],
             prevent_initial_call = True
         )(self.add_channel_overlay)
+
+        # Populating structure hierarchy tab
+        self.app.callback(
+            [
+                Output({'type':'structure-tree-div','index':ALL},'children'),
+                Output({'type':'reset-structure-hierarchy','index':ALL},'disabled')
+            ],
+            Input('ftu-structure-hierarchy','active_tab'),
+            prevent_initial_call = True
+        )(self.populate_structure_hierarchy)
+
 
     def builder_callbacks(self):
 
@@ -2148,8 +2161,12 @@ class FUSION:
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
-                filter_min_val = np.min(list(self.hex_color_key.keys()))
-                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                if len(list(self.hex_color_key.keys()))>0:
+                    filter_min_val = np.min(list(self.hex_color_key.keys()))
+                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                else:
+                    filter_min_val = 0.0
+                    filter_max_val = 1.0
                 filter_disable = False
             
             elif m_prop == 'Morphometrics':
@@ -3006,7 +3023,41 @@ class FUSION:
                 for idx, struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels, self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children, special_overlays_opts
+            # Structure hierarchy tab creation
+            structure_hierarchy_tabs = [
+                dbc.Tab(
+                    children = [
+                        html.Div(
+                            id = {'type':'structure-tree-div','index':idx},
+                            children = []
+                        ),
+                        dbc.Row([
+                                dbc.Col(
+                                    dbc.Button(
+                                        'Reset',
+                                        className = 'd-grid col-12 mx-auto',
+                                        id = {'type':'reset-structure-hierarchy','index':idx}
+                                    ),
+                                    md = 6
+                                ),
+                                dbc.Col(
+                                    dbc.Button(
+                                        'Update Structure',
+                                        className = 'd-grid col-12 mx-auto',
+                                        id = {'type': 'update-structure-hierarchy','index':idx}
+                                    ),
+                                    md = 6
+                                )
+                            ], align = 'center', style = {'marginTop':'5px'})
+                        ],
+                    label = struct,
+                    tab_id = struct
+                )
+                for idx,struct in enumerate(list(combined_colors_dict.keys()))
+            ]
+
+
+            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels, self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs
 
         else:
             raise exceptions.PreventUpdate
@@ -6214,6 +6265,56 @@ class FUSION:
             return_table = "Not in HRA!"
 
         return [return_table]
+
+    def populate_structure_hierarchy(self, active_tab):
+        """
+        Showing which structures are contained within which structure in a tree/dropdown structure for set operations
+        """
+        if not active_tab:
+            raise exceptions.PreventUpdate
+        
+        print(f'active_tab: {active_tab}')
+        tree_data = []
+        button_disable = True
+
+        # Getting structure hierarchy for current structure
+        if not active_tab in self.wsi.ftu_hierarchy:
+            tree_data = self.wsi.gen_structure_hierarchy(active_tab)
+
+        else:
+            tree_data = self.wsi.ftu_hierarchy[active_tab]
+
+        if len(tree_data['children'])==0:
+            button_disable = False
+
+        if active_tab in self.wsi.ftu_names:
+            use_idx = self.wsi.ftu_names.index(active_tab)
+        elif active_tab=='Spots':
+            use_idx = len(self.wsi.ftu_names)
+        
+        tree_select = dta.TreeView(
+            id = {'type':'structure-tree','index': use_idx},
+            multiple = True,
+            checkable = True,
+            selected = [],
+            checked = [],
+            data = tree_data
+        )
+        
+        return_list = [tree_select]*len(ctx.outputs_list[0])
+
+        return return_list, [button_disable]*len(ctx.outputs_list[1])
+
+    def update_structure_hierarchy(self,butt_click):
+        """
+        Updating structure boundaries according to selected hierarchy        
+        """
+        pass
+
+
+
+
+
 
 
 

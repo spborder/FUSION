@@ -745,6 +745,48 @@ class LayoutHandler:
                             for idx,struct in enumerate(list(combined_colors_dict.keys()))
                         ]
                     )
+                ]),
+                dbc.Row([
+                    dbc.Label(
+                        'Structure Hierarchy',
+                        html_for = 'structure-hierarchy'
+                    )
+                ]),
+                dbc.Row([
+                    dbc.Tabs(
+                        id = 'ftu-structure-hierarchy',
+                        children = [
+                            dbc.Tab(
+                                children = [
+                                    html.Div(
+                                        id = {'type':'structure-tree-div','index':idx},
+                                        children = ['blah blah test']
+                                    ),
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Button(
+                                                'Reset',
+                                                className = 'd-grid col-12 mx-auto',
+                                                id = {'type':'reset-structure-hierarchy','index':idx}
+                                            ),
+                                            md = 6
+                                        ),
+                                        dbc.Col(
+                                            dbc.Button(
+                                                'Update Structure',
+                                                className = 'd-grid col-12 mx-auto',
+                                                id = {'type': 'update-structure-hierarchy','index':idx}
+                                            ),
+                                            md = 6
+                                        )
+                                    ], align = 'center', style = {'marginTop':'5px'})
+                                ],
+                                label = struct,
+                                tab_id = struct
+                            )
+                            for idx,struct in enumerate(list(combined_colors_dict.keys()))
+                        ]
+                    )
                 ])
             ])
         ])
