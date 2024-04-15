@@ -1864,7 +1864,7 @@ class FUSION:
 
                     #TODO: Record manual ROI properties in a more sane manner.
                     manual_props = [i['geojson']['features'][0]['properties'] for i in self.wsi.manual_rois if 'properties' in i['geojson']['features'][0]]
-                    manual_raw_vals = extract_overlay_value(manual_props,self.overlay_props)
+                    manual_raw_vals = extract_overlay_value(manual_props,self.overlay_prop)
                     raw_values_list.extend(manual_raw_vals)
 
         raw_values_list = np.unique(raw_values_list).tolist()
@@ -3835,26 +3835,46 @@ class FUSION:
                                 
                                 # New geojson has no properties which can be used for overlays or anything so we have to add those
                                 # Step 1, find intersecting spots:
-                                overlap_spot_props = self.wsi.find_intersecting_spots(shape(new_roi['features'][0]['geometry']))
+                                if self.wsi.spatial_omics_type=='Visium':
+                                    overlap_props = self.wsi.find_intersecting_spots(shape(new_roi['features'][0]['geometry']))
+                                    # Adding Main_Cell_Types from intersecting spots data
+                                    main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
+                                    main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
+                                    main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
+                                    main_counts_dict = main_counts_data.astype(float).to_dict()[0]
 
-                                # Adding Main_Cell_Types from intersecting spots data
-                                main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_spot_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
-                                main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
-                                main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
-                                main_counts_dict = main_counts_data.astype(float).to_dict()[0]
+                                    # Repeating for Gene Counts
+                                    gene_counts_data = pd.DataFrame.from_records([i['Gene Counts'] for i in overlap_props if 'Gene Counts' in i]).sum(axis=0).to_frame()
+                                    main_counts_data = (gene_counts_data/gene_counts_data.sum()).fillna(0.000).round(decimals=18)
+                                    gene_counts_data[0] = gene_counts_data[0].map('{:.19f}'.format)
+                                    gene_counts_dict = gene_counts_data.astype(float).to_dict()[0]
 
-                                # Aggregating cell state information from intersecting spots
-                                agg_cell_states = {}
-                                for m_c in list(main_counts_dict.keys()):
+                                    # Aggregating cell state information from intersecting spots
+                                    agg_cell_states = {}
+                                    for m_c in list(main_counts_dict.keys()):
 
-                                    cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_spot_props]).sum(axis=0).to_frame()
-                                    cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
-                                    cell_states[0] = cell_states[0].map('{:.19f}'.format)
+                                        cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_props]).sum(axis=0).to_frame()
+                                        cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
+                                        cell_states[0] = cell_states[0].map('{:.19f}'.format)
 
-                                    agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
+                                        agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
 
-                                new_roi['features'][0]['properties']['Main_Cell_Types'] = main_counts_dict
-                                new_roi['features'][0]['properties']['Cell_States'] = agg_cell_states
+                                    new_roi['features'][0]['properties']['Main_Cell_Types'] = main_counts_dict
+                                    new_roi['features'][0]['properties']['Cell_States'] = agg_cell_states
+                                    new_roi['features'][0]['properties']['Gene Counts'] = gene_counts_dict
+
+                                elif self.wsi.spatial_omics_type=='CODEX':
+                                    overlap_props = self.wsi.intersecting_frame_intensity(shape(new_roi['features'][0]['geometry']),'all')
+
+                                    # Adding channel intensity histogram to properties.
+                                    for frame in overlap_props:
+                                        new_roi['features'][0]['properties'][frame] = overlap_props[frame]
+
+                                #TODO: include overlapping FTU properties in visualization within Manual ROIs
+                                # Now including properties of intersecting FTUs
+                                #overlap_ftu_props, _ = self.wsi.find_intersecting_ftu(shape(new_roi['features'][0]['geometry']),'all')
+
+                                # Have to normalize and make this visible in the "Cell Compositions" or something tab (since it might be more than just cells)
 
                                 new_manual_roi_dict = {
                                         'geojson':new_roi,

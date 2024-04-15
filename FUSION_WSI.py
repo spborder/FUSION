@@ -337,6 +337,7 @@ class DSASlide:
                         intersecting_ftu_props = self.ftu_props[ftu][ftu_intersect_idx[0]]
                         intersecting_ftu_poly = self.ftu_polys[ftu][ftu_intersect_idx[0]]
                 """
+                # This is for also adding spots, not including for now.
                 else:
                     spot_intersect_index = [i for i in range(0,len(self.spot_polys)) if self.spot_polys[i].intersects(box_poly)]
 
@@ -449,6 +450,9 @@ class CODEXSlide(DSASlide):
     def intersecting_frame_intensity(self,box_poly,frame_list):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
         
+        if frame_list=='all':
+            frame_list = [i for i in self.wsi.channel_names if not i=='Histology (H&E)']
+
         box_coordinates = np.array(self.convert_map_coords(list(box_poly.exterior.coords)))
         min_x = int(np.min(box_coordinates[:,0]))
         min_y = int(np.min(box_coordinates[:,1]))
