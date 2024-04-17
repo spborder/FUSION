@@ -3857,8 +3857,6 @@ class FUSION:
             if triggered_id == 'edit_control':
                 
                 if triggered_id=='edit_control':
-                    #print(f'len of new_geojson: {len(new_geojson)}')
-                    #print(new_geojson)
                     #TODO: get_pattern_matching_value test here
                     if type(new_geojson)==list:
                         new_geojson = new_geojson[0]    
@@ -3885,8 +3883,8 @@ class FUSION:
                                 new_roi = {'type':'FeatureCollection','features':[geo]}
                                 
                                 # New geojson has no properties which can be used for overlays or anything so we have to add those
-                                # Step 1, find intersecting spots:
                                 if self.wsi.spatial_omics_type=='Visium':
+                                    # Step 1, find intersecting spots:
                                     overlap_props = self.wsi.find_intersecting_spots(shape(new_roi['features'][0]['geometry']))
                                     # Adding Main_Cell_Types from intersecting spots data
                                     main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()

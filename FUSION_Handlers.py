@@ -718,6 +718,9 @@ class LayoutHandler:
                         )
                     ])
                 ]),
+                dbc.Row([
+                    html.Div(id = {'type':'added-filter-div'})
+                ],align='center'),
                 html.Hr(),
                 dbc.Row([
                     dbc.Col([
@@ -750,7 +753,8 @@ class LayoutHandler:
                     dbc.Label(
                         'Structure Hierarchy',
                         html_for = 'structure-hierarchy'
-                    )
+                    ),
+                    self.gen_info_button('Update which structures should be considered "contained" within the boundaries of other structures. Click Reset to revert back to the original annotations.')
                 ]),
                 dbc.Row([
                     dbc.Tabs(
