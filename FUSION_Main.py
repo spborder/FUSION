@@ -408,7 +408,7 @@ class FUSION:
 
                 # Generating visualization layout with empty clustering data, default filter vals, and no WSI
                 self.wsi = None
-                self.filter_vals = [0,1]
+                self.filter_vals = None
                 self.layout_handler.gen_vis_layout(
                     self.wsi
                     )
@@ -589,14 +589,32 @@ class FUSION:
             State({'type':'hgnc-id','index':ALL},'children'),
             prevent_initial_call = True
         )(self.get_asct_table)
+        
         # Adding filter to apply to structures in the image
-        """
         self.app.callback(
-            [Output('filter-div','children')],
-            [Input('add-filter','n_clicks')],
+            [
+                Output({'type':'added-filter-div','index':ALL},'children')
+            ],
+            [
+                Input('add-filter-button','n_clicks'),
+                Input({'type':'delete-filter','index':ALL},'n_clicks')
+            ],
             prevent_initial_call = True
         )(self.add_filter)
-        """
+
+        # Adding min/max values for an added slider
+        self.app.callback(
+            [
+                Output({'type':'added-filter-slider','index':MATCH},'min'),
+                Output({'type':'added-filter-slider','index':MATCH},'max'),
+                Output({'type':'added-filter-drop-drop','index':MATCH},'options'),
+                Output({'type':'added-filter-drop-drop','index':MATCH},'value'),
+                Output({'type':'added-filter-drop-drop','index':MATCH},'style'),
+                Output({'type':'added-filter-slider-div','index':MATCH},'style')
+            ],
+            Input({'type':'added-filter-drop','index':MATCH},'value'),
+            prevent_initial_call = True
+        )(self.add_filter_slider)
 
         # Updating Cell Composition pie charts
         self.app.callback(
@@ -1860,27 +1878,7 @@ class FUSION:
         raw_values_list = []
         if not self.overlay_prop is None:
             if not self.overlay_prop['name'] is None:
-
-                # Iterating through each ftu in each group:
-                for f in self.wsi.ftu_props:
-                    # Grabbing values using utils function
-                    f_raw_vals = extract_overlay_value(self.wsi.ftu_props[f],self.overlay_prop)
-                    raw_values_list.extend(f_raw_vals)
-
-                if self.wsi.spatial_omics_type=='Visium':
-                    # Iterating through spots
-                    spot_raw_vals = extract_overlay_value(self.wsi.spot_props,self.overlay_prop)
-                    raw_values_list.extend(spot_raw_vals)
-
-                # Check for manual ROIs
-                if len(self.wsi.manual_rois)>0:
-
-                    #TODO: Record manual ROI properties in a more sane manner.
-                    manual_props = [i['geojson']['features'][0]['properties'] for i in self.wsi.manual_rois if 'properties' in i['geojson']['features'][0]]
-                    manual_raw_vals = extract_overlay_value(manual_props,self.overlay_prop)
-                    raw_values_list.extend(manual_raw_vals)
-
-        raw_values_list = np.unique(raw_values_list).tolist()
+                raw_values_list.extend(self.wsi.get_overlay_value_list(self.overlay_prop))
 
         # Converting to RGB
         if len(raw_values_list)>0:
@@ -1947,7 +1945,7 @@ class FUSION:
                 m_prop = cell_val_parts[0]
                 cell_val = cell_val_parts[1]
             else:
-                m_prop = ''
+                m_prop = cell_val
             
             # Updating overlay property
             if m_prop == 'Main_Cell_Types':
@@ -1990,7 +1988,7 @@ class FUSION:
                     self.overlap_prop = {
                         'name': m_prop,
                         'value': cell_name,
-                        'sub_value': None
+                        'sub_value': cell_sub_val
                     }
                     self.update_hex_color_key()
                     color_bar_style['width'] = '350px'
@@ -2065,7 +2063,7 @@ class FUSION:
                 filter_max_val = np.max(list(self.hex_color_key.keys()))
                 filter_disable = False
 
-            elif cell_val == 'Max Cell Type':
+            elif m_prop == 'Max Cell Type':
                 # Getting the maximum cell type present for each structure
                 self.overlay_prop = {
                     'name': 'Main_Cell_Types',
@@ -2089,7 +2087,7 @@ class FUSION:
                 filter_max_val = 1.0
                 filter_disable = True
 
-            elif cell_val == 'Cluster':
+            elif m_prop == 'Cluster':
                 # Getting cluster value associated with each structure
                 self.overlay_prop = {
                     'name': 'Cluster',
@@ -2112,7 +2110,7 @@ class FUSION:
                 filter_max_val = 1.0
                 filter_disable = True
                 
-            elif cell_val == 'FTU Label':
+            elif m_prop == 'FTU Label':
                 self.overlay_prop = {
                     'name': 'Structure',
                     'value': None,
@@ -2172,7 +2170,7 @@ class FUSION:
             elif m_prop == 'Morphometrics':
 
                 self.overlay_prop = {
-                    'name': 'Morphometrics',
+                    'name': m_prop,
                     'value': cell_val,
                     'sub_value': None
                 }
@@ -2191,15 +2189,14 @@ class FUSION:
                 filter_disable = False
             
             else:
-                if m_prop=='':
-                    # For other properties
-                    self.overlap_prop = {
-                        'name': cell_val,
+                if m_prop==cell_val:
+                    self.overlay_prop = {
+                        'name': m_prop,
                         'value': None,
                         'sub_value': None
                     }
                 else:
-                    self.overlap_prop = {
+                    self.overlay_prop = {
                         'name': m_prop,
                         'value': cell_val,
                         'sub_value': None
@@ -6308,10 +6305,152 @@ class FUSION:
         Updating structure boundaries according to selected hierarchy        
         """
         pass
+    
+    def add_filter(self,butt_click, delete_click):
+
+        print(ctx.triggered_id)
+        print(butt_click)
+        print(delete_click)
+        delete_clicks = sum([i if not i is None else 0 for i in delete_click])
+        print(delete_clicks)
+
+        if not self.wsi is None and not self.overlay_prop is None and not self.filter_vals is None:
+            if ctx.triggered_id=='add-filter-button':
+                # Returning a new dropdown for selecting properties to use for a filter
+
+                # Find min and max vals
+                filter_val = self.wsi.properties_list[0]
+                if '-->' in filter_val:
+                    filter_val_parts = filter_val.split(' --> ')
+                    m_prop = filter_val_parts[0]
+                    val = filter_val_parts[1]
+                    # For full cell names
+                    if val in self.cell_names_key:
+                        val = self.cell_names_key[val]
+                else:
+                    m_prop = filter_val
+                    val = None
+
+                unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
+                value_types = [type(i) for i in unique_values][0]
+                if value_types in [int,float]:
+                    value_disable = False
+                    value_display = {'display':'inline-block','margin':'auto','width':'100%'}
+                    str_disable = True
+                    str_display = {'display':'none','margin':'auto','width':'100%'}
+                else:
+                    value_disable = True
+                    value_display = {'display':'none','margin':'auto','width':'100%'}
+                    str_disable = False
+                    str_display = {'display': 'inline-block','margin':'auto','width':'100%'}
+
+                value_slider = html.Div(
+                        dcc.RangeSlider(
+                            id = {'type':'added-filter-slider','index':butt_click},
+                            min = np.min(unique_values),
+                            max = np.max(unique_values),
+                            step = 0.01,
+                            marks = None,
+                            tooltip = {'placement':'bottom','always_visible':True},
+                            allowCross = False,
+                            disabled = value_disable
+                        ),
+                        style = value_display,
+                        id = {'type':'added-filter-slider-div','index':butt_click}  
+                    )
+                
+                # "slider" but for categorical
+                str_slider = dcc.Dropdown(
+                    id = {'type':'added-filter-drop-drop','index':butt_click},
+                    options = unique_values,
+                    multi=True,
+                    value = unique_values,
+                    disabled = str_disable,
+                    style = str_display
+                )
+
+                added_filter_div = [
+                        dbc.Row([
+                            dbc.Col(
+                                dcc.Dropdown(
+                                    options = self.wsi.properties_list,
+                                    value = self.wsi.properties_list[0],
+                                    placeholder = 'Select new property to filter FTUs',
+                                    id = {'type':'added-filter-drop','index':butt_click}
+                                ),
+                                md = 10
+                            ),
+                            dbc.Col(
+                                html.I(
+                                    id = {'type':'delete-filter','index':butt_click},
+                                    n_clicks= 0,
+                                    className = 'bi bi-x-circle-fill fa-2x',
+                                    style = {'color':'rgb(255,0,0)'}
+                                ),
+                                md = 2
+                            )
+                        ]),
+                        value_slider,
+                        str_slider,
+                        dbc.Row(
+                            html.Div(
+                                id = {'type':'added-filter-div','index': butt_click+1}
+                            )
+                        )
+                    ]
+
+                # Adding new filter to the end
+                print(f'{len(ctx.outputs_list)} outputs expected')
+                new_filter_div = []
+                for i in range(len(ctx.outputs_list)):
+                    print(i)
+                    if i==butt_click-delete_clicks-1:
+                        new_filter_div.append(added_filter_div)
+                    else:
+                        new_filter_div.append(no_update)
 
 
+            elif ctx.triggered_id['type']=='delete-filter':
+                
+                new_filter_div = []
+                for i in range(len(ctx.outputs_list)):
+                    print(i)
+                    if not i+1==ctx.triggered_id['index']:
+                        new_filter_div.append(no_update)
+                    else:
+                        new_filter_div.append([])
+                        
 
+            return new_filter_div
+        else:
+            raise exceptions.PreventUpdate
+        
+    def add_filter_slider(self, filter_drop):
 
+        print(ctx.triggered_id)
+        # Find min and max vals
+        filter_val = filter_drop
+        if '-->' in filter_val:
+            filter_val_parts = filter_val.split(' --> ')
+            m_prop = filter_val_parts[0]
+            val = filter_val_parts[1]
+            # For full cell names
+            if val in self.cell_names_key:
+                val = self.cell_names_key[val]
+        else:
+            m_prop = filter_val
+            val = None
+
+        unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
+        value_types = [type(i) for i in unique_values][0]
+        if value_types in [int,float]:
+            slider_style = {'display':'inline-block','margin':'auto','width':'100%'}
+            drop_style = {'display':'none','margin':'auto','width':'100%'}
+            return np.min(unique_values), np.max(unique_values), no_update, no_update,drop_style,slider_style
+        else:
+            slider_style = {'display':'none','margin':'auto','width':'100%'}
+            drop_style = {'display':'inline-block','margin':'auto','width':'100%'}
+            return no_update, no_update, unique_values, unique_values,drop_style,slider_style
 
 
 

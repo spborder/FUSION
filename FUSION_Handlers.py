@@ -719,7 +719,29 @@ class LayoutHandler:
                     ])
                 ]),
                 dbc.Row([
-                    html.Div(id = {'type':'added-filter-div'})
+                    html.Div(
+                        id = 'parent-added-filter-div',
+                        children = [
+                            html.Div(
+                                id = {'type':'added-filter-div','index':0},
+                                children = [
+                                    html.I(
+                                        className='bi bi-x-fill fa-2x',
+                                        id = {'type':'delete-filter','index':0},
+                                        style = {'display':'none'}
+                                    )                                    
+                                ]
+                            )
+                        ]
+                    ),
+                    html.Div(
+                        html.I(
+                            className='bi bi-filter-circle fa-2x',
+                            n_clicks = 0,
+                            id='add-filter-button',
+                            style = {'display':'inline-block','position':'relative','left':'45%','right':'50%'}
+                        ),
+                    )
                 ],align='center'),
                 html.Hr(),
                 dbc.Row([

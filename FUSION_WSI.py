@@ -14,6 +14,7 @@ import geojson
 import shutil
 
 from tqdm import tqdm
+from FUSION_Utils import extract_overlay_value
 
 class DSASlide:
 
@@ -423,6 +424,34 @@ class DSASlide:
 
             return tree_dict
 
+    def get_overlay_value_list(self, overlay_prop):
+        """
+        Pulling out overlay props and returning list of raw values
+        """
+
+        raw_values_list = []
+        # Iterating through each ftu in each group:
+        for f in self.ftu_props:
+            # Grabbing values using utils function
+            f_raw_vals = extract_overlay_value(self.ftu_props[f],overlay_prop)
+            raw_values_list.extend(f_raw_vals)
+
+        if self.spatial_omics_type=='Visium':
+            # Iterating through spots
+            spot_raw_vals = extract_overlay_value(self.spot_props,overlay_prop)
+            raw_values_list.extend(spot_raw_vals)
+
+        # Check for manual ROIs
+        if len(self.manual_rois)>0:
+
+            #TODO: Record manual ROI properties in a more sane manner.
+            manual_props = [i['geojson']['features'][0]['properties'] for i in self.manual_rois if 'properties' in i['geojson']['features'][0]]
+            manual_raw_vals = extract_overlay_value(manual_props,overlay_prop)
+            raw_values_list.extend(manual_raw_vals)
+
+        raw_values_list = np.unique(raw_values_list).tolist()
+
+        return raw_values_list
 
 
 class VisiumSlide(DSASlide):
