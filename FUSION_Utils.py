@@ -14,7 +14,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 import textwrap
 
-
+from skimage import draw
+from scipy import ndimage
 
 def get_pattern_matching_value(input_val):
     """
@@ -136,40 +137,27 @@ def process_filters(input_keys,input_values,input_styles,cell_names_key=None):
 
     return filter_list
 
+# Taken from plotly image annotation tutorial: https://dash.plotly.com/annotations#changing-the-style-of-annotations
+def path_to_indices(path):
+    """
+    From SVG path to numpy array of coordinates, each row being a (row, col) point
+    """
+    indices_str = [
+        el.replace("M", "").replace("Z", "").split(",") for el in path.split("L")
+    ]
+    return np.rint(np.array(indices_str, dtype=float)).astype(int)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def path_to_mask(path, shape):
+    """
+    From SVG path to a boolean array where all pixels enclosed by the path
+    are True, and the other pixels are False.
+    """
+    cols, rows = path_to_indices(path).T
+    rr, cc = draw.polygon(rows, cols)
+    mask = np.zeros(shape, dtype=bool)
+    mask[rr, cc] = True
+    mask = ndimage.binary_fill_holes(mask)
+    return mask
 
 
 

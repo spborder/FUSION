@@ -777,7 +777,7 @@ class LayoutHandler:
                         html_for = 'structure-hierarchy'
                     ),
                     self.gen_info_button('Update which structures should be considered "contained" within the boundaries of other structures. Click Reset to revert back to the original annotations.')
-                ]),
+                ],style={'display':'none'}),
                 dbc.Row([
                     dbc.Tabs(
                         id = 'ftu-structure-hierarchy',
@@ -813,7 +813,7 @@ class LayoutHandler:
                             for idx,struct in enumerate(list(combined_colors_dict.keys()))
                         ]
                     )
-                ])
+                ],style={'display':'none'})
             ])
         ])
 

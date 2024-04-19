@@ -873,6 +873,21 @@ class FUSION:
             prevent_initial_call = True
         )(self.populate_structure_hierarchy)
 
+        # Grabbing points from current viewport umap (CODEX) and plotting other properties
+        self.app.callback(
+            [
+                Output({'type':'extracted-cell-labeling','index':ALL},'children'),
+                Output({'type':'cell-labeling-criteria','index':ALL},'children')
+            ],
+            [
+                Input({'type':'ftu-cell-pie','index':ALL},'selectedData'),
+                Input({'type':'cell-labeling-drop','index':ALL},'value'),
+                Input({'type':'cell-labeling-set','index':ALL},'n_clicks')
+            ],
+            prevent_initial_call = True
+        )(self.cell_labeling)
+
+
     def builder_callbacks(self):
 
         # Initializing plot after selecting dataset(s)
@@ -1542,6 +1557,7 @@ class FUSION:
             if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
                 intersecting_ftus = {}
+                intersecting_ftu_polys = {}
                 if self.wsi.spatial_omics_type=='Visium':
                     # Returns dictionary of intersecting spot properties
                     intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
@@ -1550,7 +1566,7 @@ class FUSION:
                     # Getting intersecting FTU information
                     for ftu in self.current_ftu_layers:
                         if not ftu=='Spots':
-                            intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                            intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
                     for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
                         intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
@@ -1595,7 +1611,7 @@ class FUSION:
 
                         for ftu in self.current_ftu_layers:
                             if not ftu=='Spots':
-                                intersecting_ftus[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                                intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
                         for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
                             intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
@@ -1650,14 +1666,15 @@ class FUSION:
                                 counts_data_list = []
                                 counts_data = pd.DataFrame()
                                 if type(intersecting_ftus[f])==list:
-                                    for ind_ftu in intersecting_ftus[f]:
+                                    for ftu_idx,ind_ftu in enumerate(intersecting_ftus[f]):
                                         
                                         if 'Cluster' in ind_ftu:
                                             counts_data_list.append({
                                                 'Structure': f,
                                                 'Cluster': ind_ftu['Cluster'],
                                                 'umap_x': ind_ftu['umap.x'],
-                                                'umap_y': ind_ftu['umap.y']
+                                                'umap_y': ind_ftu['umap.y'],
+                                                'Bbox': list(intersecting_ftu_polys[f][ftu_idx].bounds)
                                             })
                                 
                                 if len(counts_data_list)>0:
@@ -1726,7 +1743,8 @@ class FUSION:
                                         data_frame = counts_data,
                                         x = 'umap_x',
                                         y = 'umap_y',
-                                        color = 'Cluster'
+                                        color = 'Cluster',
+                                        custom_data = 'Bbox'
                                     )
                                 elif cell_view_type=='cell':
 
@@ -1853,7 +1871,20 @@ class FUSION:
                             html.Hr(),
                             dbc.Row(
                                 dbc.Tabs(tab_list,active_tab=f'tab_0')
-                            )
+                            ),
+                            html.Hr(),
+                            dbc.Row([
+                                html.Div(
+                                    id = {'type':'extracted-cell-labeling','index':0},
+                                    children = ['Select points to start labeling!']
+                                )
+                            ]),
+                            dbc.Row([
+                                html.Div(
+                                    id = {'type':'cell-labeling-criteria','index':0},
+                                    children = []
+                                )
+                            ])
                         ])
 
                         return return_div
@@ -6469,6 +6500,35 @@ class FUSION:
             return no_update, no_update, unique_values, unique_values,drop_style,slider_style
         else:
             raise exceptions.PreventUpdate
+
+    def cell_labeling(self, selectedData,frame_drop,set_click):
+        """
+        Takes as input some selected cells, a frame to plot their distribution of intensities, and then a Set button that labels those cells
+        """
+
+        print(ctx.triggered_id)
+        print(selectedData)
+        print(frame_drop)
+        print(set_click)
+        return_div = html.Div()
+
+        if ctx.triggered_id['type']=='ftu-cell-pie':
+
+            print('Pulling new cells from clusters')
+            labeling_cells = []
+
+        return [return_div], [json.dumps(selectedData)]
+
+
+
+
+
+
+
+
+
+
+
 
 
 
