@@ -32,7 +32,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from matplotlib import colormaps
 
-from dash import dcc, ctx, MATCH, ALL, dash_table, exceptions, callback_context, no_update, DiskcacheManager
+from dash import dcc, ctx, MATCH, ALL, Patch, dash_table, exceptions, callback_context, no_update
 
 import dash_bootstrap_components as dbc
 import dash_leaflet as dl
@@ -593,7 +593,7 @@ class FUSION:
         # Adding filter to apply to structures in the image
         self.app.callback(
             [
-                Output({'type':'added-filter-div','index':ALL},'children')
+                Output('parent-added-filter-div','children',allow_duplicate=True),
             ],
             [
                 Input('add-filter-button','n_clicks'),
@@ -6307,17 +6307,14 @@ class FUSION:
         pass
     
     def add_filter(self,butt_click, delete_click):
-
-        print(ctx.triggered_id)
-        print(butt_click)
-        print(delete_click)
-        delete_clicks = sum([i if not i is None else 0 for i in delete_click])
-        print(delete_clicks)
-
+        """
+        Adding a new filter to apply to current FTUs
+        """
         if not self.wsi is None and not self.overlay_prop is None and not self.filter_vals is None:
             if ctx.triggered_id=='add-filter-button':
                 # Returning a new dropdown for selecting properties to use for a filter
 
+                patched_list = Patch()
                 # Find min and max vals
                 filter_val = self.wsi.properties_list[0]
                 if '-->' in filter_val:
@@ -6330,6 +6327,10 @@ class FUSION:
                 else:
                     m_prop = filter_val
                     val = None
+                
+                if m_prop == 'Max Cell Type':
+                    m_prop = 'Main_Cell_Types'
+                    val = 'max'
 
                 unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
                 value_types = [type(i) for i in unique_values][0]
@@ -6369,7 +6370,8 @@ class FUSION:
                     style = str_display
                 )
 
-                added_filter_div = [
+                def new_filter_item():
+                    return html.Div([
                         dbc.Row([
                             dbc.Col(
                                 dcc.Dropdown(
@@ -6389,45 +6391,30 @@ class FUSION:
                                 ),
                                 md = 2
                             )
-                        ]),
+                        ],align='center'),
                         value_slider,
-                        str_slider,
-                        dbc.Row(
-                            html.Div(
-                                id = {'type':'added-filter-div','index': butt_click+1}
-                            )
-                        )
-                    ]
+                        str_slider
+                    ])
 
-                # Adding new filter to the end
-                print(f'{len(ctx.outputs_list)} outputs expected')
-                new_filter_div = []
-                for i in range(len(ctx.outputs_list)):
-                    print(i)
-                    if i==butt_click-delete_clicks-1:
-                        new_filter_div.append(added_filter_div)
-                    else:
-                        new_filter_div.append(no_update)
-
+                patched_list.append(new_filter_item())
 
             elif ctx.triggered_id['type']=='delete-filter':
-                
-                new_filter_div = []
-                for i in range(len(ctx.outputs_list)):
-                    print(i)
-                    if not i+1==ctx.triggered_id['index']:
-                        new_filter_div.append(no_update)
-                    else:
-                        new_filter_div.append([])
-                        
 
-            return new_filter_div
+                patched_list = Patch()
+                values_to_remove = []
+                for i,val in enumerate(delete_click):
+                    if val:
+                        values_to_remove.insert(0,i)
+                
+                for v in values_to_remove:
+                    del patched_list[v]
+                
+            return patched_list
         else:
             raise exceptions.PreventUpdate
         
     def add_filter_slider(self, filter_drop):
 
-        print(ctx.triggered_id)
         # Find min and max vals
         filter_val = filter_drop
         if '-->' in filter_val:
@@ -6440,6 +6427,10 @@ class FUSION:
         else:
             m_prop = filter_val
             val = None
+
+            if m_prop=='Max Cell Type':
+                m_prop = 'Main_Cell_Types'
+                val = 'max'
 
         unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
         value_types = [type(i) for i in unique_values][0]
