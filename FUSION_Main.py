@@ -48,7 +48,7 @@ import time
 from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler, GeneHandler
 from FUSION_Prep import CODEXPrep, VisiumPrep, Prepper
-from FUSION_Utils import get_pattern_matching_value, extract_overlay_value, gen_violin_plot
+from FUSION_Utils import get_pattern_matching_value, extract_overlay_value, gen_violin_plot, process_filters
 
 from upload_component import UploadComponent
 
@@ -283,6 +283,7 @@ class FUSION:
                     for (let i = 0; i < filter_vals.length; i++) {
                         // Iterating through filter_vals dict
                         var filter = filter_vals[i];         
+                        console.log(filter);
                                                 
                         if (filter.name) {
                             // Checking if the filter name is in the feature
@@ -313,14 +314,25 @@ class FUSION:
                         }
                                  
                         if (filter.range) {
-                            if (test_val < filter.range[0]) {
-                                return_feature = return_feature & false;
+                            if (typeof filter.range[0]==='number') {
+                                console.log('is a number');
+                                if (test_val < filter.range[0]) {
+                                    return_feature = return_feature & false;
+                                }
+                                if (test_val > filter.range[1]) {
+                                    return_feature = return_feature & false;
+                                }   
+                            } else {
+                                console.log('is not a number');
+                                if (filter.range.includes(return_feature)) {
+                                    return_feature = return_feature & true;
+                                } else {
+                                    return_feature = return_feature & false;
+                                }
                             }
-                            if (test_val > filter.range[1]) {
-                                return_feature = return_feature & false;
-                            }         
                         }
                     }
+                    
                     return return_feature;
                                  
                 } else {
@@ -576,9 +588,13 @@ class FUSION:
              Output('cell-sub-select-div','children'),Output({'type':'gene-info-div','index':ALL},'style'),
              Output({'type':'gene-info-div','index':ALL},'children')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
-             Input('filter-slider','value'),Input({'type':'ftu-bound-color-butt','index':ALL},'n_clicks'),
+             Input('filter-slider','value'), Input({'type':'added-filter-slider','index':ALL},'value'),Input({'type':'added-filter-drop-drop','index':ALL},'value'),
+             Input({'type':'added-filter-drop','index':ALL},'value'),
+             Input({'type':'ftu-bound-color-butt','index':ALL},'n_clicks'),
              Input({'type':'cell-sub-drop','index':ALL},'value')],
-            State({'type':'ftu-bound-color','index':ALL},'value'),
+            [State({'type':'ftu-bound-color','index':ALL},'value'),
+             State({'type':'added-filter-slider-div','index':ALL},'style'),
+             State({'type':'added-filter-drop-drop','index':ALL},'style')],
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -856,7 +872,6 @@ class FUSION:
             Input('ftu-structure-hierarchy','active_tab'),
             prevent_initial_call = True
         )(self.populate_structure_hierarchy)
-
 
     def builder_callbacks(self):
 
@@ -1896,7 +1911,7 @@ class FUSION:
         else:
             self.hex_color_key = {}
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,ftu_color_butt,cell_sub_val,ftu_bound_color):
+    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_drop,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style,added_drop_style):
 
         print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
 
@@ -2230,8 +2245,6 @@ class FUSION:
             filter_min_val = 0
             filter_max_val = 1
 
-
-        #TODO: Add button to update filters and specify property to use as a filter
         if not filter_disable:
             self.filter_vals = [
                 {
@@ -2241,6 +2254,18 @@ class FUSION:
                     'range': filter_vals
                 }
             ]
+
+            # Processing the add-on filters:
+            repeated_filter_keys = [i for i in added_filter_keys for _ in range(2)]
+            repeated_filter_values = []
+            repeated_filter_styles = []
+            for j in range(len(added_filter_slider)):
+                repeated_filter_values.extend([added_filter_slider[j],added_filter_drop[j]])
+                repeated_filter_styles.extend([added_slide_style[j],added_drop_style[j]])
+            processed_filters = process_filters(repeated_filter_keys,repeated_filter_values,repeated_filter_styles,self.cell_names_key)
+
+            self.filter_vals.extend(processed_filters)
+
         else:
             self.filter_vals = None
 
@@ -6438,12 +6463,12 @@ class FUSION:
             slider_style = {'display':'inline-block','margin':'auto','width':'100%'}
             drop_style = {'display':'none','margin':'auto','width':'100%'}
             return np.min(unique_values), np.max(unique_values), no_update, no_update,drop_style,slider_style
-        else:
+        elif value_types in [str]:
             slider_style = {'display':'none','margin':'auto','width':'100%'}
             drop_style = {'display':'inline-block','margin':'auto','width':'100%'}
             return no_update, no_update, unique_values, unique_values,drop_style,slider_style
-
-
+        else:
+            raise exceptions.PreventUpdate
 
 
 

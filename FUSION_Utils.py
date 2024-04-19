@@ -32,7 +32,6 @@ def get_pattern_matching_value(input_val):
 
     return return_val
 
-
 def extract_overlay_value(structure_list,overlay_prop):
     """
     Used to pull out raw value to add to list used to generate heatmaps/colorbars
@@ -104,6 +103,38 @@ def gen_violin_plot(feature_data, label_col, label_name, feature_col, custom_col
 
     return figure
 
+def process_filters(input_keys,input_values,input_styles,cell_names_key=None):
+    """
+    Taking keys, values, and styles and returning a list of filter dictionaries that can be used to remove unwanted FTUs
+    """
+    filter_list = []
+    for prop,style,values in zip(input_keys,input_styles,input_values):
+        if not style['display'] is None:
+            
+            if '-->' in prop:
+                filter_parts = prop.split(' --> ')
+                m_prop = filter_parts[0]
+                val = filter_parts[1]
+            else:
+                m_prop = prop
+                val = None
+
+            if m_prop=='Max Cell Type':
+                m_prop = 'Main_Cell_Types'
+                val = 'max'
+
+            if cell_names_key:
+                if val in cell_names_key:
+                    val = cell_names_key[val]
+
+            filter_list.append({
+                'name': m_prop,
+                'value': val,
+                'sub_value': None,
+                'range': values
+            })
+
+    return filter_list
 
 
 

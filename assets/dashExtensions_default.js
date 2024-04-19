@@ -98,6 +98,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     for (let i = 0; i < filter_vals.length; i++) {
                         // Iterating through filter_vals dict
                         var filter = filter_vals[i];
+                        console.log(filter);
 
                         if (filter.name) {
                             // Checking if the filter name is in the feature
@@ -128,14 +129,25 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                         }
 
                         if (filter.range) {
-                            if (test_val < filter.range[0]) {
-                                return_feature = return_feature & false;
-                            }
-                            if (test_val > filter.range[1]) {
-                                return_feature = return_feature & false;
+                            if (typeof filter.range[0] === 'number') {
+                                console.log('is a number');
+                                if (test_val < filter.range[0]) {
+                                    return_feature = return_feature & false;
+                                }
+                                if (test_val > filter.range[1]) {
+                                    return_feature = return_feature & false;
+                                }
+                            } else {
+                                console.log('is not a number');
+                                if (filter.range.includes(return_feature)) {
+                                    return_feature = return_feature & true;
+                                } else {
+                                    return_feature = return_feature & false;
+                                }
                             }
                         }
                     }
+
                     return return_feature;
 
                 } else {
