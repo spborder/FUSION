@@ -322,6 +322,8 @@ class DSASlide:
                 
                 # Returning list of dictionaries that use original keys in properties
                 intersecting_ftu_props = []
+                intersecting_ftu_polys = []
+
                 if len(ftu_intersect_idx)>0:
                     intersecting_ftu_props = [self.ftu_props[ftu][i] for i in ftu_intersect_idx]
                     intersecting_ftu_polys = [self.ftu_polys[ftu][i] for i in ftu_intersect_idx]

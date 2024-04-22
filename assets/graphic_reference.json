@@ -1,0 +1,146 @@
+{
+    "PT":{
+        "graphic":"./assets/cell_graphics/pt_graphic.svg",
+        "full":"Proximal Tubule",
+        "subtypes":["PT","PT-S1","PT-S2","PT-S3","aPT","cycPT","dPT","dPT/DTL"],
+        "states":["reference","reference","reference","reference","altered","cycling","degenerative","degenerative"],
+        "structure":["Tubule"],
+        "class":["Epithelial"],
+        "color_code":["243,83,69","241,189,106","223,239,108"]
+    },
+    "DTL":{
+        "graphic":"./assets/cell_graphics/dtl_graphic.png",
+        "full":"Descending Thin Limb",
+        "subtypes":["DTL","DTL1","DTL2","DTL3","dDTL3"],
+        "states":["reference","reference","reference","reference","degenerative"],
+        "structure":["Tubule"],
+        "class":["Epithelial"],
+        "color_code":["116,171,10"]
+    },
+    "ATL":{
+        "graphic":"./assets/cell_graphics/atl_graphic.svg",
+        "full":"Ascending Thin Limb",
+        "subtypes":["ATL","dATL"],
+        "states":["reference","degenerative"],
+        "structure":["Tubule"],
+        "class":["Epithelial"],
+        "color_code":["100,204,113"]
+    },
+    "TAL":{
+        "graphic":"./assets/cell_graphics/tal_graphic.svg",
+        "full":"Thick Ascending Limb",
+        "subtypes":["TAL","aTAL1","aTAL2","M-TAL","dM-TAL","C-TAL","dC-TAL","MD"],
+        "states":["reference","altered","altered","reference","degenerative","reference","degenerative","reference"],
+        "structure":["Tubule"],
+        "class":["Epithelial"],
+        "color_code":["130,217,184"]
+    },
+    "DCT":{
+        "graphic":"./assets/cell_graphics/dct_graphic.svg",
+        "full":"Distal Convoluted Tubule",
+        "subtypes":["DCT","DCT1","DCT2","dDCT","cycDCT"],
+        "states":["reference","reference","reference","degenerative","cycling"],
+        "structure":["Tubule"],
+        "class":["Epithelial"],
+        "color_code":["114,198,232"]
+    },
+    "CNT":{
+        "graphic":"./assets/cell_graphics/cnt_graphic.png",
+        "full":"Connecting Tubule",
+        "subtypes":["CNT","CNT-PC","dCNT","cycCNT"],
+        "states":["reference","reference","degenerative","cycling"],
+        "structure":["Tubule"],
+        "class":["Epithelial"],
+        "color_code":["104,161,243"]
+    },
+    "PC":{
+        "graphic":"./assets/cell_graphics/Principal Cell.svg",
+        "full":"Principal Cell",
+        "subtypes":["PC","C-PC","CCD-PC","OMCD-PC","M-PC","dOMCD-PC","dM-PC","IMCD","dIMCD"],
+        "states":["reference","reference","reference","reference","reference","degenerative","degenerative","reference","degenerative"],
+        "structure":["Tubule"],
+        "class":["Epithelial"],
+        "color_code":["255,207,216"]
+    },
+    "IC":{
+        "graphic":"./assets/cell_graphics/Intercalated Cell.svg",
+        "full":"Intercalated Cell",
+        "subtypes":["IC","C-IC-A","CCD-IC-A","CNT-IC-A","dC-IC-A","OMCD-IC-A","M-IC-A","tPC-IC","IC-B"],
+        "states":["reference","reference","reference","reference","degenerative","reference","reference","transitioning","reference"],
+        "structure":["Tubule"],
+        "class":["Epithelial"],
+        "color_code":["242,188,198"]
+    },
+    "PapE":{
+        "graphic":"",
+        "full":"Papillary Tip Epithelial",
+        "subtypes":["PapE"],
+        "states":["reference"],
+        "structure":["Tubule"],
+        "class":["Epithelial"],
+        "color_code":[]
+    },
+    "POD":{
+        "graphic":"./assets/cell_graphics/podocyte-graphic.svg",
+        "full":"Podocyte",
+        "subtypes":["POD","dPOD"],
+        "states":["reference","degenerative"],
+        "structure":["Glomerulus"],
+        "class":["Epithelial"],
+        "color_code":["101,11,164"]
+    },
+    "PEC":{
+        "graphic":"./assets/cell_graphics/pec_graphic.PNG",
+        "full":"Parietal Epithelial Cell",
+        "subtypes":["PEC"],
+        "states":["reference"],
+        "structure":["Glomerulus"],
+        "class":["Epithelial"],
+        "color_code":["143,6,106"]
+    },
+    "EC":{
+        "graphic":"./assets/cell_graphics/Endothelial Cell Draft 1a.svg",
+        "full":"Endothelial Cell",
+        "subtypes":["EC","EC-GC","EC-AEA","EC-DVR","EC-PTC","dEC-PTC","EC-AVR","dEC","cycEC","EC-LYM"],
+        "states":["reference","reference","reference","reference","reference","degenerative","reference","degenerative","cycling","reference"],
+        "structure":["Various"],
+        "class":["Endothelial"],
+        "color_code":["239,241,241"]
+    },
+    "VSM/P":{
+        "graphic":"./assets/cell_graphics/Vascular Smooth Muscle Pericyte.svg",
+        "full":"Vascular Smooth Muscle Cell / Pericyte",
+        "subtypes":["VSM/P","MC","REN","VSMC","VSMC/P","dVSMC"],
+        "states":["reference","reference","reference","reference","reference","degenerative"],
+        "structure":["Various"],
+        "class":["Stroma"],
+        "color_code":["204,206,211","244,247,223"]
+    },
+    "FIB":{
+        "graphic":"./assets/cell_graphics/Fibroblast - draft 1a.svg",
+        "full":"Fibroblast",
+        "subtypes":["FIB","MYOF","cycMYOF","M-FIB","dM-FIB","aFIB","dFIB"],
+        "states":["reference","reference","reference","reference","degenerative","altered","degenerative"],
+        "structure":["Interstitium"],
+        "class":["Stroma"],
+        "color_code":["238,133,133","255,252,221"]
+    },
+    "IMM":{
+        "graphic":"./assets/cell_graphics/imm_graphic.svg",
+        "full":"Immune Cell",
+        "subtypes":["IMM","B","PL","T","NKT","MAST","MAC-M2","cycMNP","MDC","cDC","pDC","ncMON","N"],
+        "states":["reference","reference","reference","reference","reference","reference","reference","cycling","reference","reference","reference","reference","reference"],
+        "structure":["Interstitium"],
+        "class":["Immune"],
+        "color_code":["217,217,217","229,229,227"]
+    },
+    "NEU":{
+        "graphic":"./assets/cell_graphics/neu_graphic.PNG",
+        "full":"Neural Cells",
+        "subtypes":["NEU","SC/NEU"],
+        "states":["reference","reference"],
+        "structure":["Interstitium"],
+        "class":["Neural"],
+        "color_code":[]
+    }
+}

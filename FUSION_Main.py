@@ -640,7 +640,7 @@ class FUSION:
              Input({'type':'frame-histogram-drop','index':ALL},'value')],
             State('tools-tabs','active_tab'),
             prevent_initial_call = True
-        )(self.update_roi_pie)      
+        )(self.update_viewport_data)      
 
         # Updating cell hierarchy data
         self.app.callback(
@@ -877,15 +877,14 @@ class FUSION:
         self.app.callback(
             [
                 Output({'type':'extracted-cell-labeling','index':ALL},'children'),
-                Output({'type':'cell-labeling-criteria','index':ALL},'children')
+                Output({'type':'cell-labeling-criteria','index':ALL},'children'),
             ],
             [
                 Input({'type':'ftu-cell-pie','index':ALL},'selectedData'),
-                Input({'type':'cell-labeling-drop','index':ALL},'value'),
-                Input({'type':'cell-labeling-set','index':ALL},'n_clicks')
+                Input({'type':'cell-labeling-channel-drop','index':ALL},'value')
             ],
             prevent_initial_call = True
-        )(self.cell_labeling)
+        )(self.cell_labeling_initialize)
 
 
     def builder_callbacks(self):
@@ -1534,7 +1533,7 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
-    def update_roi_pie(self,bounds,cell_view_type,frame_list,current_tab):
+    def update_viewport_data(self,bounds,cell_view_type,frame_list,current_tab):
         
         if not self.wsi is None:
             if not bounds is None:
@@ -1674,7 +1673,7 @@ class FUSION:
                                                 'Cluster': ind_ftu['Cluster'],
                                                 'umap_x': ind_ftu['umap.x'],
                                                 'umap_y': ind_ftu['umap.y'],
-                                                'Bbox': list(intersecting_ftu_polys[f][ftu_idx].bounds)
+                                                'Hidden': {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds),'Cluster':ind_ftu['Cluster']}
                                             })
                                 
                                 if len(counts_data_list)>0:
@@ -1744,7 +1743,7 @@ class FUSION:
                                         x = 'umap_x',
                                         y = 'umap_y',
                                         color = 'Cluster',
-                                        custom_data = 'Bbox'
+                                        custom_data = 'Hidden'
                                     )
                                 elif cell_view_type=='cell':
 
@@ -6501,31 +6500,80 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def cell_labeling(self, selectedData,frame_drop,set_click):
+    def cell_labeling_initialize(self, selectedData, channel_select):
         """
         Takes as input some selected cells, a frame to plot their distribution of intensities, and then a Set button that labels those cells
         """
-
-        print(ctx.triggered_id)
-        print(selectedData)
-        print(frame_drop)
-        print(set_click)
+        selectedData = get_pattern_matching_value(selectedData)
+        channel_select = get_pattern_matching_value(channel_select)
         return_div = html.Div()
 
-        if ctx.triggered_id['type']=='ftu-cell-pie':
+        if ctx.triggered_id['type'] in ['ftu-cell-pie', 'cell-labeling-channel-drop']:
 
             print('Pulling new cells from clusters')
-            labeling_cells = []
+            # Pulling customdata from each point object
+            labeling_cells = [i['customdata'] for i in selectedData['points']]
 
-        return [return_div], [json.dumps(selectedData)]
+            if not ctx.triggered_id['type']=='cell-labeling-channel-drop':
+                new_channel_figure = go.Figure()
+                channel_val = []
+            else:
+                channel_val = channel_select
+                # Pulling data from selected cells:
+                cell_frame_intensity = []
+                cell_cluster_list = []
+                for cell in labeling_cells:
+                    cell_hist = self.wsi.intersecting_frame_intensity(box(*cell[0]['Bbox']),[channel_select])
+                    cell_cluster = cell[0]['Cluster']
 
+                    # Output here is a dictionary where cell_hist[channel_select] = {'':[],'':[]}
+                    total_intensity = np.mean(np.array([0]+cell_hist[channel_select]['hist']) * np.array(cell_hist[channel_select]['bin_edges']))
+                    cell_frame_intensity.append(round(total_intensity))
+                    cell_cluster_list.append(cell_cluster)
 
+                cell_frame_intensity_df = pd.DataFrame({f'{channel_select} Intensity':cell_frame_intensity,'Cluster': cell_cluster_list,'Cell':[f'Cell {idx}' for idx in range(len(cell_frame_intensity))]})
+                new_channel_figure = gen_violin_plot(cell_frame_intensity_df,label_col = 'Cluster', label_name = 'Cluster', feature_col = f'{channel_select} Intensity',custom_col = 'Cell')
 
+                new_channel_figure = go.Figure(new_channel_figure)
 
+            return_div = html.Div([
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Row(html.H6('Selected Cells')),
+                        dbc.Card(
+                            dbc.CardBody(
+                                children = [
+                                    html.Div(
+                                        f'Cell {idx} Bounding Box: {json.dumps(i)}'
+                                    )
+                                    for idx,i in enumerate(labeling_cells)
+                                    ],
+                                style = {'maxHeight':'60vh','overflow':'scroll'}
+                                )
+                            )
+                        ], md = 4),
+                    dbc.Col([
+                        dbc.Row(html.H6('Selected Cell Plot')),
+                        dbc.Row(
+                            dcc.Dropdown(
+                                options = self.wsi.channel_names,
+                                value = channel_val,
+                                placeholder = 'Select Channel to plot',
+                                id = {'type':'cell-labeling-channel-drop','index':0}
+                            ),
+                            style = {'marginTop':'5px','marginBottom':'5px'}
+                        ),
+                        dbc.Row([
+                            dcc.Graph(
+                                id = {'type':'cell-labeling-plot','index':0},
+                                figure = new_channel_figure
+                            )
+                        ])
+                    ])
+                ])
+            ])
 
-
-
-
+        return [return_div], [f'{len(selectedData["points"])} Cells selected']
 
 
 
@@ -6535,7 +6583,6 @@ class FUSION:
 def app(*args):
     
     # Using DSA as base directory for storage and accessing files
-    #dsa_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1/'
     dsa_url = os.environ.get('DSA_URL')
     try:
         username = os.environ.get('DSA_USER')
@@ -6549,6 +6596,7 @@ def app(*args):
     dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
 
     # Initial collection
+    #TODO: initial collection can be added as an environment variable
     initial_collection = ['/collection/10X_Visium']
     path_type = ['collection','collection']
     print(f'initial collection: {initial_collection}')
@@ -6601,7 +6649,6 @@ def app(*args):
             cli_dict['disabled'] = True
         
         cli_list.append(cli_dict)
-
 
     # Adding functionality that is specifically implemented in FUSION
     #fusion_cli = ['Segment Anything Model (SAM)','Contrastive Language-Image Pre-training (CLIP)']

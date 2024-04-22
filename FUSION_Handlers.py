@@ -3285,15 +3285,19 @@ class GirderHandler:
         self.usability_users = self.update_usability()
 
         # Downloading JSON resource
-        cell_graphics_resource = self.gc.get('resource/lookup',parameters={'path':assets_path+'cell_graphics/graphic_reference.json'})
-        self.cell_graphics_key = self.gc.get(f'/item/{cell_graphics_resource["_id"]}/download')
+        #cell_graphics_resource = self.gc.get('resource/lookup',parameters={'path':assets_path+'cell_graphics/graphic_reference.json'})
+        with open('./assets/graphic_reference.json','r') as f:
+            self.cell_graphics_key = json.load(f)
+        #self.cell_graphics_key = self.gc.get(f'/item/{cell_graphics_resource["_id"]}/download')
 
         self.cell_names = []
         for ct in self.cell_graphics_key:
             self.cell_names.append(self.cell_graphics_key[ct]['full'])
 
-        morpho_item = self.gc.get('resource/lookup',parameters={'path':assets_path+'morphometrics/morphometrics_reference.json'})
-        self.morphometrics_reference = self.gc.get(f'/item/{morpho_item["_id"]}/download')
+        #morpho_item = self.gc.get('resource/lookup',parameters={'path':assets_path+'morphometrics/morphometrics_reference.json'})
+        #self.morphometrics_reference = self.gc.get(f'/item/{morpho_item["_id"]}/download')
+        with open('./assets/morphometrics_reference.json','r') as f:
+            self.morphometrics_reference = json.load(f)
         
         self.morpho_names = []
         for mo in self.morphometrics_reference["Morphometrics"]:
@@ -3309,8 +3313,9 @@ class GirderHandler:
                         self.morpho_names.append(mo_name.replace('{}',sc))
 
         # Getting asct+b table
-        asct_b_table_id = self.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
-        self.asct_b_table = pd.read_csv(self.apiUrl+f'item/{asct_b_table_id}/download?token={self.user_token}',skiprows=list(range(10)))
+        #asct_b_table_id = self.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
+        #self.asct_b_table = pd.read_csv(self.apiUrl+f'item/{asct_b_table_id}/download?token={self.user_token}',skiprows=list(range(10)))
+        self.asct_b_table = pd.read_csv('./assets/Kidney_v1.2 - Kidney_v1.2.csv',skiprows=list(range(10)))
 
         # Generating plot feature selection dictionary
         self.generate_feature_dict(self.default_slides)
