@@ -156,7 +156,8 @@ class LayoutHandler:
         map_children = [
             dl.TileLayer(id = 'slide-tile',
                         url = map_url,
-                        tileSize = tile_size
+                        tileSize = tile_size,
+                        maxNativeZoom=zoom_levels-1
                         ),
             dl.FullScreenControl(position='topleft'),
             dl.FeatureGroup(id='feature-group',
@@ -817,6 +818,17 @@ class LayoutHandler:
             ])
         ])
 
+        # Annotation session tab
+        annotation_session_tab = dbc.Card([
+            dbc.CardBody([
+                html.Div(
+                    id = 'annotation-session-div',
+                    children = []
+                )
+            ])
+        ])
+
+
         # List of all tools tabs
         tool_tabs = [
             dbc.Tab(overlays_tab, label = 'Overlays',tab_id='overlays-tab'),
@@ -824,6 +836,7 @@ class LayoutHandler:
             dbc.Tab(cell_card,label = "Cell Graphics",tab_id='cell-graphics-tab'),
             dbc.Tab(cluster_card,label = 'Morphological Clustering',tab_id='clustering-tab'),
             dbc.Tab(extract_card,label = 'Download Data',tab_id='download-tab'),
+            dbc.Tab(annotation_session_tab, label = 'Annotation Station', tab_id = 'annotation-tab')
             #dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True,tab_id='analyses-tab'),
         ]
         
@@ -1767,6 +1780,191 @@ class LayoutHandler:
             )
 
             return map_children
+
+    def gen_annotation_card(self,dataset_handler, current_ftus):
+        """
+        Generate layout for annotation on structures
+        """
+        """
+        1. Current annotation sessions (for the user)
+            - Also show trained/training models
+            - Either personally created or shared
+        """
+
+        # Checking for current annotation sessions:
+        current_ann_sessions = dataset_handler.check_user_folder(folder_name='FUSION Annotation Sessions')
+        print(f'current_ann_sessions: {current_ann_sessions}')
+        if not current_ann_sessions is None:
+            # Checking annotation session folder for current sessions
+            ann_sessions = dataset_handler.gc.get(f'/folder',parameters={'parentType':'folder','parentId':current_ann_sessions["_id"]})
+            ann_session_names = [i['name'] for i in ann_sessions]
+
+            tab_list = [
+                dbc.Tab(
+                    label = i,
+                    tab_id = f'ann-sess-{idx}',
+                    activeTabClassName='fw-bold fst-italic',
+                    children = []
+                )
+                for idx,i in enumerate(ann_session_names)
+            ]
+
+            first_tab = html.Div([
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Row(html.P('Current Structures')),
+                        html.Div(
+                            children = [
+                                html.Div(
+                                    id = {'type':'annotation-station-ftu','index':idx},
+                                    children = [f'{i}: {len(current_ftus[i])}'],
+                                    style = {'display':'inline-block'}
+                                )
+                            for idx,i in enumerate(current_ftus)
+                            ]
+                        )
+                    ],md = 4),
+                    dbc.Col([
+                        dbc.Row(html.P('Select a structure to annotate in that structure')),
+                        dbc.Row([
+                            dcc.Graph(
+                                id = {'type':'annotation-current-structure','index':0},
+                                figure = go.Figure(),
+                                config = {
+                                    "modeBarButtonsToAdd": {
+                                        "drawopenpath",
+                                        "drawclosedpath",
+                                        "eraseshape"
+                                    }
+                                }
+                            )
+                        ]),
+                        dbc.Row([
+                            dbc.Col(
+                                dbc.Button(
+                                    'Previous',
+                                    id = {'type':'annotation-previous-button','index':0},
+                                    n_clicks = 0,
+                                    className = 'd-grid col-12 mx-auto'
+                                ),
+                                md = 3
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    'Save',
+                                    id = {'type':'annotation-save-button','index':0},
+                                    n_clicks = 0,
+                                    className = 'd-grid col-12 mx-auto'
+                                ),
+                                md = 6
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    'Next',
+                                    id = {'type':'annotation-next-button','index':0},
+                                    n_clicks = 0,
+                                    className = 'd-grid col-12 mx-auto'
+                                ),
+                                md = 3
+                            )
+                        ])
+                    ])
+                ],align='center'),
+                html.Hr(),
+                dbc.Row(
+                    html.P('Add a text label for the image')
+                ),
+                dbc.Row([
+                    dbc.Col(
+                        dcc.Input(
+                            placeholder='Add a class label type',
+                            id = {'type':'annotation-class-label','index':0}
+                        ),
+                        md = 5
+                    ),
+                    dbc.Col(
+                        dcc.Input(
+                            placeholder = 'Label for this image',
+                            id = {'type':'annotation-image-label','index':0}
+                        ),
+                        md = 5
+                    ),
+                    dbc.Col(
+                        html.I(
+                            id = {'type':'annotation-set-label','index':0},
+                            className = 'bi bi-check-circle-fill me-2',
+                            style = {'color':'rgb(0,255,0)'}
+                        ),
+                        md = 1
+                    ),
+                    dbc.Col(
+                        html.I(
+                            id = {'type':'annotation-delete-label','index':0},
+                            className = 'bi bi-x-circle-fill me-2',
+                            style = {'color':'rgb(255,0,0)'}
+                        ),
+                        md = 1
+                    ),
+                ],align = 'center')
+                ],
+            style = {'maxHeight':'70vh','overflow':'scroll'}
+            )
+
+        else:
+            
+            tab_list = []
+
+            first_tab = html.Div([
+                dbc.Row([
+                    dbc.Col(dbc.Label('Session Name: '),md = 5),
+                    dbc.Col(
+                        dcc.Input(
+                            placeholder = 'Name for new session',
+                            id = {'type':'annotation-session-name','index':0},
+                            style = {'width':'100%'}
+                        ),
+                        md = 7
+                    )
+                ],align='center',style = {'marginBottom':'10px'}),
+                dbc.Row(dbc.Label('Session Description'),align = 'center'),
+                dbc.Row(
+                    dcc.Textarea(
+                        id = {'type':'annotation-session-description','index':0},
+                        placeholder = 'Session Description',
+                        style = {'width':'100%'},
+                        maxLength = 10000
+                    ),
+                    align = 'center',
+                    style = {'marginBottom':'10px'}
+                ),
+                dbc.Row([
+                    'Add Users placeholder'
+                ],align='center'),
+                dbc.Row([
+                    dbc.Button(
+                        'Create New Session!',
+                        id = {'type':'create-annotation-session-button','index':0},
+                        className = 'd-grid col-12 mx-auto',
+                        n_clicks = 0
+                    )
+                ],
+                align='center',
+                style = {'marginBottom':'10px'}
+                )
+            ],style = {'maxHeight':'70vh','overflow':'scroll'})
+
+        print(f'len tab_list: {len(tab_list)}')
+        # Adding "Create New" tab
+        tab_list.append(
+            dbc.Tab(
+                label = 'Create New Session',
+                tab_id = f'ann-sess-{len(tab_list)}',
+                activeTabClassName='fw-bold fst-italic',
+                children = []
+            )
+        )
+
+        return tab_list, first_tab
 
     def get_user_ftu_labels(self,wsi,ftu):
 
@@ -3596,9 +3794,12 @@ class GirderHandler:
 
         return upload_file_response
 
-    def grab_from_user_folder(self,filename):
-
-        public_folder_path = f'/user/{self.username}/Public'
+    def grab_from_user_folder(self,filename,folder = None):
+        
+        if folder is None:
+            # Checking user public folder by default
+            public_folder_path = f'/user/{self.username}/Public'
+        
         public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
         public_folder_items = self.gc.get(f'/resource/{public_folder_id}/items?token={self.user_token}',parameters= {'type':'folder','limit':10000})
 
@@ -3609,6 +3810,8 @@ class GirderHandler:
                 user_folder_file = pd.read_csv(BytesIO(requests.get(f'{self.apiUrl}/item/{public_folder_items[public_folder_names.index(filename)]["_id"]}/download?token={self.user_token}').content))
             elif 'json' in filename:
                 user_folder_file = json.loads(requests.get(f'{self.apiUrl}/item/{public_folder_items[public_folder_names.index(filename)]["_id"]}/download?token={self.user_token}').content)
+            elif 'png' in filename:
+                user_folder_file = Image.open(BytesIO(requests.get(f'{self.apiUrl}/item/{public_folder_items[public_folder_names.index(filename)]["_id"]}/download?token={self.user_token}').content))            
             else:
                 print(f'File format: {filename} not implemented yet!')
                 user_folder_file = None
@@ -3619,22 +3822,28 @@ class GirderHandler:
 
         return user_folder_file
 
+    def check_user_folder(self,folder_name):
+        """
+        Checking if a folder with a specific name is in the user's public folder
+        """
+        public_folder_path = f'/user/{self.username}/Public'
+        public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
+
+        # Getting all folders in the folder
+        all_folders = self.gc.get(f'/folder',parameters = {'parentType':'folder','parentId':public_folder_id,'limit':100000})
+        folder_names = [i['name'] for i in all_folders]
+
+        if folder_name in folder_names:
+            return all_folders[folder_names.index(folder_name)]
+        else:
+            return None
+
     def add_slide_metadata(self,item_id,metadata_dict):
 
         # Adding slide-level metadata from upload page
         self.gc.put(f'/item/{item_id}/metadata',parameters={'metadata':json.dumps(metadata_dict)})
 
 
-    """
-    def get_cli_input_list(self,cli_id):
-        #TODO: figure out how to extract list of expected inputs & types for a given CLI from XML
-    
-    """
-    """
-    def post_cli(self,cli_id,inputs):
-        #TODO: figure out how to post a specific CLI with expected inputs, keeping track of job status, and returning outputs to FUSION
-
-    """
 
 class DownloadHandler:
     def __init__(self,

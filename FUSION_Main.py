@@ -634,7 +634,8 @@ class FUSION:
 
         # Updating Cell Composition pie charts
         self.app.callback(
-            Output('roi-pie-holder','children'),
+            [Output('roi-pie-holder','children'),
+             Output('annotation-session-div','children')],
             [Input('slide-map','bounds'),
              Input({'type':'roi-view-data','index':ALL},'value'),
              Input({'type':'frame-histogram-drop','index':ALL},'value')],
@@ -682,6 +683,7 @@ class FUSION:
              Output('slide-map','bounds'),
              Output('slide-tile','tileSize'),
              Output('slide-map','maxZoom'),
+             Output('slide-tile','maxZoom'),
              Output('slide-tile','maxNativeZoom'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
@@ -885,6 +887,18 @@ class FUSION:
             ],
             prevent_initial_call = True
         )(self.cell_labeling_initialize)
+
+        # Populating tabs for each annotation session in Annotation Station
+        self.app.callback(
+            [
+                Output({'type':'annotation-session-content','index':ALL},'children')
+            ],
+            [
+                Input({'type':'annotation-tab-group','index':ALL},'active_tab'),
+                Input({'type':'create-annotation-session-button','index':ALL},'n_clicks')
+            ],
+            prevent_initial_call = True
+        )(self.update_annotation_session)
 
 
     def builder_callbacks(self):
@@ -1550,7 +1564,7 @@ class FUSION:
             self.current_slide_bounds = None
 
             raise exceptions.PreventUpdate
-                
+        
         # Making a box-poly from the bounds
         if current_tab=='cell-compositions-tab':
             if not self.wsi is None:
@@ -1842,7 +1856,7 @@ class FUSION:
                             tab_list.append(f_tab)
 
                     if self.wsi.spatial_omics_type=='Visium' or self.wsi.spatial_omics_type=='Regular':
-                        return dbc.Tabs(tab_list,active_tab = 'tab_0')
+                        return dbc.Tabs(tab_list,active_tab = 'tab_0'), no_update
                     elif self.wsi.spatial_omics_type=='CODEX':
 
                         return_div = html.Div([
@@ -1886,13 +1900,54 @@ class FUSION:
                             ])
                         ])
 
-                        return return_div
+                        return return_div, no_update
 
                 else:
-                    return html.P('No FTUs in current view')
+                    return html.P('No FTUs in current view'), no_update
             else:
-                return html.P('Select a slide to get started!')
+                return html.P('Select a slide to get started!'), no_update
     
+        elif current_tab=='annotation-tab':
+            if self.dataset_handler.username=='fusionguest':
+                return no_update, html.P('Sign in or create an account to start annotating!')
+            else:
+                
+                # Getting intersecting FTU information
+                intersecting_ftus = {}
+                for ftu in self.current_ftu_layers:
+                    if not ftu=='Spots':
+                        intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+
+                for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
+                    intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
+
+                for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
+                    intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
+                
+                self.current_ftus = intersecting_ftus
+
+                #TODO: Check for current annotation session in user's public folder
+                annotation_tabs, first_tab = self.layout_handler.gen_annotation_card(self.dataset_handler,self.current_ftus)
+
+                annotation_tab_group = html.Div([
+                        dbc.Tabs(
+                            id = {'type':'annotation-tab-group','index':0},
+                            active_tab = 'ann-sess-0',
+                            children = annotation_tabs
+                        ),
+                        html.Div(
+                            id = {'type':'annotation-session-content','index':0},
+                            children = [
+                                first_tab
+                            ]
+                        )
+                ])
+
+                return no_update, annotation_tab_group
+        
+        else:
+            raise exceptions.PreventUpdate
+
     def update_state_bar(self,cell_click):
         if not cell_click is None:
             self.pie_cell = cell_click['points'][0]['label']
@@ -3108,8 +3163,7 @@ class FUSION:
                 for idx,struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-
-            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels, self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs
+            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.zoom_levels-1, self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs
 
         else:
             raise exceptions.PreventUpdate
@@ -6575,7 +6629,15 @@ class FUSION:
 
         return [return_div], [f'{len(selectedData["points"])} Cells selected']
 
+    def update_annotation_session(self, session_tab, new_session):
 
+        print(ctx.triggered_id)
+        return_div = html.Div()
+
+        session_tab = get_pattern_matching_value(session_tab)
+        print(session_tab)
+        
+        return return_div
 
 
 
