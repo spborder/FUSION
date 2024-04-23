@@ -1916,21 +1916,21 @@ class LayoutHandler:
 
             first_tab = html.Div([
                 dbc.Row([
-                    dbc.Col(dbc.Label('Session Name: '),md = 5),
+                    dbc.Col(dbc.Label('Session Name: '),md = 3),
                     dbc.Col(
                         dcc.Input(
                             placeholder = 'Name for new session',
                             id = {'type':'annotation-session-name','index':0},
                             style = {'width':'100%'}
                         ),
-                        md = 7
+                        md = 9
                     )
                 ],align='center',style = {'marginBottom':'10px'}),
                 dbc.Row(dbc.Label('Session Description'),align = 'center'),
                 dbc.Row(
                     dcc.Textarea(
                         id = {'type':'annotation-session-description','index':0},
-                        placeholder = 'Session Description',
+                        placeholder = 'type here',
                         style = {'width':'100%'},
                         maxLength = 10000
                     ),
@@ -1939,7 +1939,7 @@ class LayoutHandler:
                 ),
                 dbc.Row([
                     'Add Users placeholder'
-                ],align='center'),
+                ],align='center',style={'marginLeft':'5px'}),
                 dbc.Row([
                     dbc.Button(
                         'Create New Session!',
@@ -1965,6 +1965,113 @@ class LayoutHandler:
         )
 
         return tab_list, first_tab
+
+    def gen_annotation_content(self,current_ftus):
+        """
+        Generate annotation content for current ftus
+        """
+        first_tab = html.Div([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Row(html.P('Current Structures')),
+                    html.Div(
+                        children = [
+                            html.Div(
+                                id = {'type':'annotation-station-ftu','index':idx},
+                                children = [f'{i}: {len(current_ftus[i])}'],
+                                style = {'display':'inline-block'}
+                            )
+                        for idx,i in enumerate(current_ftus)
+                        ]
+                    )
+                ],md = 4),
+                dbc.Col([
+                    dbc.Row(html.P('Select a structure to annotate in that structure')),
+                    dbc.Row([
+                        dcc.Graph(
+                            id = {'type':'annotation-current-structure','index':0},
+                            figure = go.Figure(),
+                            config = {
+                                "modeBarButtonsToAdd": {
+                                    "drawopenpath",
+                                    "drawclosedpath",
+                                    "eraseshape"
+                                }
+                            }
+                        )
+                    ]),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Button(
+                                'Previous',
+                                id = {'type':'annotation-previous-button','index':0},
+                                n_clicks = 0,
+                                className = 'd-grid col-12 mx-auto'
+                            ),
+                            md = 3
+                        ),
+                        dbc.Col(
+                            dbc.Button(
+                                'Save',
+                                id = {'type':'annotation-save-button','index':0},
+                                n_clicks = 0,
+                                className = 'd-grid col-12 mx-auto'
+                            ),
+                            md = 6
+                        ),
+                        dbc.Col(
+                            dbc.Button(
+                                'Next',
+                                id = {'type':'annotation-next-button','index':0},
+                                n_clicks = 0,
+                                className = 'd-grid col-12 mx-auto'
+                            ),
+                            md = 3
+                        )
+                    ])
+                ])
+            ],align='center'),
+            html.Hr(),
+            dbc.Row(
+                html.P('Add a text label for the image')
+            ),
+            dbc.Row([
+                dbc.Col(
+                    dcc.Input(
+                        placeholder='Add a class label type',
+                        id = {'type':'annotation-class-label','index':0}
+                    ),
+                    md = 5
+                ),
+                dbc.Col(
+                    dcc.Input(
+                        placeholder = 'Label for this image',
+                        id = {'type':'annotation-image-label','index':0}
+                    ),
+                    md = 5
+                ),
+                dbc.Col(
+                    html.I(
+                        id = {'type':'annotation-set-label','index':0},
+                        className = 'bi bi-check-circle-fill me-2',
+                        style = {'color':'rgb(0,255,0)'}
+                    ),
+                    md = 1
+                ),
+                dbc.Col(
+                    html.I(
+                        id = {'type':'annotation-delete-label','index':0},
+                        className = 'bi bi-x-circle-fill me-2',
+                        style = {'color':'rgb(255,0,0)'}
+                    ),
+                    md = 1
+                ),
+            ],align = 'center')
+            ],
+        style = {'maxHeight':'70vh','overflow':'scroll'}
+        )
+
+        return first_tab
 
     def get_user_ftu_labels(self,wsi,ftu):
 

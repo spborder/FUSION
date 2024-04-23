@@ -897,6 +897,11 @@ class FUSION:
                 Input({'type':'annotation-tab-group','index':ALL},'active_tab'),
                 Input({'type':'create-annotation-session-button','index':ALL},'n_clicks')
             ],
+            [
+                State({'type':'annotation-session-name','index':ALL},'value'),
+                State({'type':'annotation-session-description','index':ALL},'value'),
+                State({'type':'annotation-session-add-users','index':ALL},'value')
+            ],
             prevent_initial_call = True
         )(self.update_annotation_session)
 
@@ -6629,13 +6634,24 @@ class FUSION:
 
         return [return_div], [f'{len(selectedData["points"])} Cells selected']
 
-    def update_annotation_session(self, session_tab, new_session):
+    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users):
 
         print(ctx.triggered_id)
         return_div = html.Div()
 
         session_tab = get_pattern_matching_value(session_tab)
         print(session_tab)
+
+        if ctx.triggered_id['type']=='create-annotation-session-button':
+            #TODO: Create new folder in user's public folder called "FUSION Annotation Sessions"
+            #TODO: Create folder in that folder with the name of the new annotation session
+            new_session_name = get_pattern_matching_value(new_session_name)
+            new_session_description = get_pattern_matching_value(new_session_description)
+            new_session_users = get_pattern_matching_value(new_session_users)
+
+            print(new_session_name)
+            print(new_session_description)
+            print(new_session_users)
         
         return return_div
 
