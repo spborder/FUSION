@@ -6745,18 +6745,18 @@ class FUSION:
             'border-radius':'5px',
         }
 
+        if ctx.triggered_id['type']=='annotation-station-ftu':
+            ftu_styles = [{'display':'inline-block'} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(ctx.outputs_list[1]))]
+
+            clicked_ftu_name = ftu_names[ctx.triggered_id['index']][0].split(':')[0]
+            ftu_idx = 0
+        else:
+            clicked_ftu_name = ftu_idx.split(':')[0]
+            ftu_idx = int(ftu_idx.split(':')[-1])
+
         if ctx.triggered_id['type'] in ['annotation-station-ftu','annotation-previous-button','annotation-next-button']:
-            # Grab the first member of the clicked ftu
             
-            if ctx.triggered_id['type']=='annotation-station-ftu':
-                ftu_styles = [{'display':'inline-block'} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(ctx.outputs_list[1]))]
-
-                clicked_ftu_name = ftu_names[ctx.triggered_id['index']][0].split(':')[0]
-                ftu_idx = 0
-            else:
-                clicked_ftu_name = ftu_idx.split(':')[0]
-                ftu_idx = int(ftu_idx.split(':')[-1])
-
+            # Grab the first member of the clicked ftu
             intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
 
             # Getting bounding box of this ftu
