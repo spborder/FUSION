@@ -1790,10 +1790,8 @@ class LayoutHandler:
             - Also show trained/training models
             - Either personally created or shared
         """
-
         # Checking for current annotation sessions:
         current_ann_sessions = dataset_handler.check_user_folder(folder_name='FUSION Annotation Sessions')
-        print(f'current_ann_sessions: {current_ann_sessions}')
         if not current_ann_sessions is None:
             # Checking annotation session folder for current sessions
             ann_sessions = dataset_handler.gc.get(f'/folder',parameters={'parentType':'folder','parentId':current_ann_sessions["_id"]})
@@ -1802,6 +1800,7 @@ class LayoutHandler:
             tab_list = [
                 dbc.Tab(
                     label = i,
+                    id = {'type':'ann-sess-tab','index':idx},
                     tab_id = f'ann-sess-{idx}',
                     activeTabClassName='fw-bold fst-italic',
                     children = []
@@ -1809,17 +1808,81 @@ class LayoutHandler:
                 for idx,i in enumerate(ann_session_names)
             ]
 
+            first_tab = self.gen_annotation_content(False,current_ftus)
+
+        else:
+            
+            tab_list = []
+
+            first_tab = html.Div([
+                dbc.Row([
+                    dbc.Col(dbc.Label('Session Name: '),md = 3),
+                    dbc.Col(
+                        dcc.Input(
+                            placeholder = 'Name for new session',
+                            id = {'type':'annotation-session-name','index':0},
+                            style = {'width':'100%'}
+                        ),
+                        md = 9
+                    )
+                ],align='center',style = {'marginBottom':'20px','marginTop':'10px'}),
+                dbc.Row(dbc.Label('Session Description'),align = 'center'),
+                dbc.Row(
+                    dcc.Textarea(
+                        id = {'type':'annotation-session-description','index':0},
+                        placeholder = 'type here',
+                        style = {'width':'100%'},
+                        maxLength = 10000
+                    ),
+                    align = 'center',
+                    style = {'marginBottom':'20px'}
+                ),
+                html.Hr(),
+                dbc.Row([
+                    'Add Users placeholder'
+                ],align='center',style={'marginLeft':'5px','marginBottom':'20px'}),
+                dbc.Row([
+                    dbc.Button(
+                        'Create New Session!',
+                        id = {'type':'create-annotation-session-button','index':0},
+                        className = 'd-grid col-12 mx-auto',
+                        n_clicks = 0
+                    )
+                ],
+                align='center',
+                style = {'marginBottom':'10px'}
+                )
+            ],style = {'maxHeight':'70vh','overflow':'scroll'})
+
+        # Adding "Create New" tab
+        tab_list.append(
+            dbc.Tab(
+                label = 'Create New Session',
+                id = {'type':'ann-sess-tab','index':len(tab_list)},
+                tab_id = f'ann-sess-{len(tab_list)}',
+                activeTabClassName='fw-bold fst-italic',
+                children = []
+            )
+        )
+
+        return tab_list, first_tab
+
+    def gen_annotation_content(self,new,current_ftus):
+        """
+        Generate annotation content for current ftus
+        """
+        if not new:
             first_tab = html.Div([
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.P('Current Structures')),
                         html.Div(
                             children = [
-                                html.Div(
+                                dbc.Row(html.Div(
                                     id = {'type':'annotation-station-ftu','index':idx},
                                     children = [f'{i}: {len(current_ftus[i])}'],
-                                    style = {'display':'inline-block'}
-                                )
+                                    style = {'display':'inline-block','marginBottom':'15px'}
+                                ),align='center')
                             for idx,i in enumerate(current_ftus)
                             ]
                         )
@@ -1829,13 +1892,19 @@ class LayoutHandler:
                         dbc.Row([
                             dcc.Graph(
                                 id = {'type':'annotation-current-structure','index':0},
-                                figure = go.Figure(),
+                                figure = go.Figure(
+                                    layout = {
+                                        'margin': {'l':0,'r':0,'t':0,'b':0},
+                                        'xaxis':{'ticks':'','showgrid':False},
+                                        'yaxis':{'ticks':'','showgrid':False}
+                                        }
+                                ),
                                 config = {
-                                    "modeBarButtonsToAdd": {
+                                    "modeBarButtonsToAdd": [
                                         "drawopenpath",
                                         "drawclosedpath",
                                         "eraseshape"
-                                    }
+                                    ]
                                 }
                             )
                         ]),
@@ -1869,7 +1938,7 @@ class LayoutHandler:
                             )
                         ])
                     ])
-                ],align='center'),
+                ],align='top'),
                 html.Hr(),
                 dbc.Row(
                     html.P('Add a text label for the image')
@@ -1878,21 +1947,23 @@ class LayoutHandler:
                     dbc.Col(
                         dcc.Input(
                             placeholder='Add a class label type',
-                            id = {'type':'annotation-class-label','index':0}
+                            id = {'type':'annotation-class-label','index':0},
+                            style = {'width':'100%'}
                         ),
                         md = 5
                     ),
                     dbc.Col(
                         dcc.Input(
                             placeholder = 'Label for this image',
-                            id = {'type':'annotation-image-label','index':0}
+                            id = {'type':'annotation-image-label','index':0},
+                            style = {'width':'100%'}
                         ),
                         md = 5
                     ),
                     dbc.Col(
                         html.I(
                             id = {'type':'annotation-set-label','index':0},
-                            className = 'bi bi-check-circle-fill me-2',
+                            className = 'bi bi-check-circle-fill fa-2x',
                             style = {'color':'rgb(0,255,0)'}
                         ),
                         md = 1
@@ -1900,7 +1971,7 @@ class LayoutHandler:
                     dbc.Col(
                         html.I(
                             id = {'type':'annotation-delete-label','index':0},
-                            className = 'bi bi-x-circle-fill me-2',
+                            className = 'bi bi-x-circle-fill fa-2x',
                             style = {'color':'rgb(255,0,0)'}
                         ),
                         md = 1
@@ -1909,11 +1980,7 @@ class LayoutHandler:
                 ],
             style = {'maxHeight':'70vh','overflow':'scroll'}
             )
-
         else:
-            
-            tab_list = []
-
             first_tab = html.Div([
                 dbc.Row([
                     dbc.Col(dbc.Label('Session Name: '),md = 3),
@@ -1925,7 +1992,7 @@ class LayoutHandler:
                         ),
                         md = 9
                     )
-                ],align='center',style = {'marginBottom':'10px'}),
+                ],align='center',style = {'marginBottom':'20px','marginTop':'10px'}),
                 dbc.Row(dbc.Label('Session Description'),align = 'center'),
                 dbc.Row(
                     dcc.Textarea(
@@ -1935,11 +2002,12 @@ class LayoutHandler:
                         maxLength = 10000
                     ),
                     align = 'center',
-                    style = {'marginBottom':'10px'}
+                    style = {'marginBottom':'20px'}
                 ),
+                html.Hr(),
                 dbc.Row([
                     'Add Users placeholder'
-                ],align='center',style={'marginLeft':'5px'}),
+                ],align='center',style={'marginLeft':'5px','marginBottom':'20px'}),
                 dbc.Row([
                     dbc.Button(
                         'Create New Session!',
@@ -1952,124 +2020,6 @@ class LayoutHandler:
                 style = {'marginBottom':'10px'}
                 )
             ],style = {'maxHeight':'70vh','overflow':'scroll'})
-
-        print(f'len tab_list: {len(tab_list)}')
-        # Adding "Create New" tab
-        tab_list.append(
-            dbc.Tab(
-                label = 'Create New Session',
-                tab_id = f'ann-sess-{len(tab_list)}',
-                activeTabClassName='fw-bold fst-italic',
-                children = []
-            )
-        )
-
-        return tab_list, first_tab
-
-    def gen_annotation_content(self,current_ftus):
-        """
-        Generate annotation content for current ftus
-        """
-        first_tab = html.Div([
-            dbc.Row([
-                dbc.Col([
-                    dbc.Row(html.P('Current Structures')),
-                    html.Div(
-                        children = [
-                            html.Div(
-                                id = {'type':'annotation-station-ftu','index':idx},
-                                children = [f'{i}: {len(current_ftus[i])}'],
-                                style = {'display':'inline-block'}
-                            )
-                        for idx,i in enumerate(current_ftus)
-                        ]
-                    )
-                ],md = 4),
-                dbc.Col([
-                    dbc.Row(html.P('Select a structure to annotate in that structure')),
-                    dbc.Row([
-                        dcc.Graph(
-                            id = {'type':'annotation-current-structure','index':0},
-                            figure = go.Figure(),
-                            config = {
-                                "modeBarButtonsToAdd": {
-                                    "drawopenpath",
-                                    "drawclosedpath",
-                                    "eraseshape"
-                                }
-                            }
-                        )
-                    ]),
-                    dbc.Row([
-                        dbc.Col(
-                            dbc.Button(
-                                'Previous',
-                                id = {'type':'annotation-previous-button','index':0},
-                                n_clicks = 0,
-                                className = 'd-grid col-12 mx-auto'
-                            ),
-                            md = 3
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                'Save',
-                                id = {'type':'annotation-save-button','index':0},
-                                n_clicks = 0,
-                                className = 'd-grid col-12 mx-auto'
-                            ),
-                            md = 6
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                'Next',
-                                id = {'type':'annotation-next-button','index':0},
-                                n_clicks = 0,
-                                className = 'd-grid col-12 mx-auto'
-                            ),
-                            md = 3
-                        )
-                    ])
-                ])
-            ],align='center'),
-            html.Hr(),
-            dbc.Row(
-                html.P('Add a text label for the image')
-            ),
-            dbc.Row([
-                dbc.Col(
-                    dcc.Input(
-                        placeholder='Add a class label type',
-                        id = {'type':'annotation-class-label','index':0}
-                    ),
-                    md = 5
-                ),
-                dbc.Col(
-                    dcc.Input(
-                        placeholder = 'Label for this image',
-                        id = {'type':'annotation-image-label','index':0}
-                    ),
-                    md = 5
-                ),
-                dbc.Col(
-                    html.I(
-                        id = {'type':'annotation-set-label','index':0},
-                        className = 'bi bi-check-circle-fill me-2',
-                        style = {'color':'rgb(0,255,0)'}
-                    ),
-                    md = 1
-                ),
-                dbc.Col(
-                    html.I(
-                        id = {'type':'annotation-delete-label','index':0},
-                        className = 'bi bi-x-circle-fill me-2',
-                        style = {'color':'rgb(255,0,0)'}
-                    ),
-                    md = 1
-                ),
-            ],align = 'center')
-            ],
-        style = {'maxHeight':'70vh','overflow':'scroll'}
-        )
 
         return first_tab
 
@@ -3944,6 +3894,23 @@ class GirderHandler:
             return all_folders[folder_names.index(folder_name)]
         else:
             return None
+
+    def create_user_folder(self, parent_path, folder_name, metadata = None):
+        """
+        Creating a folder in user's public folder
+        """
+        public_folder_path = parent_path
+        public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
+
+        # Creating folder
+        new_folder = self.gc.loadOrCreateFolder(
+            folderName = folder_name,
+            parentId = public_folder_id,
+            parentType = 'folder',
+            metadata = metadata
+        )
+
+        return new_folder
 
     def add_slide_metadata(self,item_id,metadata_dict):
 

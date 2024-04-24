@@ -891,7 +891,8 @@ class FUSION:
         # Populating tabs for each annotation session in Annotation Station
         self.app.callback(
             [
-                Output({'type':'annotation-session-content','index':ALL},'children')
+                Output({'type':'annotation-session-content','index':ALL},'children'),
+                Output({'type':'annotation-tab-group','index':ALL},'children')
             ],
             [
                 Input({'type':'annotation-tab-group','index':ALL},'active_tab'),
@@ -900,10 +901,35 @@ class FUSION:
             [
                 State({'type':'annotation-session-name','index':ALL},'value'),
                 State({'type':'annotation-session-description','index':ALL},'value'),
-                State({'type':'annotation-session-add-users','index':ALL},'value')
+                State({'type':'annotation-session-add-users','index':ALL},'value'),
+                State({'type':'ann-sess-tab','index':ALL},'label')
             ],
             prevent_initial_call = True
         )(self.update_annotation_session)
+
+        # Updating annotation data and annotation structure
+        self.app.callback(
+            [
+                Output({'type':'annotation-current-structure','index':ALL},'figure'),
+                Output({'type':'annotation-station-ftu','index':ALL},'style'),
+                Output({'type':'annotation-class-label','index':ALL},'value'),
+                Output({'type':'annotation-image-label','index':ALL},'value')
+            ],
+            [
+                Input({'type':'annotation-station-ftu','index':ALL},'n_clicks'),
+                Input({'type':'annotation-previous-button','index':ALL},'n_clicks'),
+                Input({'type':'annotation-next-button','index':ALL},'n_clicks'),
+                Input({'type':'annotation-save-button','index':ALL},'n_clicks'),
+                Input({'type':'annotation-set-label','index':ALL},'n_clicks'),
+                Input({'type':'annotation-delete-label','index':ALL},'n_clicks')
+            ],
+            [
+                State({'type':'annotation-current-structure','index':ALL},'relayoutData'),
+                State({'type':'annotation-class-label','index':ALL},'value'),
+                State({'type':'annotation-image-label','index':ALL},'value')
+            ],
+            prevent_initial_call = True
+        )(self.update_current_annotation)
 
 
     def builder_callbacks(self):
@@ -1554,6 +1580,9 @@ class FUSION:
 
     def update_viewport_data(self,bounds,cell_view_type,frame_list,current_tab):
         
+        print(f'triggered update_viewport_data: {ctx.triggered_id}, {ctx.triggered}')
+        print(ctx.outputs_list)
+
         if not self.wsi is None:
             if not bounds is None:
                 if len(bounds)==2:
@@ -1908,9 +1937,9 @@ class FUSION:
                         return return_div, no_update
 
                 else:
-                    return html.P('No FTUs in current view'), no_update
+                    return html.P('No FTUs in current view'), [no_update]
             else:
-                return html.P('Select a slide to get started!'), no_update
+                return html.P('Select a slide to get started!'), [no_update]
     
         elif current_tab=='annotation-tab':
             if self.dataset_handler.username=='fusionguest':
@@ -1948,7 +1977,7 @@ class FUSION:
                         )
                 ])
 
-                return no_update, annotation_tab_group
+                return html.Div(), annotation_tab_group
         
         else:
             raise exceptions.PreventUpdate
@@ -6634,26 +6663,112 @@ class FUSION:
 
         return [return_div], [f'{len(selectedData["points"])} Cells selected']
 
-    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users):
+    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names):
 
-        print(ctx.triggered_id)
-        return_div = html.Div()
+        print(f'triggered update_annotation_session: {ctx.triggered_id}, {ctx.triggered}')
+        return_div = [no_update]
+        new_annotation_tab_group = [no_update]
 
         session_tab = get_pattern_matching_value(session_tab)
-        print(session_tab)
+        print(f'current tab: {session_tab}')
+        print(f'outputs list: {ctx.outputs_list}')
 
         if ctx.triggered_id['type']=='create-annotation-session-button':
-            #TODO: Create new folder in user's public folder called "FUSION Annotation Sessions"
-            #TODO: Create folder in that folder with the name of the new annotation session
             new_session_name = get_pattern_matching_value(new_session_name)
             new_session_description = get_pattern_matching_value(new_session_description)
             new_session_users = get_pattern_matching_value(new_session_users)
+            
+            # Creating folder in user's public folder called FUSION Annotation Sessions, with sub-folder named the new_session_name
+            ann_sessions_folder = self.dataset_handler.check_user_folder("FUSION Annotation Sessions")
+            if ann_sessions_folder is None:
+                # Creating parent folder if it doesn't exist
+                parent_folder = self.dataset_handler.create_user_folder(
+                    parent_path = f'/user/{self.dataset_handler.username}/Public',
+                    folder_name = 'FUSION Annotation Sessions',
+                    metadata = {"Folder Description":"Data related to annotation sessions completed in FUSION"}
+                )
 
-            print(new_session_name)
-            print(new_session_description)
-            print(new_session_users)
+            new_session_folder = self.dataset_handler.create_user_folder(
+                parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions',
+                folder_name = new_session_name,
+                metadata = {"Session Description":new_session_description}
+            )
+
+            updated_tabs,first_tab = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus)
+
+            new_annotation_tab_group = [html.Div([
+                dbc.Tabs(
+                    id = {'type':'annotation-tab-group','index':0},
+                    active_tab = 'ann-sess-0',
+                    children = updated_tabs
+                )
+            ])]
+
+            return_div = [first_tab]
+
+        if ctx.triggered_id['type']=='annotation-tab-group':
+            #TODO: Find out if this is a new session
+            print(session_tab)
+            session_name = current_session_names[int(session_tab.split('-')[-1])]
+            print(session_name)
+
+            if session_name=='Create New Session':
+                first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = self.current_ftus)
+            else:
+                first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = self.current_ftus)
+
+            return_div = [first_tab]
+
         
-        return return_div
+        return return_div, new_annotation_tab_group
+    
+    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click, annotations, class_label, image_label):
+        """
+        Getting current annotation data (text or image) and saving to annotation session folder on the server
+        """
+
+        current_structure_fig = [no_update]
+        ftu_styles = [no_update]*len(ctx.outputs_list[1])
+        class_labels = [no_update]*len(ctx.outputs_list[2])
+        image_labels = [no_update]*len(ctx.outputs_list[3])
+
+        selected_style = {
+            'background':'rgba(255,255,255,0.8)',
+            'box-shadow':'0 0 10px rgba(0,0,0,0.2)',
+            'border-radius':'5px',
+        }
+
+        print(ftus)
+        print(prev_click)
+        print(next_click)
+        print(save_click)
+        print(set_click)
+        print(delete_click)
+        print(annotations)
+        print(class_label)
+        print(image_label)
+
+        print(ctx.triggered_id)
+
+        if ctx.triggered_id['type']=='annotation-station-ftu':
+            ftu_styles = [{'display':'inline-block'} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(ctx.outputs_list[1]))]
+
+            
+
+
+
+
+        return current_structure_fig, ftu_styles, class_labels, image_labels
+
+
+
+
+
+
+
+
+
+
 
 
 
