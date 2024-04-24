@@ -45,7 +45,7 @@
         "color_code":["114,198,232"]
     },
     "CNT":{
-        "graphic":"./assets/cell_graphics/cnt_graphic.png",
+        "graphic":"./assets/cell_graphics/Connecting Tubule.svg",
         "full":"Connecting Tubule",
         "subtypes":["CNT","CNT-PC","dCNT","cycCNT"],
         "states":["reference","reference","degenerative","cycling"],

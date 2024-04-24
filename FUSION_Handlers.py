@@ -1878,7 +1878,7 @@ class LayoutHandler:
                         dbc.Row(html.P('Current Structures')),
                         html.Div(
                             children = [
-                                dbc.Row(html.Div(
+                                dbc.Row(html.A(
                                     id = {'type':'annotation-station-ftu','index':idx},
                                     children = [f'{i}: {len(current_ftus[i])}'],
                                     style = {'display':'inline-block','marginBottom':'15px'}
@@ -1889,14 +1889,21 @@ class LayoutHandler:
                     ],md = 4),
                     dbc.Col([
                         dbc.Row(html.P('Select a structure to annotate in that structure')),
+                        html.Div(
+                            id = {'type':'annotation-station-ftu-idx','index':0},
+                            children = [
+                                "FTU: 0"
+                            ],
+                            style = {'display':'none'}
+                        ),
                         dbc.Row([
                             dcc.Graph(
                                 id = {'type':'annotation-current-structure','index':0},
                                 figure = go.Figure(
                                     layout = {
                                         'margin': {'l':0,'r':0,'t':0,'b':0},
-                                        'xaxis':{'ticks':'','showgrid':False},
-                                        'yaxis':{'ticks':'','showgrid':False}
+                                        'xaxis':{'showticklabels':False,'showgrid':False},
+                                        'yaxis':{'showticklabels':False,'showgrid':False}
                                         }
                                 ),
                                 config = {
@@ -1937,7 +1944,7 @@ class LayoutHandler:
                                 md = 3
                             )
                         ])
-                    ])
+                    ],md = 8)
                 ],align='top'),
                 html.Hr(),
                 dbc.Row(
@@ -3423,8 +3430,9 @@ class GirderHandler:
                         )
                     )
             
-            except:
+            except Exception as e:
                 print('-------------------------------------------------')
+                print(f'Error: {e}')
                 print(f'Error reading image region from item: {item_id}')
                 print(f'Provided coordinates: {coords_list}')
                 print(f'------------------------------------------------')

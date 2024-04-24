@@ -913,7 +913,8 @@ class FUSION:
                 Output({'type':'annotation-current-structure','index':ALL},'figure'),
                 Output({'type':'annotation-station-ftu','index':ALL},'style'),
                 Output({'type':'annotation-class-label','index':ALL},'value'),
-                Output({'type':'annotation-image-label','index':ALL},'value')
+                Output({'type':'annotation-image-label','index':ALL},'value'),
+                Output({'type':'annotation-station-ftu-idx','index':ALL},'children')
             ],
             [
                 Input({'type':'annotation-station-ftu','index':ALL},'n_clicks'),
@@ -926,7 +927,9 @@ class FUSION:
             [
                 State({'type':'annotation-current-structure','index':ALL},'relayoutData'),
                 State({'type':'annotation-class-label','index':ALL},'value'),
-                State({'type':'annotation-image-label','index':ALL},'value')
+                State({'type':'annotation-image-label','index':ALL},'value'),
+                State({'type':'annotation-station-ftu','index':ALL},'children'),
+                State({'type':'annotation-station-ftu-idx','index':ALL},'children')
             ],
             prevent_initial_call = True
         )(self.update_current_annotation)
@@ -6722,7 +6725,7 @@ class FUSION:
         
         return return_div, new_annotation_tab_group
     
-    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click, annotations, class_label, image_label):
+    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click, annotations, class_label, image_label, ftu_names, ftu_idx):
         """
         Getting current annotation data (text or image) and saving to annotation session folder on the server
         """
@@ -6731,6 +6734,10 @@ class FUSION:
         ftu_styles = [no_update]*len(ctx.outputs_list[1])
         class_labels = [no_update]*len(ctx.outputs_list[2])
         image_labels = [no_update]*len(ctx.outputs_list[3])
+        
+        ftu_idx = get_pattern_matching_value(ftu_idx)
+        if type(ftu_idx)==list:
+            ftu_idx=ftu_idx[0]
 
         selected_style = {
             'background':'rgba(255,255,255,0.8)',
@@ -6738,27 +6745,47 @@ class FUSION:
             'border-radius':'5px',
         }
 
-        print(ftus)
-        print(prev_click)
-        print(next_click)
-        print(save_click)
-        print(set_click)
-        print(delete_click)
-        print(annotations)
-        print(class_label)
-        print(image_label)
-
-        print(ctx.triggered_id)
-
-        if ctx.triggered_id['type']=='annotation-station-ftu':
-            ftu_styles = [{'display':'inline-block'} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(ctx.outputs_list[1]))]
-
+        if ctx.triggered_id['type'] in ['annotation-station-ftu','annotation-previous-button','annotation-next-button']:
+            # Grab the first member of the clicked ftu
             
+            if ctx.triggered_id['type']=='annotation-station-ftu':
+                ftu_styles = [{'display':'inline-block'} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(ctx.outputs_list[1]))]
 
+                clicked_ftu_name = ftu_names[ctx.triggered_id['index']][0].split(':')[0]
+                ftu_idx = 0
+            else:
+                clicked_ftu_name = ftu_idx.split(':')[0]
+                ftu_idx = int(ftu_idx.split(':')[-1])
 
+            intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
 
+            # Getting bounding box of this ftu
+            if ctx.triggered_id['type']=='annotation-station-ftu':
+                ftu_bbox_coords = list(intersecting_ftu_polys[0].exterior.coords)
+            else:
+                if ctx.triggered_id['type']=='annotation-previous-button':
+                    ftu_idx = np.minimum(0,ftu_idx-1)
+                elif ctx.triggered_id['type']=='annotation-next-button':
+                    ftu_idx = np.minimum(len(intersecting_ftu_polys)-1, ftu_idx+1)
 
-        return current_structure_fig, ftu_styles, class_labels, image_labels
+                ftu_bbox_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
+            
+            ftu_bbox = np.array(self.wsi.convert_map_coords(ftu_bbox_coords))
+            ftu_bbox = [np.min(ftu_bbox[:,0]),np.min(ftu_bbox[:,1]),np.max(ftu_bbox[:,0]),np.max(ftu_bbox[:,1])]
+            #TODO: This method only grabs histology images that are single frame or multi-frame with RGB at 0,1,2
+            ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox])
+
+            current_structure_fig = go.Figure(px.imshow(np.array(ftu_image)))
+            current_structure_fig.update_layout(
+                {
+                    'margin': {'l':0,'r':0,'t':0,'b':0},
+                    'xaxis':{'showticklabels':False,'showgrid':False},
+                    'yaxis':{'showticklabels':False,'showgrid':False}
+                }
+            )
+            current_structure_fig = [current_structure_fig]
+
+        return current_structure_fig, ftu_styles, class_labels, image_labels, [f'{clicked_ftu_name}:{ftu_idx}']
 
 
 
