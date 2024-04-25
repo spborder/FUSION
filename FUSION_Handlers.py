@@ -1797,6 +1797,8 @@ class LayoutHandler:
             ann_sessions = dataset_handler.gc.get(f'/folder',parameters={'parentType':'folder','parentId':current_ann_sessions["_id"]})
             ann_session_names = [i['name'] for i in ann_sessions]
 
+            first_session = ann_session_names[0]
+
             tab_list = [
                 dbc.Tab(
                     label = i,
@@ -1813,6 +1815,7 @@ class LayoutHandler:
         else:
             
             tab_list = []
+            first_session = ['Create New Session']
 
             first_tab = html.Div([
                 dbc.Row([
@@ -1865,7 +1868,7 @@ class LayoutHandler:
             )
         )
 
-        return tab_list, first_tab
+        return tab_list, first_tab, first_session
 
     def gen_annotation_content(self,new,current_ftus):
         """
@@ -1914,8 +1917,27 @@ class LayoutHandler:
                                             "eraseshape"
                                         ]
                                     }
-                                )
-                            )
+                                ),
+                                md = 9
+                            ),
+                            dbc.Col([
+                                dbc.Row('Annotation Options'),
+                                html.Hr(),
+                                dbc.Row(dbc.Label('Line Width')),
+                                dbc.Row(
+                                    dcc.Slider(
+                                        id = {'type':'annotation-line-slider','index':0},
+                                        min = 1.0,
+                                        max = 10.0,
+                                        step = 0.1,
+                                        vertical=False,
+                                        style = {'width':'100%','marginBottom':'20px'}
+                                    )
+                                ),
+                                html.Hr(),
+                                dbc.Row(dbc.Label('Class Name')),
+                                dbc.Row('Placeholder for populating with available classes')
+                            ])
                         ],style = {'marginBottom':'20px'}),
                         dbc.Row([
                             dbc.Col(
@@ -1932,7 +1954,8 @@ class LayoutHandler:
                                     'Save',
                                     id = {'type':'annotation-save-button','index':0},
                                     n_clicks = 0,
-                                    className = 'd-grid col-12 mx-auto'
+                                    className = 'd-grid col-12 mx-auto',
+                                    color = 'primary'
                                 ),
                                 md = 6
                             ),
@@ -2015,8 +2038,12 @@ class LayoutHandler:
                 ),
                 html.Hr(),
                 dbc.Row([
+                    'Placeholder for defining annotation session type (text/image/both) and classes/labels'
+                ]),
+                html.Hr(),
+                dbc.Row([
                     'Add Users placeholder'
-                ],align='center',style={'marginLeft':'5px','marginBottom':'20px'}),
+                ],align='center',style={'marginLeft':'5px','marginBottom':'20px','marginTop':'10px'}),
                 dbc.Row([
                     dbc.Button(
                         'Create New Session!',
@@ -3842,27 +3869,23 @@ class GirderHandler:
         if save_object['filename'] in current_items_names:
            self.gc.delete(f'/item/{current_items[current_items_names.index(save_object["filename"])]["_id"]}')
 
-        if isinstance(save_object['content'],pd.DataFrame):
-            
-            # Saving dataframe
-            if 'csv' in save_object['filename']:
-                save_object['content'].to_csv(f'/tmp/{save_object["filename"]}')
+        # Saving dataframe
+        if 'csv' in save_object['filename']:
+            save_object['content'].to_csv(f'/tmp/{save_object["filename"]}')
 
-            elif 'xlsx' in save_object['filename']:
-                with pd.ExcelWriter(f'/tmp/{save_object["filename"]}') as writer:
-                    save_object['content'].to_excel(writer,engine='openpyxl')
-            
-            elif 'png' in save_object['filename']:
-                # Should be a PIL.Image object
-                save_object['content'].save(f'/tmp/{save_object["filename"]}')
-
-            upload_file_response = self.gc.uploadFileToFolder(
-                folderId = output_path_id,
-                filepath = f'/tmp/{save_object["filename"]}'
-            )
+        elif 'xlsx' in save_object['filename']:
+            with pd.ExcelWriter(f'/tmp/{save_object["filename"]}') as writer:
+                save_object['content'].to_excel(writer,engine='openpyxl')
         
-        else:
-            upload_file_response = []
+        elif 'png' in save_object['filename']:
+            # Should be a PIL.Image object
+            save_object['content'].save(f'/tmp/{save_object["filename"]}')
+
+        print(f'Uploading: {save_object["filename"]} to {output_path_id}')
+        upload_file_response = self.gc.uploadFileToFolder(
+            folderId = output_path_id,
+            filepath = f'/tmp/{save_object["filename"]}'
+        )
 
         return upload_file_response
 
@@ -3902,11 +3925,12 @@ class GirderHandler:
             public_folder_path = f'/user/{self.username}/Public'
         else:
             public_folder_path = f'/user/{self.username}/Public/{folder_name}'
-            folder_name = subfolder
 
             if not sub_sub_folder is None:
                 public_folder_path = f'/user/{self.username}/Public/{folder_name}/{subfolder}'
                 folder_name = sub_sub_folder
+            else:
+                folder_name = subfolder
 
         public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
 

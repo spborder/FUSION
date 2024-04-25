@@ -921,7 +921,7 @@ class FUSION:
                 Output({'type':'annotation-class-label','index':ALL},'value'),
                 Output({'type':'annotation-image-label','index':ALL},'value'),
                 Output({'type':'annotation-station-ftu-idx','index':ALL},'children'),
-                Output({'type':'annotation-save-button','index':ALL},'style')
+                Output({'type':'annotation-save-button','index':ALL},'color')
             ],
             [
                 Input({'type':'annotation-station-ftu','index':ALL},'n_clicks'),
@@ -1971,7 +1971,8 @@ class FUSION:
                 self.current_ftus = intersecting_ftus
 
                 #TODO: Check for current annotation session in user's public folder
-                annotation_tabs, first_tab = self.layout_handler.gen_annotation_card(self.dataset_handler,self.current_ftus)
+                annotation_tabs, first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler,self.current_ftus)
+                self.current_ann_session = first_session
 
                 annotation_tab_group = html.Div([
                         dbc.Tabs(
@@ -6687,6 +6688,8 @@ class FUSION:
             new_session_name = get_pattern_matching_value(new_session_name)
             new_session_description = get_pattern_matching_value(new_session_description)
             new_session_users = get_pattern_matching_value(new_session_users)
+
+            self.current_ann_session = new_session_name
             
             # Creating folder in user's public folder called FUSION Annotation Sessions, with sub-folder named the new_session_name
             ann_sessions_folder = self.dataset_handler.check_user_folder("FUSION Annotation Sessions")
@@ -6738,7 +6741,7 @@ class FUSION:
         ftu_styles = [no_update]*len(ctx.outputs_list[1])
         class_labels = [no_update]*len(ctx.outputs_list[2])
         image_labels = [no_update]*len(ctx.outputs_list[3])
-        save_button_style = [no_update]
+        save_button_style = ['primary']
         
         ftu_idx = get_pattern_matching_value(ftu_idx)
         if type(ftu_idx)==list:
@@ -6748,10 +6751,11 @@ class FUSION:
             'background':'rgba(255,255,255,0.8)',
             'box-shadow':'0 0 10px rgba(0,0,0,0.2)',
             'border-radius':'5px',
+            'marginBottom':'15px'
         }
 
         if ctx.triggered_id['type']=='annotation-station-ftu':
-            ftu_styles = [{'display':'inline-block'} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(ctx.outputs_list[1]))]
+            ftu_styles = [{'display':'inline-block','marginBottom':'15px'} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(ctx.outputs_list[1]))]
 
             clicked_ftu_name = ftu_names[ctx.triggered_id['index']][0].split(':')[0]
             ftu_idx = 0
@@ -6810,6 +6814,57 @@ class FUSION:
             print(f'class_label: {class_label}')
             print(f'image_label: {image_label}')
 
+            if type(class_label)==str:
+                label_dict = {class_label: image_label}
+            elif type(class_label)==list:
+                label_dict = {i:j for i,j in zip(class_label,image_label)}
+            
+            if ctx.triggered_id['type']=='annotation-set-label':
+                # Grab the first member of the clicked ftu
+                if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
+                    intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+                elif 'Manual' in clicked_ftu_name:
+                    manual_idx = int(clicked_ftu_name.split(': ')[-1])
+                    intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
+                elif 'Marked' in clicked_ftu_name:
+                    intersecting_ftu_polys = [shape(i['geojson']) for i in self.wsi.marked_ftus]
+
+                ftu_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
+                ftu_coords = np.array(self.wsi.convert_map_coords(ftu_coords))
+                ftu_bbox = [np.min(ftu_coords[:,0]),np.min(ftu_coords[:,1]),np.max(ftu_coords[:,0]),np.max(ftu_coords[:,1])]
+
+                # Now saving image with label in metadata
+                ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox])
+
+                ftu_content = {
+                    'content': ftu_image,
+                    'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.png',
+                    'metadata': label_dict
+                }
+
+                # Checking if slide folder is created
+                slide_folder = self.dataset_handler.check_user_folder(
+                    folder_name = 'FUSION Annotation Sessions',
+                    subfolder = self.current_ann_session,
+                    sub_sub_folder = self.wsi.slide_name
+                )
+                if slide_folder is None:
+                    # Creating slide folder in current_ann_session
+                    new_folder = self.dataset_handler.create_user_folder(
+                        parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}',
+                        folder_name = self.wsi.slide_name
+                    )
+                    new_folder = self.dataset_handler.create_user_folder(
+                        parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}',
+                        folder_name = 'Images with Labels'
+                    )
+
+                # Saving data
+                self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}/Images with Labels')
+            else:
+                class_labels = [no_update if not i==ctx.triggered_id['index'] else '' for i in range(len(ctx.outputs_list[2]))]
+                image_labels = [no_update if not i==ctx.triggered_id['index'] else '' for i in range(len(ctx.outputs_list[3]))]
+
         elif ctx.triggered_id['type'] == 'annotation-save-button':
 
             # Grab the first member of the clicked ftu
@@ -6829,6 +6884,7 @@ class FUSION:
 
             # Convert annotations relayoutData to a mask and save both image and mask to current annotation session
             combined_mask = np.zeros((height,width,3))
+            annotations = get_pattern_matching_value(annotations)
             for key in annotations:
                 if 'shapes' in key:
                     for i in range(len(annotations['shapes'])):
@@ -6861,12 +6917,19 @@ class FUSION:
                     parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}',
                     folder_name = self.wsi.slide_name
                 )
+                new_folder = self.dataset_handler.create_user_folder(
+                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}',
+                    folder_name = 'Images'
+                )
+                new_folder = self.dataset_handler.create_user_folder(
+                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}',
+                    folder_name = 'Masks'
+                )
             # Saving data
-            self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}')
-            self.dataset_handler.save_to_user_folder(mask_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}')
+            self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}/Images')
+            self.dataset_handler.save_to_user_folder(mask_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}/Masks')
 
-            save_button_style = [{'color':'success'}]
-
+            save_button_style = ['success']
 
         return current_structure_fig, ftu_styles, class_labels, image_labels, [f'{clicked_ftu_name}:{ftu_idx}'], save_button_style
 
