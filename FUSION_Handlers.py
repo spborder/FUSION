@@ -1897,24 +1897,26 @@ class LayoutHandler:
                             style = {'display':'none'}
                         ),
                         dbc.Row([
-                            dcc.Graph(
-                                id = {'type':'annotation-current-structure','index':0},
-                                figure = go.Figure(
-                                    layout = {
-                                        'margin': {'l':0,'r':0,'t':0,'b':0},
-                                        'xaxis':{'showticklabels':False,'showgrid':False},
-                                        'yaxis':{'showticklabels':False,'showgrid':False}
-                                        }
-                                ),
-                                config = {
-                                    "modeBarButtonsToAdd": [
-                                        "drawopenpath",
-                                        "drawclosedpath",
-                                        "eraseshape"
-                                    ]
-                                }
+                            dbc.Col(
+                                dcc.Graph(
+                                    id = {'type':'annotation-current-structure','index':0},
+                                    figure = go.Figure(
+                                        layout = {
+                                            'margin': {'l':0,'r':0,'t':0,'b':0},
+                                            'xaxis':{'showticklabels':False,'showgrid':False},
+                                            'yaxis':{'showticklabels':False,'showgrid':False}
+                                            }
+                                    ),
+                                    config = {
+                                        "modeBarButtonsToAdd": [
+                                            "drawopenpath",
+                                            "drawclosedpath",
+                                            "eraseshape"
+                                        ]
+                                    }
+                                )
                             )
-                        ]),
+                        ],style = {'marginBottom':'20px'}),
                         dbc.Row([
                             dbc.Col(
                                 dbc.Button(
@@ -1983,7 +1985,7 @@ class LayoutHandler:
                         ),
                         md = 1
                     ),
-                ],align = 'center')
+                ],align = 'center',style = {'marginBottom':'20px'})
                 ],
             style = {'maxHeight':'70vh','overflow':'scroll'}
             )
@@ -3825,12 +3827,13 @@ class GirderHandler:
             # Maybe just load the default clustering data if there's an error?
             return pd.DataFrame()
 
-    def save_to_user_folder(self,save_object):
+    def save_to_user_folder(self,save_object, output_path = None):
 
         if not os.path.exists('/tmp'):
             os.makedirs('/tmp')
 
-        output_path = f'/user/{self.username}/Public'
+        if output_path is None:
+            output_path = f'/user/{self.username}/Public'
         output_path_id = self.gc.get('/resource/lookup',parameters={'path':output_path})['_id']
 
         # Removing file if there's a duplicate
@@ -3848,6 +3851,10 @@ class GirderHandler:
             elif 'xlsx' in save_object['filename']:
                 with pd.ExcelWriter(f'/tmp/{save_object["filename"]}') as writer:
                     save_object['content'].to_excel(writer,engine='openpyxl')
+            
+            elif 'png' in save_object['filename']:
+                # Should be a PIL.Image object
+                save_object['content'].save(f'/tmp/{save_object["filename"]}')
 
             upload_file_response = self.gc.uploadFileToFolder(
                 folderId = output_path_id,
@@ -3887,11 +3894,20 @@ class GirderHandler:
 
         return user_folder_file
 
-    def check_user_folder(self,folder_name):
+    def check_user_folder(self,folder_name, subfolder = None, sub_sub_folder = None):
         """
         Checking if a folder with a specific name is in the user's public folder
         """
-        public_folder_path = f'/user/{self.username}/Public'
+        if subfolder is None:
+            public_folder_path = f'/user/{self.username}/Public'
+        else:
+            public_folder_path = f'/user/{self.username}/Public/{folder_name}'
+            folder_name = subfolder
+
+            if not sub_sub_folder is None:
+                public_folder_path = f'/user/{self.username}/Public/{folder_name}/{subfolder}'
+                folder_name = sub_sub_folder
+
         public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
 
         # Getting all folders in the folder
@@ -3911,12 +3927,19 @@ class GirderHandler:
         public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
 
         # Creating folder
-        new_folder = self.gc.loadOrCreateFolder(
-            folderName = folder_name,
-            parentId = public_folder_id,
-            parentType = 'folder',
-            metadata = metadata
-        )
+        if not metadata is None:
+            new_folder = self.gc.loadOrCreateFolder(
+                folderName = folder_name,
+                parentId = public_folder_id,
+                parentType = 'folder',
+                metadata = metadata
+            )
+        else:
+            new_folder = self.gc.loadOrCreateFolder(
+                folderName = folder_name,
+                parentId = public_folder_id,
+                parentType = 'folder'
+            )
 
         return new_folder
 

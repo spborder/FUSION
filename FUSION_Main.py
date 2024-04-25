@@ -48,7 +48,10 @@ import time
 from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler, GeneHandler
 from FUSION_Prep import CODEXPrep, VisiumPrep, Prepper
-from FUSION_Utils import get_pattern_matching_value, extract_overlay_value, gen_violin_plot, process_filters
+from FUSION_Utils import (
+    get_pattern_matching_value, extract_overlay_value, 
+    gen_violin_plot, process_filters,
+    path_to_mask)
 
 from upload_component import UploadComponent
 
@@ -194,6 +197,9 @@ class FUSION:
         self.filter_vals = None
         self.overlap_prop = None
         self.hex_color_key = {}
+
+        # Initializing current annotation session
+        self.current_ann_session = None
 
         # JavaScript functions for controlling annotation properties
         self.ftu_style_handle = assign("""function(feature,context){
@@ -6710,10 +6716,8 @@ class FUSION:
             return_div = [first_tab]
 
         if ctx.triggered_id['type']=='annotation-tab-group':
-            #TODO: Find out if this is a new session
-            print(session_tab)
             session_name = current_session_names[int(session_tab.split('-')[-1])]
-            print(session_name)
+            self.current_ann_session = session_name
 
             if session_name=='Create New Session':
                 first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = self.current_ftus)
@@ -6729,7 +6733,6 @@ class FUSION:
         """
         Getting current annotation data (text or image) and saving to annotation session folder on the server
         """
-
         current_structure_fig = [no_update]
         ftu_styles = [no_update]*len(ctx.outputs_list[1])
         class_labels = [no_update]*len(ctx.outputs_list[2])
@@ -6757,18 +6760,30 @@ class FUSION:
         if ctx.triggered_id['type'] in ['annotation-station-ftu','annotation-previous-button','annotation-next-button']:
             
             # Grab the first member of the clicked ftu
-            intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+            if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
+                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+            elif 'Manual' in clicked_ftu_name:
+                manual_idx = int(clicked_ftu_name.split(': ')[-1])
+                intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
+            elif 'Marked' in clicked_ftu_name:
+                intersecting_ftu_polys = [shape(i['geojson']) for i in self.wsi.marked_ftus]
 
             # Getting bounding box of this ftu
             if ctx.triggered_id['type']=='annotation-station-ftu':
-                ftu_bbox_coords = list(intersecting_ftu_polys[0].exterior.coords)
+                ftu_idx = 0
             else:
                 if ctx.triggered_id['type']=='annotation-previous-button':
-                    ftu_idx = np.minimum(0,ftu_idx-1)
+                    if ftu_idx-1<0:
+                        ftu_idx = len(intersecting_ftu_polys)-1
+                    else:
+                        ftu_idx -= 1
                 elif ctx.triggered_id['type']=='annotation-next-button':
-                    ftu_idx = np.minimum(len(intersecting_ftu_polys)-1, ftu_idx+1)
+                    if ftu_idx+1>=len(intersecting_ftu_polys):
+                        ftu_idx = 0
+                    else:
+                        ftu_idx +=1 
 
-                ftu_bbox_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
+            ftu_bbox_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
             
             ftu_bbox = np.array(self.wsi.convert_map_coords(ftu_bbox_coords))
             ftu_bbox = [np.min(ftu_bbox[:,0]),np.min(ftu_bbox[:,1]),np.max(ftu_bbox[:,0]),np.max(ftu_bbox[:,1])]
@@ -6785,11 +6800,71 @@ class FUSION:
             )
             current_structure_fig = [current_structure_fig]
 
+        elif ctx.triggered_id['type'] in ['annotation-set-label','annotation-delete-label']:
+            
+            #TODO: Add more labels after clicking the check-mark
+            class_label = get_pattern_matching_value(class_label)
+            image_label = get_pattern_matching_value(image_label)
+            print(f'class_label: {class_label}')
+            print(f'image_label: {image_label}')
+
+        elif ctx.triggered_id['type'] == 'annotation-save-button':
+
+            # Grab the first member of the clicked ftu
+            if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
+                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+            elif 'Manual' in clicked_ftu_name:
+                manual_idx = int(clicked_ftu_name.split(': ')[-1])
+                intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
+            elif 'Marked' in clicked_ftu_name:
+                intersecting_ftu_polys = [shape(i['geojson']) for i in self.wsi.marked_ftus]
+
+            ftu_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
+            ftu_coords = np.array(self.wsi.convert_map_coords(ftu_coords))
+            ftu_bbox = [np.min(ftu_coords[:,0]),np.min(ftu_coords[:,1]),np.max(ftu_coords[:,0]),np.max(ftu_coords[:,1])]
+            height = int(ftu_bbox[3]-ftu_bbox[1])
+            width = int(ftu_bbox[2]-ftu_bbox[0])
+
+            # Convert annotations relayoutData to a mask and save both image and mask to current annotation session
+            combined_mask = np.zeros((height,width,3))
+            for key in annotations:
+                if 'shapes' in key:
+                    for i in range(len(annotations['shapes'])):
+                        mask = path_to_mask(annotations['shapes'][i]['path'],combined_mask.shape)
+
+                        combined_mask += 255*mask
+            
+            # Now saving both image and mask to the annotation session folder
+            ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox])
+            mask_image = Image.fromarray(np.uint8(combined_mask))
+
+            ftu_content = {
+                'content': ftu_image,
+                'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.png'
+            }
+            mask_content = {
+                'content': mask_image,
+                'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.png'
+            }
+
+            # Checking if slide folder is created
+            slide_folder = self.dataset_handler.check_user_folder(
+                folder_name = 'FUSION Annotation Sessions',
+                subfolder = self.current_ann_session,
+                sub_sub_folder = self.wsi.slide_name
+            )
+            if slide_folder is None:
+                # Creating slide folder in current_ann_session
+                new_folder = self.dataset_handler.create_user_folder(
+                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}',
+                    folder_name = self.wsi.slide_name
+                )
+            # Saving data
+            self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}')
+            self.dataset_handler.save_to_user_folder(mask_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}')
+
+
         return current_structure_fig, ftu_styles, class_labels, image_labels, [f'{clicked_ftu_name}:{ftu_idx}']
-
-
-
-
 
 
 
