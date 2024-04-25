@@ -537,7 +537,7 @@ class Prepper:
                                                 parameters={
                                                     'girderApiUrl':self.girder_handler.apiUrl,
                                                     'girderToken':self.girder_handler.user_token,
-                                                    'input_file':file_id,
+                                                    'files':file_id,
                                                     'base_dir':folder_id,
                                                     'modelfile':self.model_zoo[model]['model_id']
                                                 })

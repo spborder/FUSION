@@ -920,7 +920,8 @@ class FUSION:
                 Output({'type':'annotation-station-ftu','index':ALL},'style'),
                 Output({'type':'annotation-class-label','index':ALL},'value'),
                 Output({'type':'annotation-image-label','index':ALL},'value'),
-                Output({'type':'annotation-station-ftu-idx','index':ALL},'children')
+                Output({'type':'annotation-station-ftu-idx','index':ALL},'children'),
+                Output({'type':'annotation-save-button','index':ALL},'style')
             ],
             [
                 Input({'type':'annotation-station-ftu','index':ALL},'n_clicks'),
@@ -6737,6 +6738,7 @@ class FUSION:
         ftu_styles = [no_update]*len(ctx.outputs_list[1])
         class_labels = [no_update]*len(ctx.outputs_list[2])
         image_labels = [no_update]*len(ctx.outputs_list[3])
+        save_button_style = [no_update]
         
         ftu_idx = get_pattern_matching_value(ftu_idx)
         if type(ftu_idx)==list:
@@ -6863,8 +6865,10 @@ class FUSION:
             self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}')
             self.dataset_handler.save_to_user_folder(mask_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}')
 
+            save_button_style = [{'color':'success'}]
 
-        return current_structure_fig, ftu_styles, class_labels, image_labels, [f'{clicked_ftu_name}:{ftu_idx}']
+
+        return current_structure_fig, ftu_styles, class_labels, image_labels, [f'{clicked_ftu_name}:{ftu_idx}'], save_button_style
 
 
 
