@@ -1888,7 +1888,10 @@ class LayoutHandler:
                                 ),align='center')
                             for idx,i in enumerate(current_ftus)
                             ]
-                        )
+                        ),
+                        dbc.Row([
+                            'Placeholder for showing annotation progress'
+                        ])
                     ],md = 4),
                     dbc.Col([
                         dbc.Row(html.P('Select a structure to annotate in that structure')),
