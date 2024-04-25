@@ -3890,6 +3890,11 @@ class GirderHandler:
             filepath = f'/tmp/{save_object["filename"]}'
         )
 
+        # Adding metadata to uploaded object
+        if 'metadata' in save_object:
+            self.add_slide_metadata(upload_file_response['itemId'],save_object['metadata'])
+
+
         return upload_file_response
 
     def grab_from_user_folder(self,filename,folder = None):
