@@ -6763,8 +6763,10 @@ class FUSION:
                         {i: {'type': j}}
                         for i,j in zip(annotation_users,annotation_user_types)
                     ]
-                    }
+                }
             )
+
+            #TODO: Find some way to share this with indicated users
 
             updated_tabs,first_tab = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus)
 
@@ -6781,7 +6783,7 @@ class FUSION:
         if ctx.triggered_id['type']=='annotation-tab-group':
             session_name = current_session_names[int(session_tab.split('-')[-1])]
             self.current_ann_session = session_name
-
+            
             if session_name=='Create New Session':
                 first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = self.current_ftus)
             else:

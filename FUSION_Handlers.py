@@ -1875,6 +1875,8 @@ class LayoutHandler:
         Generate annotation content for current ftus
         """
         if not new:
+            #TODO: Have to pull session metadata to populate a few things here
+            #TODO: things like progress (individual user/across users for admins), available classes, available labels
             first_tab = html.Div([
                 dbc.Row([
                     dbc.Col([
