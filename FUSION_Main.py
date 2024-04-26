@@ -50,6 +50,7 @@ from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler, GeneH
 from FUSION_Prep import CODEXPrep, VisiumPrep, Prepper
 from FUSION_Utils import (
     get_pattern_matching_value, extract_overlay_value, 
+    gen_umap,
     gen_violin_plot, process_filters,
     path_to_mask)
 
@@ -908,10 +909,21 @@ class FUSION:
                 State({'type':'annotation-session-name','index':ALL},'value'),
                 State({'type':'annotation-session-description','index':ALL},'value'),
                 State({'type':'annotation-session-add-users','index':ALL},'value'),
-                State({'type':'ann-sess-tab','index':ALL},'label')
+                State({'type':'ann-sess-tab','index':ALL},'label'),
             ],
             prevent_initial_call = True
         )(self.update_annotation_session)
+
+        # Add new image annotation class
+        self.app.callback(
+            [
+                Output('')
+            ],
+            [
+                Input()
+            ],
+            prevent_initial_call = True
+        )
 
         # Updating annotation data and annotation structure
         self.app.callback(
@@ -940,7 +952,6 @@ class FUSION:
             ],
             prevent_initial_call = True
         )(self.update_current_annotation)
-
 
     def builder_callbacks(self):
 
@@ -1589,9 +1600,9 @@ class FUSION:
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
     def update_viewport_data(self,bounds,cell_view_type,frame_list,current_tab):
-        
-        print(f'triggered update_viewport_data: {ctx.triggered_id}, {ctx.triggered}')
-        print(ctx.outputs_list)
+        """
+        Updating data used for current viewport visualizations
+        """
 
         if not self.wsi is None:
             if not bounds is None:
@@ -1640,21 +1651,24 @@ class FUSION:
                         if cell_view_type is None:
                             cell_view_type = 'channel_hist'
 
-                    if cell_view_type=='channel_hist':
-                        if len(frame_list)==0:
-                            # For empty list
-                            frame_list = [self.wsi.channel_names[0]]
-                        else:
-                            # For first list element
-                            frame_list = frame_list[0]
-                            if not frame_list is None:
-                                if len(frame_list)==0:
-                                    frame_list = [self.wsi.channel_names[0]]
-                                if any([type(i)==list for i in frame_list]):
-                                    # channel histograms are only for general tissue
-                                    frame_list = [self.wsi.channel_names[0]]
-                            else:
+                    if len(frame_list)==0:
+                        # For empty list
+                        frame_list = [self.wsi.channel_names[0]]
+                    else:
+                        # For first list element
+                        frame_list = frame_list[0]
+                        if not frame_list is None:
+                            if len(frame_list)==0:
                                 frame_list = [self.wsi.channel_names[0]]
+                            if any([type(i)==list for i in frame_list]):
+                                # channel histograms are only for general tissue
+                                frame_list = [self.wsi.channel_names[0]]
+                        else:
+                            frame_list = [self.wsi.channel_names[0]]
+
+
+                    if cell_view_type in ['channel_hist']:
+
                         try:
                             intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box,frame_list)
                         except girder_client.HttpError:
@@ -1664,7 +1678,7 @@ class FUSION:
                             raise exceptions.PreventUpdate
                         intersecting_ftus['Tissue'] = intersecting_region
 
-                    elif cell_view_type=='umap' or cell_view_type=='cell':
+                    if cell_view_type=='features' or cell_view_type=='cell':
 
                         for ftu in self.current_ftu_layers:
                             if not ftu=='Spots':
@@ -1715,9 +1729,9 @@ class FUSION:
                                         else:
                                             counts_data = pd.concat([counts_data,frame_data_df],axis=0,ignore_index=True)
 
-                            elif cell_view_type == 'umap':
+                            elif cell_view_type == 'features':
                                 counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
-                                first_chart_label = 'Cell UMAP'
+                                first_chart_label = 'Nucleus Features'
 
                                 # Getting all clustering information for structures in current viewport
                                 counts_data_list = []
@@ -1725,14 +1739,23 @@ class FUSION:
                                 if type(intersecting_ftus[f])==list:
                                     for ftu_idx,ind_ftu in enumerate(intersecting_ftus[f]):
                                         
+                                        cell_features = {}
+                                        if 'Channel Means' in ind_ftu:
+                                            for frame in frame_list:
+                                                #TODO: Get rid of "Histology H&E" in channel names
+                                                cell_features[f'Channel {self.wsi.channel_names.index(frame)}'] = ind_ftu['Channel Means'][self.wsi.channel_names.index(frame)]
+
+                                        if 'Cell Type' in ind_ftu:
+                                            cell_features['Cell Type'] = ind_ftu['Cell Type']
+                                        else:
+                                            cell_features['Cell Type'] = 'Unlabeled'
+                                        
                                         if 'Cluster' in ind_ftu:
-                                            counts_data_list.append({
-                                                'Structure': f,
-                                                'Cluster': ind_ftu['Cluster'],
-                                                'umap_x': ind_ftu['umap.x'],
-                                                'umap_y': ind_ftu['umap.y'],
-                                                'Hidden': {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds),'Cluster':ind_ftu['Cluster']}
-                                            })
+                                            cell_features['Cluster'] = ind_ftu['Cluster']
+                                        
+                                        cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
+
+                                        counts_data_list.append(cell_features)
                                 
                                 if len(counts_data_list)>0:
                                     counts_data = pd.DataFrame.from_records(counts_data_list)
@@ -1795,14 +1818,42 @@ class FUSION:
                                         y = 'Frequency',
                                         color = 'Channel'
                                     )
-                                elif cell_view_type=='umap':
-                                    f_pie = px.scatter(
-                                        data_frame = counts_data,
-                                        x = 'umap_x',
-                                        y = 'umap_y',
-                                        color = 'Cluster',
-                                        custom_data = 'Hidden'
-                                    )
+                                elif cell_view_type=='features':
+
+                                    if len(frame_list)==1:
+                                        f_pie = gen_violin_plot(
+                                            feature_data = counts_data,
+                                            label_col = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
+                                            label_name = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
+                                            feature_col = f'Channel {self.wsi.channel_names.index(frame_list[0])}',
+                                            custom_col = 'Hidden'
+                                        )
+                                    elif len(frame_list)==2:
+                                        f_names = [i for i in counts_data.columns.tolist() if 'Channel' in i]
+                                        f_pie = px.scatter(
+                                            data_frame = counts_data,
+                                            x = f_names[0],
+                                            y = f_names[1],
+                                            color = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
+                                            custom_data = 'Hidden'
+                                        )
+                                        
+                                    elif len(frame_list)>2:
+                                        # Generate UMAP dimensional reduction for channel mean data
+                                        f_umap_data = gen_umap(
+                                            feature_data = counts_data,
+                                            feature_cols = [i for i in counts_data.columns.tolist() if 'Channel' in i],
+                                            label_and_custom_cols=[i for i in counts_data.columns.tolist() if not 'Channel' in i]
+                                        )
+
+                                        f_pie = px.scatter(
+                                            data_frame = f_umap_data,
+                                            x = 'UMAP1',
+                                            y = 'UMAP2',
+                                            color = 'Cell Type' if 'Cell Type' in f_umap_data.columns else 'Cluster',
+                                            custom_data = 'Hidden'
+                                        )
+
                                 elif cell_view_type=='cell':
 
                                     counts_data = counts_data['Cluster'].value_counts().to_dict()
@@ -1872,7 +1923,7 @@ class FUSION:
                                 f_tab = dbc.Tab([
                                     dbc.Row([
                                         dbc.Col(
-                                            dbc.Label('Select a Channel Name to view Histogram:',html_for={'type':'frame-histogram-drop','index':0}),
+                                            dbc.Label('Select a Channel Name:',html_for={'type':'frame-histogram-drop','index':0}),
                                             md = 6, align = 'center',
                                         ),
                                         dbc.Col(
@@ -1884,7 +1935,7 @@ class FUSION:
                                             ),
                                             md = 6, align = 'center'
                                         )
-                                    ], style = {'display':'none'} if not cell_view_type=='channel_hist' else {}),
+                                    ], style = {'display':'none'} if not cell_view_type in ['channel_hist','features'] else {}),
                                     dbc.Row([
                                         dbc.Col([
                                             dbc.Label(first_chart_label),
@@ -1916,7 +1967,7 @@ class FUSION:
                                     dcc.Dropdown(
                                         options = [
                                             {'label':'Channel Intensity Histograms','value':'channel_hist'},
-                                            {'label':'UMAP Clustering','value':'umap'},
+                                            {'label':'Nucleus Features','value':'features'},
                                             {'label':'Cell Type Composition','value':'cell'}
                                         ],
                                         value = cell_view_type,
@@ -6614,26 +6665,7 @@ class FUSION:
             labeling_cells = [i['customdata'] for i in selectedData['points']]
 
             if not ctx.triggered_id['type']=='cell-labeling-channel-drop':
-                new_channel_figure = go.Figure()
                 channel_val = []
-            else:
-                channel_val = channel_select
-                # Pulling data from selected cells:
-                cell_frame_intensity = []
-                cell_cluster_list = []
-                for cell in labeling_cells:
-                    cell_hist = self.wsi.intersecting_frame_intensity(box(*cell[0]['Bbox']),[channel_select])
-                    cell_cluster = cell[0]['Cluster']
-
-                    # Output here is a dictionary where cell_hist[channel_select] = {'':[],'':[]}
-                    total_intensity = np.mean(np.array([0]+cell_hist[channel_select]['hist']) * np.array(cell_hist[channel_select]['bin_edges']))
-                    cell_frame_intensity.append(round(total_intensity))
-                    cell_cluster_list.append(cell_cluster)
-
-                cell_frame_intensity_df = pd.DataFrame({f'{channel_select} Intensity':cell_frame_intensity,'Cluster': cell_cluster_list,'Cell':[f'Cell {idx}' for idx in range(len(cell_frame_intensity))]})
-                new_channel_figure = gen_violin_plot(cell_frame_intensity_df,label_col = 'Cluster', label_name = 'Cluster', feature_col = f'{channel_select} Intensity',custom_col = 'Cell')
-
-                new_channel_figure = go.Figure(new_channel_figure)
 
             return_div = html.Div([
                 dbc.Row([
@@ -6653,20 +6685,8 @@ class FUSION:
                         ], md = 4),
                     dbc.Col([
                         dbc.Row(html.H6('Selected Cell Plot')),
-                        dbc.Row(
-                            dcc.Dropdown(
-                                options = self.wsi.channel_names,
-                                value = channel_val,
-                                placeholder = 'Select Channel to plot',
-                                id = {'type':'cell-labeling-channel-drop','index':0}
-                            ),
-                            style = {'marginTop':'5px','marginBottom':'5px'}
-                        ),
                         dbc.Row([
-                            dcc.Graph(
-                                id = {'type':'cell-labeling-plot','index':0},
-                                figure = new_channel_figure
-                            )
+                            "Something should go here for assigning a label to the selected cell types"
                         ])
                     ])
                 ])

@@ -1910,7 +1910,8 @@ class LayoutHandler:
                                         layout = {
                                             'margin': {'l':0,'r':0,'t':0,'b':0},
                                             'xaxis':{'showticklabels':False,'showgrid':False},
-                                            'yaxis':{'showticklabels':False,'showgrid':False}
+                                            'yaxis':{'showticklabels':False,'showgrid':False},
+                                            'dragmode':'drawclosedpath'
                                             }
                                     ),
                                     config = {
@@ -1934,8 +1935,9 @@ class LayoutHandler:
                                         max = 10.0,
                                         step = 0.1,
                                         vertical=False,
-                                        style = {'width':'100%','marginBottom':'20px'}
-                                    )
+                                        marks=None
+                                    ),
+                                    style = {'width':'100%','marginBottom':'20px'}
                                 ),
                                 html.Hr(),
                                 dbc.Row(dbc.Label('Class Name')),
@@ -2032,7 +2034,7 @@ class LayoutHandler:
                 dbc.Row(
                     dcc.Textarea(
                         id = {'type':'annotation-session-description','index':0},
-                        placeholder = 'type here',
+                        placeholder = 'Write any useful information about the annotation session here including rationale, goals, and considerations for labeling',
                         style = {'width':'100%'},
                         maxLength = 10000
                     ),
@@ -2041,11 +2043,83 @@ class LayoutHandler:
                 ),
                 html.Hr(),
                 dbc.Row([
-                    'Placeholder for defining annotation session type (text/image/both) and classes/labels'
-                ]),
+                    dbc.Label('What classes should be annotated in images?',html_for={'type':'annotation-session-classes','index':0}),
+                    html.Div(
+                        id = {'type':'annotation-classes-parent-div','index':0},
+                        children = [
+                            html.Div(
+                                id = {'type':'annotation-class-div','index':0},
+                                children = [
+                                    html.I(
+                                        className = 'bi-x-fill fa-2x',
+                                        id = {'type':'delete-annotation-class','index':0},
+                                        style = {'display':'none'}
+                                    )
+                                ]
+                            )
+                        ]
+                    ),
+                    html.Div(
+                        id = {'type':'annotation-session-class-div','index':0},
+                        children = [
+                            html.I(
+                                className = 'bi bi-plus-square fa-2x',
+                                id = {'type':'add-class-butt','index':0},
+                                style = {'display':'inline-block','position':'relative','left':'45%','right':'50%'}
+                            )
+                        ],
+                        style = {'marginBottom':'15px'}
+                    ),
+                    dbc.Label('What labels should be assigned to images?',html_for = {'type':'annotation-session-labels','index':0}),
+                    html.Div(
+                        id = {'type':'annotation-labels-parent-div','index':0},
+                        children = [
+                            html.I(
+                                className = 'bi bi-x-fill fa-2x',
+                                id = {'type':'delete-annotation-label','index':0},
+                                style = {'display':'none'}
+                            )
+                        ],
+                        style = {'marginBottom':'15px'}
+                    ),
+                    html.Div(
+                        children = [
+                            html.I(
+                                className = 'bi bi-clipboard-plus fa-2x',
+                                n_clicks = 0,
+                                id = {'type':'add-label-butt','index':0},
+                                style = {'display':'inline-block','position':'relative','left':'45%','right':'50%'}
+                            )
+                        ]
+                    )
+                ],align='center'),
                 html.Hr(),
                 dbc.Row([
-                    'Add Users placeholder'
+                    dbc.Label('Who should see this annotation session?',html_for = {'type':'annotation-session-users','index':0}),
+                    html.Div(
+                        id = {'type':'annotation-session-users-parent','index':0},
+                        children = [
+                            html.Div(
+                                id = {'type':'annotation-add-user-div','index':0},
+                                children = [
+                                    html.I(
+                                        className='bi bi-x-fill fa-2x',
+                                        id = {'type':'delete-annotation-user','index':0},
+                                        style = {'display':'none'}
+                                    )
+                                ]
+                            )
+                        ]
+                    ),
+                    html.Div(
+                        html.I(
+                            className = 'bi bi-person-plus fa-2x',
+                            n_clicks = 0,
+                            id = {'type':'add-user-butt','index':0},
+                            style = {'display':'inline-block','position':'relative','left':'45%','right':'50%'}
+                        ),
+                        style = {'marginBottom':'10px'}
+                    )
                 ],align='center',style={'marginLeft':'5px','marginBottom':'20px','marginTop':'10px'}),
                 dbc.Row([
                     dbc.Button(

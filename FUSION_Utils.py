@@ -17,6 +17,8 @@ import textwrap
 from skimage import draw
 from scipy import ndimage
 
+from umap import UMAP
+
 def get_pattern_matching_value(input_val):
     """
     Used to extract usable values from components generated using pattern-matching syntax.
@@ -103,6 +105,30 @@ def gen_violin_plot(feature_data, label_col, label_name, feature_col, custom_col
     )
 
     return figure
+
+def gen_umap(feature_data, feature_cols, label_and_custom_cols):
+    """
+    Generating umap embeddings dataframe from input data
+    """
+
+    quant_data = feature_data.loc[:,[i for i in feature_cols if i in feature_data.columns]].values
+    label_data = feature_data.loc[:,[i for i in label_and_custom_cols if i in feature_data.columns]]
+
+    feature_data_means = np.nanmean(quant_data,axis=0)
+    feature_data_stds = np.nanstd(quant_data,axis=0)
+
+    scaled_data = (quant_data-feature_data_means)/feature_data_stds
+    scaled_data[np.isnan(scaled_data)] = 0.0
+    scaled_data[~np.isfinite(scaled_data)] = 0.0
+
+    umap_reducer = UMAP()
+    embeddings = umap_reducer.fit_transform(scaled_data)
+    umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'])
+
+    umap_df = pd.concat((umap_df,label_data),axis=1,ignore_index=True)
+    umap_df.columns = ['UMAP1','UMAP2'] + label_and_custom_cols
+
+    return umap_df
 
 def process_filters(input_keys,input_values,input_styles,cell_names_key=None):
     """
