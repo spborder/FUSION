@@ -910,6 +910,10 @@ class FUSION:
                 State({'type':'annotation-session-description','index':ALL},'value'),
                 State({'type':'annotation-session-add-users','index':ALL},'value'),
                 State({'type':'ann-sess-tab','index':ALL},'label'),
+                State({'type':'new-annotation-class','index':ALL},'value'),
+                State({'type':'new-annotation-label','index':ALL},'value'),
+                State({'type':'new-annotation-user','index':ALL},'value'),
+                State({'type':'new-user-type','index':ALL},'value')
             ],
             prevent_initial_call = True
         )(self.update_annotation_session)
@@ -6721,7 +6725,7 @@ class FUSION:
 
         return [return_div], [f'{len(selectedData["points"])} Cells selected']
 
-    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names):
+    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_labels, annotation_users, annotation_user_types):
 
         print(f'triggered update_annotation_session: {ctx.triggered_id}, {ctx.triggered}')
         return_div = [no_update]
@@ -6751,7 +6755,15 @@ class FUSION:
             new_session_folder = self.dataset_handler.create_user_folder(
                 parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions',
                 folder_name = new_session_name,
-                metadata = {"Session Description":new_session_description}
+                metadata = {
+                    "Session Description":new_session_description,
+                    "Annotations": annotation_classes,
+                    "Labels": annotation_labels,
+                    "Users": [
+                        {i: {'type': j}}
+                        for i,j in zip(annotation_users,annotation_user_types)
+                    ]
+                    }
             )
 
             updated_tabs,first_tab = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus)
