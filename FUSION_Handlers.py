@@ -1932,7 +1932,7 @@ class LayoutHandler:
                                     dcc.Slider(
                                         id = {'type':'annotation-line-slider','index':0},
                                         min = 1.0,
-                                        max = 10.0,
+                                        max = 100.0,
                                         step = 0.1,
                                         vertical=False,
                                         marks=None
@@ -1941,7 +1941,13 @@ class LayoutHandler:
                                 ),
                                 html.Hr(),
                                 dbc.Row(dbc.Label('Class Name')),
-                                dbc.Row('Placeholder for populating with available classes')
+                                dbc.Row(
+                                    dcc.Dropdown(
+                                        placeholder = 'Select annotation class',
+                                        id = {'type':'annotation-class-select','index':0}
+                                    ),
+                                    style = {'width':'100%'}
+                                )
                             ])
                         ],style = {'marginBottom':'20px'}),
                         dbc.Row([
@@ -2064,7 +2070,7 @@ class LayoutHandler:
                         children = [
                             html.I(
                                 className = 'bi bi-plus-square fa-2x',
-                                id = {'type':'add-class-butt','index':0},
+                                id = {'type':'add-annotation-class','index':0},
                                 style = {'display':'inline-block','position':'relative','left':'45%','right':'50%'}
                             )
                         ],
@@ -2087,7 +2093,7 @@ class LayoutHandler:
                             html.I(
                                 className = 'bi bi-clipboard-plus fa-2x',
                                 n_clicks = 0,
-                                id = {'type':'add-label-butt','index':0},
+                                id = {'type':'add-annotation-label','index':0},
                                 style = {'display':'inline-block','position':'relative','left':'45%','right':'50%'}
                             )
                         ]
@@ -2115,7 +2121,7 @@ class LayoutHandler:
                         html.I(
                             className = 'bi bi-person-plus fa-2x',
                             n_clicks = 0,
-                            id = {'type':'add-user-butt','index':0},
+                            id = {'type':'add-annotation-user','index':0},
                             style = {'display':'inline-block','position':'relative','left':'45%','right':'50%'}
                         ),
                         style = {'marginBottom':'10px'}

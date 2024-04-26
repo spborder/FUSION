@@ -917,13 +917,38 @@ class FUSION:
         # Add new image annotation class
         self.app.callback(
             [
-                Output('')
+                Output({'type':'annotation-classes-parent-div','index':ALL},'children',allow_duplicate=True)
             ],
             [
-                Input()
+                Input({'type':'add-annotation-class','index':ALL},'n_clicks'),
+                Input({'type':'delete-annotation-class','index':ALL},'n_clicks')
             ],
             prevent_initial_call = True
-        )
+        )(self.add_annotation_class)
+
+        # Add new annotation text label
+        self.app.callback(
+            [
+                Output({'type':'annotation-labels-parent-div','index':ALL},'children')
+            ],
+            [
+                Input({'type':'add-annotation-label','index':ALL},'n_clicks'),
+                Input({'type':'delete-annotation-label','index':ALL},'n_clicks')
+            ],
+            prevent_initial_call = True
+        )(self.add_annotation_label)
+
+        # Add new annotation session user
+        self.app.callback(
+            [
+                Output({'type':'annotation-session-users-parent','index':ALL},'children')
+            ],
+            [
+                Input({'type':'add-annotation-user','index':ALL},'n_clicks'),
+                Input({'type':'delete-annotation-user','index':ALL},'n_clicks')
+            ],
+            prevent_initial_call = True
+        )(self.add_annotation_user)
 
         # Updating annotation data and annotation structure
         self.app.callback(
@@ -941,7 +966,9 @@ class FUSION:
                 Input({'type':'annotation-next-button','index':ALL},'n_clicks'),
                 Input({'type':'annotation-save-button','index':ALL},'n_clicks'),
                 Input({'type':'annotation-set-label','index':ALL},'n_clicks'),
-                Input({'type':'annotation-delete-label','index':ALL},'n_clicks')
+                Input({'type':'annotation-delete-label','index':ALL},'n_clicks'),
+                Input({'type':'annotation-line-slider','index':ALL},'value'),
+                Input({'type':'annotation-class-select','index':ALL},'value')
             ],
             [
                 State({'type':'annotation-current-structure','index':ALL},'relayoutData'),
@@ -6753,7 +6780,7 @@ class FUSION:
         
         return return_div, new_annotation_tab_group
     
-    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click, annotations, class_label, image_label, ftu_names, ftu_idx):
+    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, annotations, class_label, image_label, ftu_names, ftu_idx):
         """
         Getting current annotation data (text or image) and saving to annotation session folder on the server
         """
@@ -6762,7 +6789,20 @@ class FUSION:
         class_labels = [no_update]*len(ctx.outputs_list[2])
         image_labels = [no_update]*len(ctx.outputs_list[3])
         save_button_style = ['primary']
-        
+
+        line_slide = get_pattern_matching_value(line_slide)
+        if line_slide is None:
+            line_slide = 5
+        ann_class = get_pattern_matching_value(ann_class)
+
+        ann_class_color = 'rgb(255,0,0)'
+
+        annotations = get_pattern_matching_value(annotations)
+        if 'shapes' in annotations.keys():
+            annotations = annotations['shapes']
+        else:
+            annotations = []
+
         ftu_idx = get_pattern_matching_value(ftu_idx)
         if type(ftu_idx)==list:
             ftu_idx=ftu_idx[0]
@@ -6783,7 +6823,7 @@ class FUSION:
             clicked_ftu_name = ftu_idx.split(':')[0]
             ftu_idx = int(ftu_idx.split(':')[-1])
 
-        if ctx.triggered_id['type'] in ['annotation-station-ftu','annotation-previous-button','annotation-next-button']:
+        if ctx.triggered_id['type'] in ['annotation-station-ftu','annotation-previous-button','annotation-next-button','annotation-line-slider','annotation-class-select']:
             
             # Grab the first member of the clicked ftu
             if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
@@ -6821,7 +6861,10 @@ class FUSION:
                 {
                     'margin': {'l':0,'r':0,'t':0,'b':0},
                     'xaxis':{'showticklabels':False,'showgrid':False},
-                    'yaxis':{'showticklabels':False,'showgrid':False}
+                    'yaxis':{'showticklabels':False,'showgrid':False},
+                    "shapes":annotations,
+                    "newshape.line.width": line_slide,
+                    "newshape.line.color": ann_class_color
                 }
             )
             current_structure_fig = [current_structure_fig]
@@ -6904,7 +6947,6 @@ class FUSION:
 
             # Convert annotations relayoutData to a mask and save both image and mask to current annotation session
             combined_mask = np.zeros((height,width,3))
-            annotations = get_pattern_matching_value(annotations)
             for key in annotations:
                 if 'shapes' in key:
                     for i in range(len(annotations['shapes'])):
@@ -6953,8 +6995,175 @@ class FUSION:
 
         return current_structure_fig, ftu_styles, class_labels, image_labels, [f'{clicked_ftu_name}:{ftu_idx}'], save_button_style
 
+    def add_annotation_class(self,add_click,delete_click):
+        """
+        Adding a new annotation class when pre-setting an annotation session
+        """
+        add_click = get_pattern_matching_value(add_click)
+
+        print(ctx.triggered_id)
+        if ctx.triggered_id['type']=='add-annotation-class':
+            patched_list = Patch()
+
+            def new_class_input():
+                return html.Div([
+                    dbc.Row([
+                        dbc.Col(
+                            dcc.Input(
+                                placeholder = 'New Class Name',
+                                type = 'text',
+                                maxLength=1000,
+                                id = {'type':'new-annotation-class','index':add_click}
+                            ),
+                            md = 8
+                        ),
+                        dbc.Col(
+                            'color-picker',
+                            md = 2
+                        ),
+                        dbc.Col(
+                            html.I(
+                                id = {'type':'delete-annotation-class','index':add_click},
+                                n_clicks = 0,
+                                className = 'bi bi-x-circle-fill fa-2x',
+                                style = {'color':'rgb(255,0,0)'}
+                            ),
+                            md = 2
+                        )
+                    ],align = 'center')
+                ])
+        
+            patched_list.append(new_class_input())
+
+        elif ctx.triggered_id['type']=='delete-annotation-class':
+    
+            patched_list = Patch()
+            values_to_remove = []
+            for i,val in enumerate(delete_click):
+                if val:
+                    values_to_remove.insert(0,i)
+            
+            for v in values_to_remove:
+                del patched_list[v]
+
+        else:
+            raise exceptions.PreventUpdate
+
+        return [patched_list]
+
+    def add_annotation_label(self,add_click,delete_click):
+        """
+        Adding a new annotation label type when pre-setting an annotation session
+        """
+        print(ctx.triggered_id)
+        add_click = get_pattern_matching_value(add_click)
+
+        if ctx.triggered_id['type']=='add-annotation-label':
+
+            patched_list = Patch()
+
+            def new_label_item():
+                return html.Div([
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Input(
+                                placeholder = 'New Class Label',
+                                type = 'text',
+                                maxLength=1000,
+                                id = {'type':'new-annotation-label','index':add_click}
+                            )
+                        ], md = 10),
+                        dbc.Col(
+                            html.I(
+                                id = {'type':'delete-annotation-label','index':add_click},
+                                n_clicks = 0,
+                                className = 'bi bi-x-circle-fill fa-2x',
+                                style = {'color':'rgb(255,0,0)'}
+                            ),
+                            md = 2
+                        )
+                    ])
+                ])
+            
+            patched_list.append(new_label_item())
+        
+        elif ctx.triggered_id['type']=='delete-annotation-label':
+
+            patched_list = Patch()
+            values_to_remove = []
+            for i,val in enumerate(delete_click):
+                if val:
+                    values_to_remove.insert(0,i)
+            
+            for v in values_to_remove:
+                del patched_list[v]
+
+        else:
+            raise exceptions.PreventUpdate
+        
+        return [patched_list]
+
+    def add_annotation_user(self,add_click,delete_click):
+        """
+        Adding a new user to the annotation session preset
+        """
+        print(ctx.triggered_id)
+        add_click = get_pattern_matching_value(add_click)
+
+        if ctx.triggered_id['type']=='add-annotation-user':
+
+            patched_list = Patch()
+
+            def new_user_input():
+                return html.Div([
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Input(
+                                placeholder = 'Add username here',
+                                type = 'text',
+                                maxLength = 1000,
+                                id = {'type':'new-annotation-user','index':add_click},
+                                style = {'width':'100%'}
+                            )
+                        ], md = 8),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = ['annotator','admin'],
+                                value = 'annotator',
+                                id = {'type':'new-user-type','index':add_click}
+                            )
+                        ),
+                        dbc.Col(
+                            html.I(
+                                id = {'type':'delete-annotation-user','index':add_click},
+                                n_clicks = 0,
+                                className = 'bi bi-x-circle-fill fa-2x',
+                                style = {'color':'rgb(255,0,0)'}
+                            ),
+                            md = 2
+                        )
+                    ])
+                ])
+
+            patched_list.append(new_user_input())
+        
+        elif ctx.triggered_id['type']=='delete-annotation-user':
+            patched_list = Patch()
+            values_to_remove = []
+            for i,val in enumerate(delete_click):
+                if val:
+                    values_to_remove.insert(0,i)
+            for v in values_to_remove:
+                del patched_list[v]
+
+        else:
+            raise exceptions.PreventUpdate
+
+        return [patched_list]
 
 
+
+        return [patched_list]
 
 
 
