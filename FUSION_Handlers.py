@@ -28,6 +28,7 @@ import requests
 from math import ceil
 import base64
 import datetime
+import tifffile
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -1796,8 +1797,9 @@ class LayoutHandler:
             # Checking annotation session folder for current sessions
             ann_sessions = dataset_handler.gc.get(f'/folder',parameters={'parentType':'folder','parentId':current_ann_sessions["_id"]})
             ann_session_names = [i['name'] for i in ann_sessions]
+            ann_session_meta = [i['meta'] for i in ann_sessions]
 
-            first_session = ann_session_names[0]
+            first_session = ann_sessions[0]
 
             tab_list = [
                 dbc.Tab(
@@ -1810,52 +1812,16 @@ class LayoutHandler:
                 for idx,i in enumerate(ann_session_names)
             ]
 
-            first_tab = self.gen_annotation_content(False,current_ftus)
+            session_progress, session_info = dataset_handler.get_annotation_session_progress(first_session['name'])
+
+            first_tab = self.gen_annotation_content(False,current_ftus, ann_session_meta[0]['Annotations'], ann_session_meta[0]['Labels'], session_progress)
 
         else:
             
             tab_list = []
             first_session = ['Create New Session']
 
-            first_tab = html.Div([
-                dbc.Row([
-                    dbc.Col(dbc.Label('Session Name: '),md = 3),
-                    dbc.Col(
-                        dcc.Input(
-                            placeholder = 'Name for new session',
-                            id = {'type':'annotation-session-name','index':0},
-                            style = {'width':'100%'}
-                        ),
-                        md = 9
-                    )
-                ],align='center',style = {'marginBottom':'20px','marginTop':'10px'}),
-                dbc.Row(dbc.Label('Session Description'),align = 'center'),
-                dbc.Row(
-                    dcc.Textarea(
-                        id = {'type':'annotation-session-description','index':0},
-                        placeholder = 'type here',
-                        style = {'width':'100%'},
-                        maxLength = 10000
-                    ),
-                    align = 'center',
-                    style = {'marginBottom':'20px'}
-                ),
-                html.Hr(),
-                dbc.Row([
-                    'Add Users placeholder'
-                ],align='center',style={'marginLeft':'5px','marginBottom':'20px'}),
-                dbc.Row([
-                    dbc.Button(
-                        'Create New Session!',
-                        id = {'type':'create-annotation-session-button','index':0},
-                        className = 'd-grid col-12 mx-auto',
-                        n_clicks = 0
-                    )
-                ],
-                align='center',
-                style = {'marginBottom':'10px'}
-                )
-            ],style = {'maxHeight':'70vh','overflow':'scroll'})
+            first_tab = self.gen_annotation_content(True, None)
 
         # Adding "Create New" tab
         tab_list.append(
@@ -1870,13 +1836,11 @@ class LayoutHandler:
 
         return tab_list, first_tab, first_session
 
-    def gen_annotation_content(self,new,current_ftus):
+    def gen_annotation_content(self,new,current_ftus,classes=None,labels=None,ann_progress = None):
         """
         Generate annotation content for current ftus
         """
         if not new:
-            #TODO: Have to pull session metadata to populate a few things here
-            #TODO: things like progress (individual user/across users for admins), available classes, available labels
             first_tab = html.Div([
                 dbc.Row([
                     dbc.Col([
@@ -1891,9 +1855,20 @@ class LayoutHandler:
                             for idx,i in enumerate(current_ftus)
                             ]
                         ),
+                        html.Hr(),
                         dbc.Row([
-                            'Placeholder for showing annotation progress'
-                        ])
+                            dbc.Alert([
+                                html.H4('Progress'),
+                                html.H6(f'Slides: {ann_progress["slides"]}'),
+                                html.Hr(),
+                                html.H6(f'Annotations: {ann_progress["annotations"]}'),
+                                html.Hr(),
+                                html.H6(f'Labels: {ann_progress["labels"]}')
+                            ],
+                            color = 'info',
+                            style = {'marginTop':'20px','marginLeft':'10px', 'width':'75%'}
+                            )
+                        ],align='center')
                     ],md = 4),
                     dbc.Col([
                         dbc.Row(html.P('Select a structure to annotate in that structure')),
@@ -1946,6 +1921,8 @@ class LayoutHandler:
                                 dbc.Row(
                                     dcc.Dropdown(
                                         placeholder = 'Select annotation class',
+                                        options = classes,
+                                        value = classes[0]['value'],
                                         id = {'type':'annotation-class-select','index':0}
                                     ),
                                     style = {'width':'100%'}
@@ -1990,8 +1967,10 @@ class LayoutHandler:
                 ),
                 dbc.Row([
                     dbc.Col(
-                        dcc.Input(
+                        dcc.Dropdown(
                             placeholder='Add a class label type',
+                            options = labels,
+                            value = labels[0],
                             id = {'type':'annotation-class-label','index':0},
                             style = {'width':'100%'}
                         ),
@@ -2072,6 +2051,7 @@ class LayoutHandler:
                         children = [
                             html.I(
                                 className = 'bi bi-plus-square fa-2x',
+                                n_clicks = 0,
                                 id = {'type':'add-annotation-class','index':0},
                                 style = {'display':'inline-block','position':'relative','left':'45%','right':'50%'}
                             )
@@ -2084,6 +2064,7 @@ class LayoutHandler:
                         children = [
                             html.I(
                                 className = 'bi bi-x-fill fa-2x',
+                                n_clicks = 0,
                                 id = {'type':'delete-annotation-label','index':0},
                                 style = {'display':'none'}
                             )
@@ -2112,6 +2093,7 @@ class LayoutHandler:
                                 children = [
                                     html.I(
                                         className='bi bi-x-fill fa-2x',
+                                        n_clicks = 0,
                                         id = {'type':'delete-annotation-user','index':0},
                                         style = {'display':'none'}
                                     )
@@ -3023,34 +3005,38 @@ class LayoutHandler:
             ],style={'marginBottom':'20px','display':'none'}
         )
         
-        welcome_layout = html.Div([
-            dcc.Location(id='url'),
-            html.Div(id='ga-invisible-div', style={'display': 'none'}),
-            header,
-            html.B(),
-            dbc.Row(dbc.Col(html.Div(sider))),
-            html.B(),
-            dbc.Row(
-                id = 'descrip-and-instruct',
-                children = description,
-                align='center'
-            ),
-            dbc.Row(
-                id = 'slide-select-row',
-                children = slide_select
-            ),
-            dbc.Container([
-                html.H1('Welcome to FUSION!'),
-                html.Img(src='./assets/hello-fusey'),
-                ],fluid=True,id='container-content',style = {'height':'100vh'}
-            ),
-            #html.Hr(),
-            html.Div(id='user-id-div', style={'display': 'none'}),
-            html.Div(id='dummy-div-for-userId', style={'display': 'none'}),
-            html.Div(id='dummy-div-plugin-track', style={'display': 'none'}),
-            html.Div(id='plugin-ga-track', style={'display': 'none'}),
-            html.Footer('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
-        ])
+        welcome_layout = dmc.MantineProvider(
+            children = [
+                html.Div([
+                    dcc.Location(id='url'),
+                    html.Div(id='ga-invisible-div', style={'display': 'none'}),
+                    header,
+                    html.B(),
+                    dbc.Row(dbc.Col(html.Div(sider))),
+                    html.B(),
+                    dbc.Row(
+                        id = 'descrip-and-instruct',
+                        children = description,
+                        align='center'
+                    ),
+                    dbc.Row(
+                        id = 'slide-select-row',
+                        children = slide_select
+                    ),
+                    dbc.Container([
+                        html.H1('Welcome to FUSION!'),
+                        html.Img(src='./assets/hello-fusey'),
+                        ],fluid=True,id='container-content',style = {'height':'100vh'}
+                    ),
+                    #html.Hr(),
+                    html.Div(id='user-id-div', style={'display': 'none'}),
+                    html.Div(id='dummy-div-for-userId', style={'display': 'none'}),
+                    html.Div(id='dummy-div-plugin-track', style={'display': 'none'}),
+                    html.Div(id='plugin-ga-track', style={'display': 'none'}),
+                    html.Footer('“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”')
+                ])
+            ]
+        )
 
         self.current_initial_layout = welcome_layout
         self.validation_layout.append(welcome_layout)
@@ -3430,7 +3416,7 @@ class GirderHandler:
             for f in np.unique(slide_folderIds):
                 self.slide_datasets[f] = {}
                 folder_name = self.gc.get(f'/folder/{f}')['name']
-                if not folder_name=='histoqc_outputs':
+                if not folder_name=='histoqc_outputs' or folder_name == 'FUSION Annotation Sessions':
                     self.slide_datasets[f]['name'] = folder_name
                 
                     folder_slides = [i for i in collection_slides if i['folderId']==f]
@@ -3962,9 +3948,12 @@ class GirderHandler:
             with pd.ExcelWriter(f'/tmp/{save_object["filename"]}') as writer:
                 save_object['content'].to_excel(writer,engine='openpyxl')
         
-        elif 'png' in save_object['filename']:
-            # Should be a PIL.Image object
-            save_object['content'].save(f'/tmp/{save_object["filename"]}')
+        elif 'png' in save_object['filename'] or 'tiff' in save_object['filename']:
+            if 'png' in save_object['filename']:
+                # Should be a PIL.Image object
+                Image.fromarray(save_object['content']).save(f'/tmp/{save_object["filename"]}')
+            elif 'tiff' in save_object['filename']:
+                tifffile.imsave(f'/tmp/{save_object["filename"]}',save_object['content'])
 
         print(f'Uploading: {save_object["filename"]} to {output_path_id}')
         upload_file_response = self.gc.uploadFileToFolder(
@@ -4032,6 +4021,50 @@ class GirderHandler:
             return all_folders[folder_names.index(folder_name)]
         else:
             return None
+
+    def get_annotation_session_progress(self, session_name):
+        """
+        Getting slide and image count (both with annotations and with labels)
+        """
+        session_progress = {
+            'slides': 0,
+            'annotations': 0,
+            'labels': 0
+        }
+
+        session_info = {
+            'name':'',
+            'Annotations':[],
+            'Labels':[]
+        }
+
+        path_to_ann_sessions = f'/user/{self.username}/Public/FUSION Annotation Sessions/{session_name}'
+        folder_id = self.gc.get('/resource/lookup',parameters={'path':path_to_ann_sessions})
+
+        session_info['name'] = folder_id['name']
+        session_info['Annotations'] = folder_id['meta']['Annotations']
+        session_info['Labels'] = folder_id['meta']['Labels']
+
+        # Getting slide count
+        all_folders = self.gc.get(f'/folder',parameters = {'parentType':'folder','parentId':folder_id["_id"],'limit':100000})
+        session_progress['slides'] += len(all_folders)
+        
+        # Getting annotation and label count
+        for a in all_folders:
+            folders_in_slide = self.gc.get(f'folder',parameters = {'parentType':'folder','parentId':a["_id"],'limit':10000})
+            folder_names = [i['name'] for i in folders_in_slide]
+            if 'Images' in folder_names:
+                image_folder_id = folders_in_slide[folder_names.index('Images')]['_id']
+                image_contents = self.gc.get(f'/folder/{image_folder_id}/details')
+                session_progress['annotations'] += image_contents['nItems']
+            
+            if 'Images with Labels' in folder_names:
+                label_folder_id = folders_in_slide[folder_names.index('Images with Labels')]["_id"]
+                label_contents = self.gc.get(f'/folder/{label_folder_id}/details')
+                session_progress['labels'] += label_contents['nItems']
+
+
+        return session_progress, session_info
 
     def create_user_folder(self, parent_path, folder_name, metadata = None):
         """

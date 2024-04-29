@@ -32,6 +32,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from matplotlib import colormaps
 
+import dash
+# Requirement for dash_mantine_components
+dash._dash_renderer._set_react_version('18.2.0')
 from dash import dcc, ctx, MATCH, ALL, Patch, dash_table, exceptions, callback_context, no_update
 
 import dash_bootstrap_components as dbc
@@ -642,11 +645,14 @@ class FUSION:
         # Updating Cell Composition pie charts
         self.app.callback(
             [Output('roi-pie-holder','children'),
-             Output('annotation-session-div','children')],
+             Output('annotation-session-div','children'),
+             Output({'type':'frame-label-drop','index':ALL},'disabled')],
             [Input('slide-map','bounds'),
              Input({'type':'roi-view-data','index':ALL},'value'),
-             Input({'type':'frame-histogram-drop','index':ALL},'value')],
-            State('tools-tabs','active_tab'),
+             Input({'type':'frame-data-butt','index':ALL},'n_clicks')],
+            [State('tools-tabs','active_tab'),
+             State({'type':'frame-histogram-drop','index':ALL},'value'),
+             State({'type':'frame-label-drop','index':ALL},'value')],
             prevent_initial_call = True
         )(self.update_viewport_data)      
 
@@ -911,6 +917,7 @@ class FUSION:
                 State({'type':'annotation-session-add-users','index':ALL},'value'),
                 State({'type':'ann-sess-tab','index':ALL},'label'),
                 State({'type':'new-annotation-class','index':ALL},'value'),
+                State({'type':'new-annotation-color','index':ALL},'value'),
                 State({'type':'new-annotation-label','index':ALL},'value'),
                 State({'type':'new-annotation-user','index':ALL},'value'),
                 State({'type':'new-user-type','index':ALL},'value')
@@ -1630,10 +1637,11 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
-    def update_viewport_data(self,bounds,cell_view_type,frame_list,current_tab):
+    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,current_tab,frame_list,frame_label):
         """
         Updating data used for current viewport visualizations
         """
+        frame_label_disable = [no_update]*len(ctx.outputs_list[-1])
 
         if not self.wsi is None:
             if not bounds is None:
@@ -1697,6 +1705,10 @@ class FUSION:
                         else:
                             frame_list = [self.wsi.channel_names[0]]
 
+                    frame_label = get_pattern_matching_value(frame_label)
+                    print(frame_label)
+                    if len(frame_list)<2:
+                        frame_label = None
 
                     if cell_view_type in ['channel_hist']:
 
@@ -1865,7 +1877,7 @@ class FUSION:
                                             data_frame = counts_data,
                                             x = f_names[0],
                                             y = f_names[1],
-                                            color = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
+                                            color = 'Cell Type' if frame_label is None else frame_label,
                                             custom_data = 'Hidden'
                                         )
                                         
@@ -1881,7 +1893,7 @@ class FUSION:
                                             data_frame = f_umap_data,
                                             x = 'UMAP1',
                                             y = 'UMAP2',
-                                            color = 'Cell Type' if 'Cell Type' in f_umap_data.columns else 'Cluster',
+                                            color = 'Cell Type' if frame_label is None else frame_label,
                                             custom_data = 'Hidden'
                                         )
 
@@ -1955,7 +1967,7 @@ class FUSION:
                                     dbc.Row([
                                         dbc.Col(
                                             dbc.Label('Select a Channel Name:',html_for={'type':'frame-histogram-drop','index':0}),
-                                            md = 6, align = 'center',
+                                            md = 3, align = 'center',
                                         ),
                                         dbc.Col(
                                             dcc.Dropdown(
@@ -1965,8 +1977,39 @@ class FUSION:
                                                 id = {'type':'frame-histogram-drop','index':0}
                                             ),
                                             md = 6, align = 'center'
+                                        ),
+                                        dbc.Col(
+                                            dbc.Button(
+                                                'Plot it!',
+                                                className = 'd-grid col-12 mx-auto',
+                                                n_clicks = 0,
+                                                style = {'width':'100%'},
+                                                id = {'type':'frame-data-butt','index':0}
+                                            ),
+                                            md = 3
                                         )
                                     ], style = {'display':'none'} if not cell_view_type in ['channel_hist','features'] else {}),
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Label('Select a label: ',html_for = {'type':'frame-label-drop','index':0}),
+                                            md = 3
+                                        ),
+                                        dbc.Col(
+                                            dcc.Dropdown(
+                                                options = [
+                                                    {
+                                                        'label': i,
+                                                        'value': i
+                                                    }
+                                                    if not i=='Unsupervised Labels' else {'label':i, 'value': i, 'disabled': True if len(frame_list)<2 else False}
+                                                    for i in self.wsi.channel_names+['Unsupervised Clusters']
+                                                ],
+                                                value = frame_label,
+                                                id = {'type':'frame-label-drop','index':0},
+                                                disabled = True if len(frame_list)<2 else False
+                                            )
+                                        )
+                                    ]),
                                     dbc.Row([
                                         dbc.Col([
                                             dbc.Label(first_chart_label),
@@ -2029,13 +2072,13 @@ class FUSION:
                         return return_div, no_update
 
                 else:
-                    return html.P('No FTUs in current view'), [no_update]
+                    return html.P('No FTUs in current view'), [no_update], frame_label_disable
             else:
-                return html.P('Select a slide to get started!'), [no_update]
+                return html.P('Select a slide to get started!'), [no_update], frame_label_disable
     
         elif current_tab=='annotation-tab':
             if self.dataset_handler.username=='fusionguest':
-                return no_update, html.P('Sign in or create an account to start annotating!')
+                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable
             else:
                 
                 # Getting intersecting FTU information
@@ -2070,7 +2113,7 @@ class FUSION:
                         )
                 ])
 
-                return html.Div(), annotation_tab_group
+                return html.Div(), annotation_tab_group, frame_label_disable
         
         else:
             raise exceptions.PreventUpdate
@@ -6725,22 +6768,17 @@ class FUSION:
 
         return [return_div], [f'{len(selectedData["points"])} Cells selected']
 
-    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_labels, annotation_users, annotation_user_types):
+    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types):
 
-        print(f'triggered update_annotation_session: {ctx.triggered_id}, {ctx.triggered}')
         return_div = [no_update]
         new_annotation_tab_group = [no_update]
 
         session_tab = get_pattern_matching_value(session_tab)
-        print(f'current tab: {session_tab}')
-        print(f'outputs list: {ctx.outputs_list}')
 
         if ctx.triggered_id['type']=='create-annotation-session-button':
             new_session_name = get_pattern_matching_value(new_session_name)
             new_session_description = get_pattern_matching_value(new_session_description)
             new_session_users = get_pattern_matching_value(new_session_users)
-
-            self.current_ann_session = new_session_name
             
             # Creating folder in user's public folder called FUSION Annotation Sessions, with sub-folder named the new_session_name
             ann_sessions_folder = self.dataset_handler.check_user_folder("FUSION Annotation Sessions")
@@ -6757,7 +6795,10 @@ class FUSION:
                 folder_name = new_session_name,
                 metadata = {
                     "Session Description":new_session_description,
-                    "Annotations": annotation_classes,
+                    "Annotations": [
+                        {'label': i, 'value': j}
+                        for i,j in zip(annotation_classes, annotation_colors)
+                    ],
                     "Labels": annotation_labels,
                     "Users": [
                         {i: {'type': j}}
@@ -6768,7 +6809,8 @@ class FUSION:
 
             #TODO: Find some way to share this with indicated users
 
-            updated_tabs,first_tab = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus)
+            updated_tabs,first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus)
+            self.current_ann_session = first_session
 
             new_annotation_tab_group = [html.Div([
                 dbc.Tabs(
@@ -6782,19 +6824,25 @@ class FUSION:
 
         if ctx.triggered_id['type']=='annotation-tab-group':
             session_name = current_session_names[int(session_tab.split('-')[-1])]
-            self.current_ann_session = session_name
-            
+
             if session_name=='Create New Session':
+                self.current_ann_session = {
+                    'name':'Create New Session',
+                    'Annotations':[],
+                    'Labels': []
+                }
+
                 first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = self.current_ftus)
             else:
-                first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = self.current_ftus)
+                session_progress, self.current_ann_session = self.dataset_handler.get_annotation_session_progress(session_name)
+                first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = self.current_ftus, classes = self.current_ann_session['Annotations'], labels = self.current_ann_session['Labels'], ann_progress = session_progress)
 
             return_div = [first_tab]
 
         
         return return_div, new_annotation_tab_group
     
-    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, annotations, class_label, image_label, ftu_names, ftu_idx):
+    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx):
         """
         Getting current annotation data (text or image) and saving to annotation session folder on the server
         """
@@ -6808,12 +6856,18 @@ class FUSION:
         if line_slide is None:
             line_slide = 5
         ann_class = get_pattern_matching_value(ann_class)
+        ann_class_color = ann_class
 
-        ann_class_color = 'rgb(255,0,0)'
-
-        annotations = get_pattern_matching_value(annotations)
-        if 'shapes' in annotations.keys():
-            annotations = annotations['shapes']
+        all_annotations = get_pattern_matching_value(all_annotations)
+        #TODO: Process "line"s and shapes together
+        if not all_annotations is None:
+            annotations = []
+            if 'shapes' in all_annotations.keys():
+                annotations += all_annotations['shapes']
+                if 'line' in all_annotations.keys():
+                    annotations += all_annotations['line']
+            else:
+                annotations = []
         else:
             annotations = []
 
@@ -6831,7 +6885,13 @@ class FUSION:
         if ctx.triggered_id['type']=='annotation-station-ftu':
             ftu_styles = [{'display':'inline-block','marginBottom':'15px'} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(ctx.outputs_list[1]))]
 
-            clicked_ftu_name = ftu_names[ctx.triggered_id['index']][0].split(':')[0]
+            clicked_ftu_name = ftu_names[ctx.triggered_id['index']][0]
+            if 'Manual' in clicked_ftu_name:
+                clicked_ftu_name = 'Manual:'+clicked_ftu_name.split(':')[1].strip()
+            elif 'Marked' in clicked_ftu_name:
+                clicked_ftu_name = 'Marked:'+clicked_ftu_name.split(':')[1].strip()
+            else:
+                clicked_ftu_name = clicked_ftu_name.split(':')[0]
             ftu_idx = 0
         else:
             clicked_ftu_name = ftu_idx.split(':')[0]
@@ -6840,13 +6900,14 @@ class FUSION:
         if ctx.triggered_id['type'] in ['annotation-station-ftu','annotation-previous-button','annotation-next-button','annotation-line-slider','annotation-class-select']:
             
             # Grab the first member of the clicked ftu
-            if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
+            if not 'Manual' in clicked_ftu_name and not 'Marked' in clicked_ftu_name:
                 intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
             elif 'Manual' in clicked_ftu_name:
-                manual_idx = int(clicked_ftu_name.split(': ')[-1])
-                intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
+                print(clicked_ftu_name)
+                manual_idx = int(clicked_ftu_name.split(':')[-1])-1
+                intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson']['features'][0]['geometry'])]
             elif 'Marked' in clicked_ftu_name:
-                intersecting_ftu_polys = [shape(i['geojson']) for i in self.wsi.marked_ftus]
+                intersecting_ftu_polys = [shape(i['geojson']['features'][0]['geometry']) for i in self.wsi.marked_ftus]
 
             # Getting bounding box of this ftu
             if ctx.triggered_id['type']=='annotation-station-ftu':
@@ -6866,9 +6927,15 @@ class FUSION:
             ftu_bbox_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
             
             ftu_bbox = np.array(self.wsi.convert_map_coords(ftu_bbox_coords))
-            ftu_bbox = [np.min(ftu_bbox[:,0]),np.min(ftu_bbox[:,1]),np.max(ftu_bbox[:,0]),np.max(ftu_bbox[:,1])]
+            ftu_bbox = [np.min(ftu_bbox[:,0])-50,np.min(ftu_bbox[:,1])-50,np.max(ftu_bbox[:,0])+50,np.max(ftu_bbox[:,1])+50]
             #TODO: This method only grabs histology images that are single frame or multi-frame with RGB at 0,1,2
             ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox])
+
+            if not ann_class_color is None:
+                color_parts = ann_class_color.replace('rgb(','').replace(')','').split(',')
+                fill_color = f'rgba({color_parts[0]},{color_parts[1]},{color_parts[2]},0.2)'
+            else:
+                fill_color = 'rgba(255,255,255,0.2)'
 
             current_structure_fig = go.Figure(px.imshow(np.array(ftu_image)))
             current_structure_fig.update_layout(
@@ -6876,9 +6943,11 @@ class FUSION:
                     'margin': {'l':0,'r':0,'t':0,'b':0},
                     'xaxis':{'showticklabels':False,'showgrid':False},
                     'yaxis':{'showticklabels':False,'showgrid':False},
+                    'dragmode':'drawclosedpath',
                     "shapes":annotations,
                     "newshape.line.width": line_slide,
-                    "newshape.line.color": ann_class_color
+                    "newshape.line.color": ann_class_color,
+                    "newshape.fillcolor": fill_color
                 }
             )
             current_structure_fig = [current_structure_fig]
@@ -6888,27 +6957,27 @@ class FUSION:
             #TODO: Add more labels after clicking the check-mark
             class_label = get_pattern_matching_value(class_label)
             image_label = get_pattern_matching_value(image_label)
-            print(f'class_label: {class_label}')
-            print(f'image_label: {image_label}')
 
             if type(class_label)==str:
                 label_dict = {class_label: image_label}
             elif type(class_label)==list:
                 label_dict = {i:j for i,j in zip(class_label,image_label)}
             
+            label_dict['Annotator'] = self.dataset_handler.username
+            
             if ctx.triggered_id['type']=='annotation-set-label':
                 # Grab the first member of the clicked ftu
                 if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
                     intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
                 elif 'Manual' in clicked_ftu_name:
-                    manual_idx = int(clicked_ftu_name.split(': ')[-1])
+                    manual_idx = int(clicked_ftu_name.split(':')[-1])
                     intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
                 elif 'Marked' in clicked_ftu_name:
                     intersecting_ftu_polys = [shape(i['geojson']) for i in self.wsi.marked_ftus]
 
                 ftu_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
                 ftu_coords = np.array(self.wsi.convert_map_coords(ftu_coords))
-                ftu_bbox = [np.min(ftu_coords[:,0]),np.min(ftu_coords[:,1]),np.max(ftu_coords[:,0]),np.max(ftu_coords[:,1])]
+                ftu_bbox = [np.min(ftu_coords[:,0])-50,np.min(ftu_coords[:,1])-50,np.max(ftu_coords[:,0])+50,np.max(ftu_coords[:,1])+50]
 
                 # Now saving image with label in metadata
                 ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox])
@@ -6945,41 +7014,63 @@ class FUSION:
         elif ctx.triggered_id['type'] == 'annotation-save-button':
 
             # Grab the first member of the clicked ftu
-            if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
+            if not 'Manual' in clicked_ftu_name and not 'Marked' in clicked_ftu_name:
                 intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
             elif 'Manual' in clicked_ftu_name:
-                manual_idx = int(clicked_ftu_name.split(': ')[-1])
+                manual_idx = int(clicked_ftu_name.split(':')[-1])
                 intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
             elif 'Marked' in clicked_ftu_name:
                 intersecting_ftu_polys = [shape(i['geojson']) for i in self.wsi.marked_ftus]
 
             ftu_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
             ftu_coords = np.array(self.wsi.convert_map_coords(ftu_coords))
-            ftu_bbox = [np.min(ftu_coords[:,0]),np.min(ftu_coords[:,1]),np.max(ftu_coords[:,0]),np.max(ftu_coords[:,1])]
+            ftu_bbox = [np.min(ftu_coords[:,0])-50,np.min(ftu_coords[:,1])-50,np.max(ftu_coords[:,0])+50,np.max(ftu_coords[:,1])+50]
             height = int(ftu_bbox[3]-ftu_bbox[1])
             width = int(ftu_bbox[2]-ftu_bbox[0])
 
             # Convert annotations relayoutData to a mask and save both image and mask to current annotation session
-            combined_mask = np.zeros((height,width,3))
+            #TODO: combined mask here should have a channel dimension equal to the number of classes (e.g. if two classes overlap)
+            combined_mask = np.zeros((height,width,len(self.current_ann_session["Annotations"])))
+            annotation_colors_list = [i['value'] for i in self.current_ann_session['Annotations']]
             for key in annotations:
                 if 'shapes' in key:
                     for i in range(len(annotations['shapes'])):
-                        mask = path_to_mask(annotations['shapes'][i]['path'],combined_mask.shape)
+                        #TODO: Add color property to this function for multiple classes
+                        #TODO: Add lines to this mask
+                        mask = path_to_mask(annotations['shapes'][i]['path'],(combined_mask.shape[0],combined_mask.shape[1]))
+                        mask_class = annotations['shapes'][i]['line']['color']
 
-                        combined_mask += 255*mask
+                        combined_mask[:,:,annotation_colors_list.index(mask_class)] += 255*mask
             
             # Now saving both image and mask to the annotation session folder
             ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox])
-            mask_image = Image.fromarray(np.uint8(combined_mask))
+            
+            mask_image = np.uint8(combined_mask)
 
             ftu_content = {
                 'content': ftu_image,
-                'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.png'
+                'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.png',
+                'metadata': {
+                    "Annotator": self.dataset_handler.username
+                }
             }
-            mask_content = {
-                'content': mask_image,
-                'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.png'
-            }
+
+            if mask_image.shape[-1] in [1,3]:
+                mask_content = {
+                    'content': mask_image,
+                    'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.png',
+                    'metadata': {
+                        "Annotator": self.dataset_handler.username
+                    }
+                }
+            else:
+                mask_content = {
+                    'content': mask_image,
+                    'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.tiff',
+                    'metadata': {
+                        "Annotator": self.dataset_handler.username
+                    }
+                }
 
             # Checking if slide folder is created
             slide_folder = self.dataset_handler.check_user_folder(
@@ -7013,9 +7104,8 @@ class FUSION:
         """
         Adding a new annotation class when pre-setting an annotation session
         """
+        add_click
         add_click = get_pattern_matching_value(add_click)
-
-        print(ctx.triggered_id)
         if ctx.triggered_id['type']=='add-annotation-class':
             patched_list = Patch()
 
@@ -7027,12 +7117,21 @@ class FUSION:
                                 placeholder = 'New Class Name',
                                 type = 'text',
                                 maxLength=1000,
-                                id = {'type':'new-annotation-class','index':add_click}
+                                id = {'type':'new-annotation-class','index':add_click},
+                                style = {'width':'100%'}
                             ),
                             md = 8
                         ),
                         dbc.Col(
-                            'color-picker',
+                            html.Div(
+                                dmc.ColorInput(
+                                    id = {'type':'new-annotation-color','index':add_click},
+                                    label = 'Color',
+                                    format = 'rgb',
+                                    value = f'rgb({random.randint(0,255)},{random.randint(0,255)},{random.randint(0,255)})'
+                                ),
+                                style = {'width':'100%'}
+                            ),
                             md = 2
                         ),
                         dbc.Col(
@@ -7069,7 +7168,6 @@ class FUSION:
         """
         Adding a new annotation label type when pre-setting an annotation session
         """
-        print(ctx.triggered_id)
         add_click = get_pattern_matching_value(add_click)
 
         if ctx.triggered_id['type']=='add-annotation-label':
@@ -7084,7 +7182,8 @@ class FUSION:
                                 placeholder = 'New Class Label',
                                 type = 'text',
                                 maxLength=1000,
-                                id = {'type':'new-annotation-label','index':add_click}
+                                id = {'type':'new-annotation-label','index':add_click},
+                                style = {'width':'100%'}
                             )
                         ], md = 10),
                         dbc.Col(
@@ -7121,7 +7220,6 @@ class FUSION:
         """
         Adding a new user to the annotation session preset
         """
-        print(ctx.triggered_id)
         add_click = get_pattern_matching_value(add_click)
 
         if ctx.triggered_id['type']=='add-annotation-user':
