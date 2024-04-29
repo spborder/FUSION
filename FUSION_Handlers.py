@@ -1813,8 +1813,8 @@ class LayoutHandler:
             ]
 
             session_progress, session_info = dataset_handler.get_annotation_session_progress(first_session['name'])
-
-            first_tab = self.gen_annotation_content(False,current_ftus, ann_session_meta[0]['Annotations'], ann_session_meta[0]['Labels'], session_progress)
+            first_session = session_info
+            first_tab = self.gen_annotation_content(False,current_ftus, first_session['Annotations'], first_session['Labels'], session_progress)
 
         else:
             

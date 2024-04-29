@@ -6810,7 +6810,7 @@ class FUSION:
             #TODO: Find some way to share this with indicated users
 
             updated_tabs,first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus)
-            self.current_ann_session = first_session
+            session_progress, self.current_ann_session = self.dataset_handler.get_annotation_session_progress(first_session)
 
             new_annotation_tab_group = [html.Div([
                 dbc.Tabs(
@@ -6991,22 +6991,22 @@ class FUSION:
                 # Checking if slide folder is created
                 slide_folder = self.dataset_handler.check_user_folder(
                     folder_name = 'FUSION Annotation Sessions',
-                    subfolder = self.current_ann_session,
+                    subfolder = self.current_ann_session['name'],
                     sub_sub_folder = self.wsi.slide_name
                 )
                 if slide_folder is None:
                     # Creating slide folder in current_ann_session
                     new_folder = self.dataset_handler.create_user_folder(
-                        parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}',
+                        parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}',
                         folder_name = self.wsi.slide_name
                     )
                     new_folder = self.dataset_handler.create_user_folder(
-                        parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}',
+                        parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}',
                         folder_name = 'Images with Labels'
                     )
 
                 # Saving data
-                self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}/Images with Labels')
+                self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Images with Labels')
             else:
                 class_labels = [no_update if not i==ctx.triggered_id['index'] else '' for i in range(len(ctx.outputs_list[2]))]
                 image_labels = [no_update if not i==ctx.triggered_id['index'] else '' for i in range(len(ctx.outputs_list[3]))]
@@ -7027,7 +7027,7 @@ class FUSION:
             ftu_bbox = [np.min(ftu_coords[:,0])-50,np.min(ftu_coords[:,1])-50,np.max(ftu_coords[:,0])+50,np.max(ftu_coords[:,1])+50]
             height = int(ftu_bbox[3]-ftu_bbox[1])
             width = int(ftu_bbox[2]-ftu_bbox[0])
-
+            
             # Convert annotations relayoutData to a mask and save both image and mask to current annotation session
             #TODO: combined mask here should have a channel dimension equal to the number of classes (e.g. if two classes overlap)
             combined_mask = np.zeros((height,width,len(self.current_ann_session["Annotations"])))
@@ -7075,26 +7075,26 @@ class FUSION:
             # Checking if slide folder is created
             slide_folder = self.dataset_handler.check_user_folder(
                 folder_name = 'FUSION Annotation Sessions',
-                subfolder = self.current_ann_session,
+                subfolder = self.current_ann_session['name'],
                 sub_sub_folder = self.wsi.slide_name
             )
             if slide_folder is None:
                 # Creating slide folder in current_ann_session
                 new_folder = self.dataset_handler.create_user_folder(
-                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}',
+                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}',
                     folder_name = self.wsi.slide_name
                 )
                 new_folder = self.dataset_handler.create_user_folder(
-                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}',
+                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}',
                     folder_name = 'Images'
                 )
                 new_folder = self.dataset_handler.create_user_folder(
-                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}',
+                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}',
                     folder_name = 'Masks'
                 )
             # Saving data
-            self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}/Images')
-            self.dataset_handler.save_to_user_folder(mask_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session}/{self.wsi.slide_name}/Masks')
+            self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Images')
+            self.dataset_handler.save_to_user_folder(mask_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Masks')
 
             save_button_style = ['success']
 
