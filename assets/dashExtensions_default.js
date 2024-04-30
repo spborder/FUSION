@@ -12,25 +12,25 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 var overlay_value = Number.Nan;
                 if (overlay_prop) {
                     if (overlay_prop.name) {
-                        if (overlay_prop.name in feature.properties) {
+                        if (overlay_prop.name in feature.properties.user) {
                             if (overlay_prop.value) {
-                                if (overlay_prop.value in feature.properties[overlay_prop.name]) {
+                                if (overlay_prop.value in feature.properties.user[overlay_prop.name]) {
                                     if (overlay_prop.sub_value) {
-                                        if (overlay_prop.sub_value in feature.properties[overlay_prop.name][overlay_prop.value]) {
-                                            var overlay_value = feature.properties[overlay_prop.name][overlay_prop.value][overlay_prop.sub_value];
+                                        if (overlay_prop.sub_value in feature.properties.user[overlay_prop.name][overlay_prop.value]) {
+                                            var overlay_value = feature.properties.user[overlay_prop.name][overlay_prop.value][overlay_prop.sub_value];
                                         } else {
                                             var overlay_value = Number.Nan;
                                         }
                                     } else {
-                                        var overlay_value = feature.properties[overlay_prop.name][overlay_prop.value];
+                                        var overlay_value = feature.properties.user[overlay_prop.name][overlay_prop.value];
                                     }
                                 } else if (overlay_prop.value === "max") {
                                     // Finding max represented sub-value
                                     var overlay_value = Number.Nan;
                                     var test_value = 0.0;
                                     var overlay_idx = -1.0;
-                                    for (var key in feature.properties[overlay_prop.name]) {
-                                        var tester = feature.properties[overlay_prop.name][key];
+                                    for (var key in feature.properties.user[overlay_prop.name]) {
+                                        var tester = feature.properties.user[overlay_prop.name][key];
                                         overlay_idx += 1.0;
                                         if (tester > test_value) {
                                             test_value = tester;
@@ -41,7 +41,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                                     var overlay_value = Number.Nan;
                                 }
                             } else {
-                                var overlay_value = feature.properties[overlay_prop.name];
+                                var overlay_value = feature.properties.user[overlay_prop.name];
                             }
                         } else {
                             var overlay_value = Number.Nan;
@@ -98,22 +98,21 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                     for (let i = 0; i < filter_vals.length; i++) {
                         // Iterating through filter_vals dict
                         var filter = filter_vals[i];
-                        console.log(filter);
 
                         if (filter.name) {
                             // Checking if the filter name is in the feature
-                            if (filter.name in feature.properties) {
+                            if (filter.name in feature.properties.user) {
 
                                 if (filter.value) {
-                                    if (filter.value in feature.properties[filter.name]) {
+                                    if (filter.value in feature.properties.user[filter.name]) {
                                         if (filter.sub_value) {
-                                            if (filter.sub_value in feature.properties[filter.name][filter.value]) {
-                                                var test_val = feature.properties[filter.name][filter.value][filter.sub_value];
+                                            if (filter.sub_value in feature.properties.user[filter.name][filter.value]) {
+                                                var test_val = feature.properties.user[filter.name][filter.value][filter.sub_value];
                                             } else {
                                                 return_feature = return_feature & false;
                                             }
                                         } else {
-                                            var test_val = feature.properties[filter.name][filter.value];
+                                            var test_val = feature.properties.user[filter.name][filter.value];
                                         }
                                     } else if (filter.value === "max") {
                                         return_feature = return_feature & true;
@@ -121,7 +120,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                                         return_feature = return_feature & false;
                                     }
                                 } else {
-                                    var test_val = feature.properties[filter.name];
+                                    var test_val = feature.properties.user[filter.name];
                                 }
                             } else {
                                 return_feature = return_feature & false;
@@ -130,7 +129,6 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
 
                         if (filter.range) {
                             if (typeof filter.range[0] === 'number') {
-                                console.log('is a number');
                                 if (test_val < filter.range[0]) {
                                     return_feature = return_feature & false;
                                 }
@@ -138,7 +136,6 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                                     return_feature = return_feature & false;
                                 }
                             } else {
-                                console.log('is not a number');
                                 if (filter.range.includes(return_feature)) {
                                     return_feature = return_feature & true;
                                 } else {

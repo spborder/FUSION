@@ -212,25 +212,25 @@ class FUSION:
             var overlay_value = Number.Nan;
             if (overlay_prop) {
                 if (overlay_prop.name) {
-                    if (overlay_prop.name in feature.properties) {
+                    if (overlay_prop.name in feature.properties.user) {
                         if (overlay_prop.value) {
-                            if (overlay_prop.value in feature.properties[overlay_prop.name]) {
+                            if (overlay_prop.value in feature.properties.user[overlay_prop.name]) {
                                 if (overlay_prop.sub_value) {
-                                    if (overlay_prop.sub_value in feature.properties[overlay_prop.name][overlay_prop.value]) {
-                                        var overlay_value = feature.properties[overlay_prop.name][overlay_prop.value][overlay_prop.sub_value];
+                                    if (overlay_prop.sub_value in feature.properties.user[overlay_prop.name][overlay_prop.value]) {
+                                        var overlay_value = feature.properties.user[overlay_prop.name][overlay_prop.value][overlay_prop.sub_value];
                                     } else {
                                         var overlay_value = Number.Nan;
                                     }
                                 } else {
-                                    var overlay_value = feature.properties[overlay_prop.name][overlay_prop.value];
+                                    var overlay_value = feature.properties.user[overlay_prop.name][overlay_prop.value];
                                 }
                             } else if (overlay_prop.value==="max") {
                                 // Finding max represented sub-value
                                 var overlay_value = Number.Nan;
                                 var test_value = 0.0;
                                 var overlay_idx = -1.0;
-                                for (var key in feature.properties[overlay_prop.name]) {
-                                    var tester = feature.properties[overlay_prop.name][key];
+                                for (var key in feature.properties.user[overlay_prop.name]) {
+                                    var tester = feature.properties.user[overlay_prop.name][key];
                                     overlay_idx += 1.0;
                                     if (tester > test_value) {
                                         test_value = tester;
@@ -241,7 +241,7 @@ class FUSION:
                                 var overlay_value = Number.Nan;
                             }
                         } else {
-                            var overlay_value = feature.properties[overlay_prop.name];
+                            var overlay_value = feature.properties.user[overlay_prop.name];
                         }
                     } else {
                         var overlay_value = Number.Nan;
@@ -293,22 +293,21 @@ class FUSION:
                     for (let i = 0; i < filter_vals.length; i++) {
                         // Iterating through filter_vals dict
                         var filter = filter_vals[i];         
-                        console.log(filter);
                                                 
                         if (filter.name) {
                             // Checking if the filter name is in the feature
-                            if (filter.name in feature.properties) {
+                            if (filter.name in feature.properties.user) {
                                 
                                 if (filter.value) {
-                                    if (filter.value in feature.properties[filter.name]) {
+                                    if (filter.value in feature.properties.user[filter.name]) {
                                         if (filter.sub_value) {
-                                            if (filter.sub_value in feature.properties[filter.name][filter.value]) {
-                                                var test_val = feature.properties[filter.name][filter.value][filter.sub_value];
+                                            if (filter.sub_value in feature.properties.user[filter.name][filter.value]) {
+                                                var test_val = feature.properties.user[filter.name][filter.value][filter.sub_value];
                                             } else {
                                                 return_feature = return_feature & false;
                                             }
                                         } else {
-                                            var test_val = feature.properties[filter.name][filter.value];
+                                            var test_val = feature.properties.user[filter.name][filter.value];
                                         }
                                     } else if (filter.value==="max") {
                                         return_feature = return_feature & true;
@@ -316,7 +315,7 @@ class FUSION:
                                         return_feature = return_feature & false;
                                     }
                                 } else {
-                                    var test_val = feature.properties[filter.name];
+                                    var test_val = feature.properties.user[filter.name];
                                 }
                             } else {
                                 return_feature = return_feature & false;
@@ -325,7 +324,6 @@ class FUSION:
                                  
                         if (filter.range) {
                             if (typeof filter.range[0]==='number') {
-                                console.log('is a number');
                                 if (test_val < filter.range[0]) {
                                     return_feature = return_feature & false;
                                 }
@@ -333,7 +331,6 @@ class FUSION:
                                     return_feature = return_feature & false;
                                 }   
                             } else {
-                                console.log('is not a number');
                                 if (filter.range.includes(return_feature)) {
                                     return_feature = return_feature & true;
                                 } else {
@@ -702,10 +699,29 @@ class FUSION:
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children'),
              Output('ftu-structure-hierarchy','children')],
-            Input('slide-select','value'),
+            Input('slide-load-interval','disabled'),
             prevent_initial_call=True,
             suppress_callback_exceptions=True
         )(self.ingest_wsi)
+
+        # Displaying slide loading progress
+        self.app.callback(
+            [
+                Output('slide-load-modal','is_open'),
+                Output('slide-load-modal','children'),
+                Output('slide-info-store','data'),
+                Output('slide-load-interval','disabled')
+            ],
+            [
+                Input('slide-select','value'),
+                Input('slide-load-interval','n_intervals')
+            ],
+            [
+                State('slide-load-modal','is_open'),
+                State('slide-info-store','data')
+            ],
+            prevent_initial_call = True
+        )(self.load_new_slide)
         
         # Updating cytoscapes plot for cell hierarchy
         self.app.callback(
@@ -1266,9 +1282,6 @@ class FUSION:
             i['included'] = True
             self.current_slides.append(i)
 
-        # Updating annotation metadata
-        #self.update_plotting_metadata()
-
         # Defining cell_type_dropdowns
         cell_type_dropdowns = [
             dbc.Col(dcc.Dropdown(all_metadata_labels,id={'type':'meta-drop','index':0}),md=6),
@@ -1599,15 +1612,13 @@ class FUSION:
                 slide_options.extend([
                     {
                         'label':i['name'],
-                        'value':i['name'],
+                        'value':i['_id'],
                         'disabled':False
                     }
                     for i in self.current_slides if i['included'] and i['folderId']==f
                 ])
 
         if slide_options == []:
-            # Old bit, just change this to be the default slides
-            #slide_options = [{'label':'blah','value':'blah'}]
             slide_options = []
             unique_folders = np.unique([s['folderId'] for s in self.dataset_handler.default_slides])
             for f in unique_folders:
@@ -1629,7 +1640,7 @@ class FUSION:
                 slide_options.extend([
                     {
                         'label':i['name'],
-                        'value':i['name'],
+                        'value':i['_id'],
                         'disabled':False
                     }
                     for i in self.dataset_handler.default_slides if i['folderId']==f
@@ -3146,101 +3157,237 @@ class FUSION:
 
         return f'Label: {label}', dcc.Link(f'ID: {id}', href = new_url), f'Notes: {notes}'
     
-    def ingest_wsi(self,slide_name):
-        
-        if not slide_name=='':
-            new_children = []
-            print(f'Slide selected: {slide_name}')
-            # Find folder containing this slide
-            for d in self.dataset_handler.slide_datasets:
-                d_slides = [i['name'] for i in self.dataset_handler.slide_datasets[d]['Slides']]
-                if slide_name in d_slides:
-                    # Getting slide item id
-                    slide_info = self.dataset_handler.slide_datasets[d]['Slides'][d_slides.index(slide_name)]
-                    slide_id = slide_info['_id']
-                    if 'Spatial Omics Type' in slide_info['meta']:
-                        slide_type = slide_info['meta']['Spatial Omics Type']
-                    else:
-                        slide_type = 'Regular'
+    def load_new_slide(self,slide_id,new_interval,modal_is_open,slide_info_store):
+        """
+        Progress indicator for loading a new WSI and annotations
+        """
+        modal_open = True
+        modal_children = []
+        slide_info_store_data = [no_update]
+        disable_slide_load = False
 
-            #TODO: Check for previous manual ROIs or marked FTUs
-            special_overlays_opts = []
-            if slide_type=='Regular':
+        if ctx.triggered_id=='slide-select':
 
-                new_slide = DSASlide(
-                    slide_id,
-                    self.dataset_handler,
-                    self.ftu_colors,
-                    manual_rois=[],
-                    marked_ftus=[]
-                )
+            if not slide_id:
+                raise exceptions.PreventUpdate
 
-                # Returning options for special-overlays div
-                # Not sure what this can be 
-                #special_overlays_opts = []
+            # "slide_name" here is the itemId of a slide
+            print(f'Getting info for slide: {slide_id}')
+            slide_info = self.dataset_handler.get_item_info(slide_id)
+            annotation_info = self.dataset_handler.get_available_annotation_ids(slide_id)
 
-            elif slide_type=='Visium':
-                new_slide = VisiumSlide(
-                    slide_id,
-                    self.dataset_handler,
-                    self.ftu_colors,
-                    manual_rois=[],
-                    marked_ftus=[]
-                )
-
-                # Returning options for special-overlays div
-                # For Visium, this can be that change-level plugin
-                special_overlay_components = self.layout_handler.gen_special_overlay_opts(new_slide)
-                special_overlays_opts.extend(special_overlay_components)
-
-            elif slide_type=='CODEX':
-                new_slide = CODEXSlide(
-                    slide_id,
-                    self.dataset_handler,
-                    self.ftu_colors,
-                    manual_rois=[],
-                    marked_ftus=[]
-                )
-
-                # Returning options for special-overlays div
-                # For CODEX, this can be adding colorful channel overlays
-                self.current_channels = {}
-
-                special_overlay_components = self.layout_handler.gen_special_overlay_opts(new_slide)
-                special_overlays_opts.extend(special_overlay_components)
-
-                # Adding the different frames to the layers control object
-                new_children+=[
-                    dl.BaseLayer(
-                        dl.TileLayer(
-                            url = new_slide.channel_tile_url[c_idx],
-                            tileSize = 240,
-                            id = {'type':'codex-tile-layer','index':c_idx}
-                        ),
-                        name = c_name,
-                        checked = c_name== new_slide.channel_names[0]
+            if 'Spatial Omics Type' in slide_info['meta']:
+                slide_type = slide_info['meta']['Spatial Omics Type']
+                if slide_type=='Visium':
+                    self.wsi = VisiumSlide(
+                        item_id = slide_info['_id'],
+                        girder_handler=self.dataset_handler,
+                        ftu_colors = self.ftu_colors,
+                        manual_rois = [],
+                        marked_ftus = []
                     )
-                    for c_idx,c_name in enumerate(new_slide.channel_names)
+                elif slide_type=='CODEX':
+                    self.wsi = CODEXSlide(
+                        item_id = slide_info['_id'],
+                        girder_handler = self.dataset_handler,
+                        ftu_colors = self.ftu_colors,
+                        manual_rois = [],
+                        marked_ftus = []
+                    )
+                elif slide_type=='Regular':
+                    self.wsi = DSASlide(
+                        item_id = slide_info['_id'],
+                        girder_handler = self.dataset_handler,
+                        ftu_colors = self.ftu_colors,
+                        manual_rois = [],
+                        marked_ftus = []
+                    )
+                else:
+                    self.wsi = DSASlide(
+                        item_id = slide_info['_id'],
+                        girder_handler = self.dataset_handler,
+                        ftu_colors = self.ftu_colors,
+                        manual_rois = [],
+                        marked_ftus = []
+                    )
+            else:
+                self.wsi = DSASlide(
+                    item_id = slide_info['_id'],
+                    girder_handler = self.dataset_handler,
+                    ftu_colors = self.ftu_colors,
+                    manual_rois = [],
+                    marked_ftus = []
+                )
+
+            # Storing some info in a data store component (erases upon refresh)
+            slide_annotation_info = {
+                'slide_info': slide_info,
+                'annotations': annotation_info
+            }
+
+            n_annotations = len(annotation_info)
+            if n_annotations>0:
+                first_annotation = annotation_info[0]['annotation']['name']
+                slide_annotation_info['loading_annotation'] = annotation_info[0]['_id']
+
+                slide_info_store_data = [
+                    json.dumps(slide_annotation_info)
                 ]
 
-            print(f'New Slide type: {new_slide.spatial_omics_type}')
+                self.wsi.get_annotation_geojson(0)
 
-            self.wsi = new_slide
+                modal_children = [
+                    html.Div([
+                        dbc.ModalHeader(html.H4(f'Loading Annotations for: {slide_info["name"]}')),
+                        html.Hr(),
+                        dbc.ModalBody([
+                            html.Div(
+                                html.H6(f'Working on: {first_annotation}')
+                            ),
+                            dbc.Progress(
+                            id = {'type':'slide-load-progress','index':0},
+                            value = int(100*(1/n_annotations)),
+                            label = f'{int(100*(1/n_annotations))}%'
+                            )
+                        ])
+                    ])
+                ]
+            else:
 
+                slide_info_store_data = [
+                    json.dumps(slide_annotation_info)
+                ]         
+                modal_children = [
+                    html.Div(
+                        dbc.ModalHeader(html.H4(f'Loading Slide: {slide_info["name"]}'))
+                    )
+                ]
+        
+        elif ctx.triggered_id=='slide-load-interval':
+            
+            if not new_interval:
+                raise exceptions.PreventUpdate
+            
+            slide_info_store = json.loads(slide_info_store[0])
+
+            if len(slide_info_store['annotations'])>0:
+
+                # Checking if previous annotation is complete
+                previous_annotation_id = slide_info_store['loading_annotation']
+                print(f'previous_annotation_id: {previous_annotation_id}')
+                print(f"file is writable: {os.access(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json',os.W_OK)} and exists {os.path.exists(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json')}")
+                if os.access(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json',os.W_OK) and os.path.exists(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json'):
+
+                    all_annotation_ids = [i['_id'] for i in slide_info_store['annotations']]
+                    next_ann_idx = all_annotation_ids.index(previous_annotation_id) + 1
+
+                    print(f'next_ann_idx: {next_ann_idx}')
+                    print(f'all_annotation_ids: {all_annotation_ids}')
+                    n_annotations = len(all_annotation_ids)
+                    slide_name = slide_info_store['slide_info']['name']
+
+                    if next_ann_idx<len(all_annotation_ids):
+                        next_annotation = slide_info_store['annotations'][next_ann_idx]['annotation']['name']
+                        slide_info_store['loading_annotation'] = slide_info_store['annotations'][next_ann_idx]['_id']
+                        
+                        self.wsi.get_annotation_geojson(next_ann_idx)
+
+                        modal_children = [
+                            html.Div([
+                                dbc.ModalHeader(html.H4(f'Loading Annotations for: {slide_name}')),
+                                html.Hr(),
+                                dbc.ModalBody([
+                                    html.Div(
+                                        html.H6(f'Working on: {next_annotation}')
+                                    ),
+                                    dbc.Progress(
+                                        id = {'type':'slide-load-progress','index':0},
+                                        value = int(100*((next_ann_idx)/n_annotations)),
+                                        label = f'{int(100*((next_ann_idx)/n_annotations))}%'
+                                    )
+                                ])
+                            ])
+                        ]
+                    else:
+                        slide_info_store['loading_annotation'] = 'done'
+
+                        modal_children = [
+                            html.Div([
+                                dbc.ModalHeader(html.H4(f'All done!')),
+                                html.Hr(),
+                                dbc.ModalBody([
+                                    dbc.Progress(
+                                        id = {'type':'slide-load-progress','index':0},
+                                        value = 100,
+                                        label = f'100%'
+                                    )
+                                ])
+                            ])
+                        ]
+
+                else:
+
+                    if not previous_annotation_id=='done':
+                        all_annotation_ids = [i['_id'] for i in slide_info_store['annotations']]
+                        old_ann_idx = all_annotation_ids.index(previous_annotation_id)
+                        old_ann_name = slide_info_store['annotations'][old_ann_idx]['annotation']['name']
+                        n_annotations = len(all_annotation_ids)
+                        slide_name = slide_info_store['slide_info']['name']
+
+                        modal_children = [
+                            html.Div([
+                                dbc.ModalHeader(html.H4(f'Loading Annotations for: {slide_name}')),
+                                html.Hr(),
+                                dbc.ModalBody([
+                                    html.Div(
+                                        html.H6(f'Working on: {old_ann_name}')
+                                    ),
+                                    dbc.Progress(
+                                        id = {'type':'slide-load-progress','index':0},
+                                        value = int(100*((old_ann_idx)/n_annotations)),
+                                        label = f'{int(100*((old_ann_idx)/n_annotations))}%'
+                                    )
+                                ])
+                            ])
+                        ]
+                    else:
+                        modal_children = []
+                        disable_slide_load = True
+                        modal_open = False
+
+                slide_info_store_data = [
+                    json.dumps(slide_info_store)
+                ]
+
+            else:
+                disable_slide_load = True
+                modal_open = False
+
+        return modal_open, modal_children, slide_info_store_data, disable_slide_load
+
+    def ingest_wsi(self,load_slide_done):
+        """
+        Populating slide visualization components after loading annotation and tile information
+        """
+        print(f'load_slide_done: {load_slide_done}')
+        load_slide_done = get_pattern_matching_value(load_slide_done)
+        if load_slide_done:
             # Updating in the case that an FTU isn't in the previous set of ftu_colors
             self.ftu_colors = self.wsi.ftu_colors
 
             # Updating overlays colors according to the current cell
             self.update_hex_color_key()
 
-            new_children += [
+            special_overlays_opts = self.layout_handler.gen_special_overlay_opts(self.wsi)
+
+            new_children = [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(url = f'./assets/slide_annotations/{struct}.json', id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                        dl.GeoJSON(url = self.wsi.map_dict['FTUs'][struct]['url'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
                                     hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
                                     hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                                     zoomToBounds=True,children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
-                    ), name = struct, checked = True, id = new_slide.item_id+'_'+struct
+                    ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
                 )
                 for struct in self.wsi.map_dict['FTUs']
             ]
@@ -3255,7 +3402,7 @@ class FUSION:
                                         hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')),
                                         children = [dl.Popup(id=man['popup_id'])])
                         ),
-                        name = f'Manual ROI {m_idx}', checked = True, id = new_slide.item_id+f'_manual_roi{m_idx}'
+                        name = f'Manual ROI {m_idx}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
                     )
                 )
 
@@ -3334,7 +3481,6 @@ class FUSION:
             ]
 
             return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.zoom_levels-1, self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs
-
         else:
             raise exceptions.PreventUpdate
 
@@ -6893,6 +7039,10 @@ class FUSION:
             else:
                 clicked_ftu_name = clicked_ftu_name.split(':')[0]
             ftu_idx = 0
+
+            # Clearing image labels
+            image_labels = ['']*len(ctx.outputs_list[3])
+
         else:
             clicked_ftu_name = ftu_idx.split(':')[0]
             ftu_idx = int(ftu_idx.split(':')[-1])
@@ -6952,6 +7102,9 @@ class FUSION:
             )
             current_structure_fig = [current_structure_fig]
 
+            # Updating image labels
+            image_labels = ['']*len(ctx.outputs_list[3])
+
         elif ctx.triggered_id['type'] in ['annotation-set-label','annotation-delete-label']:
             
             #TODO: Add more labels after clicking the check-mark
@@ -6980,7 +7133,7 @@ class FUSION:
                 ftu_bbox = [np.min(ftu_coords[:,0])-50,np.min(ftu_coords[:,1])-50,np.max(ftu_coords[:,0])+50,np.max(ftu_coords[:,1])+50]
 
                 # Now saving image with label in metadata
-                ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox])
+                ftu_image = np.array(self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox]))
 
                 ftu_content = {
                     'content': ftu_image,
@@ -7002,13 +7155,18 @@ class FUSION:
                     )
                     new_folder = self.dataset_handler.create_user_folder(
                         parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}',
-                        folder_name = 'Images with Labels'
+                        folder_name = 'Images'
                     )
 
                 # Saving data
-                self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Images with Labels')
+                self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Images')
+                
+                # Updating image labels
+                image_labels = ['']*len(ctx.outputs_list[3])
+
             else:
-                class_labels = [no_update if not i==ctx.triggered_id['index'] else '' for i in range(len(ctx.outputs_list[2]))]
+                #TODO: delete label from image metadata if that metadata is already attached to an image in the annotation session
+
                 image_labels = [no_update if not i==ctx.triggered_id['index'] else '' for i in range(len(ctx.outputs_list[3]))]
 
         elif ctx.triggered_id['type'] == 'annotation-save-button':
@@ -7033,17 +7191,17 @@ class FUSION:
             combined_mask = np.zeros((height,width,len(self.current_ann_session["Annotations"])))
             annotation_colors_list = [i['value'] for i in self.current_ann_session['Annotations']]
             for key in annotations:
-                if 'shapes' in key:
-                    for i in range(len(annotations['shapes'])):
-                        #TODO: Add color property to this function for multiple classes
-                        #TODO: Add lines to this mask
-                        mask = path_to_mask(annotations['shapes'][i]['path'],(combined_mask.shape[0],combined_mask.shape[1]))
-                        mask_class = annotations['shapes'][i]['line']['color']
+                for i in range(len(annotations)):
+                    #TODO: Add color property to this function for multiple classes
+                    #TODO: Add lines to this mask
+                    if 'path' in annotations[i]:
+                        mask = path_to_mask(annotations[i]['path'],(combined_mask.shape[0],combined_mask.shape[1]))
+                        mask_class = annotations[i]['line']['color']
 
                         combined_mask[:,:,annotation_colors_list.index(mask_class)] += 255*mask
             
             # Now saving both image and mask to the annotation session folder
-            ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox])
+            ftu_image = np.array(self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox]))
             
             mask_image = np.uint8(combined_mask)
 
@@ -7092,6 +7250,7 @@ class FUSION:
                     parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}',
                     folder_name = 'Masks'
                 )
+
             # Saving data
             self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Images')
             self.dataset_handler.save_to_user_folder(mask_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Masks')
@@ -7333,7 +7492,10 @@ def app(*args):
     dataset_handler.get_asset_items(assets_path)
 
     # Getting the slide data for DSASlide()
-    slide_names = [i['name'] for i in initial_collection_contents]
+    slide_names = [
+        {'label': i['name'],'value':i['_id']}
+        for i in initial_collection_contents
+    ]
 
     # Starting off with no WSI, don't load annotations until on the /vis page
     wsi = None

@@ -49,7 +49,7 @@ class DSASlide:
         # Adding ftu hierarchy property. This just stores which structures contain which other structures.
         self.ftu_hierarchy = {}
 
-        self.get_slide_map_data(self.item_id)
+        self.get_slide_map_data()
     
     def __str__(self):
         
@@ -85,16 +85,12 @@ class DSASlide:
             else:
                 self.ftu_props[ftu_name][ftu_index]['user_labels'].pop(label)
 
-    def get_slide_map_data(self,resource):
+    def get_slide_map_data(self):
         # Getting all of the necessary materials for loading a new slide
 
-        # Step 1: get resource item id
-        # lol
-        item_id = resource
-
-        # Step 2: get resource tile metadata
-        tile_metadata = self.girder_handler.get_tile_metadata(item_id)
-        # Step 2.1: adding n_frames if "frames" in metadata
+        # Step 1: get resource tile metadata
+        tile_metadata = self.girder_handler.get_tile_metadata(self.item_id)
+        # Step 2: adding n_frames if "frames" in metadata (normal rgb images just have 1 frame but ome-tiff images record each color channel as a "frame")
         if 'frames' in tile_metadata:
             self.n_frames = len(tile_metadata['frames'])
         else:
@@ -119,25 +115,126 @@ class DSASlide:
             tile_metadata['sizeY']
         ]
 
-        # Step 4: Defining bounds of map
+        # Step 4: Defining bounds of map (size of the first tile)
         self.map_bounds = [[0,self.image_dims[1]],[0,self.image_dims[0]]]
 
-        # Step 5: Getting annotations for a resource
-        self.annotations = self.girder_handler.get_annotations(item_id)
-        print(f'Found: {len(self.annotations)} Annotations')
+        # Step 5: Getting annotation ids for an item
+        self.annotation_ids = self.girder_handler.get_available_annotation_ids(self.item_id)
+        print(f'Found: {len(self.annotation_ids)} Annotations')
 
         # Step 6: Getting user token and tile url
         self.user_token = self.girder_handler.get_token()
         if not 'frames' in tile_metadata:
-            self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token
+            self.tile_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token
         else:
-            self.tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
+            # Set first 3 frames to RGB
+            self.tile_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
 
         # Step 7: Converting Histomics/large-image annotations to GeoJSON
-        self.x_scale, self.y_scale = self.convert_json()
+        base_x_scale = self.base_dims[0]/self.tile_dims[0]
+        base_y_scale = self.base_dims[1]/self.tile_dims[1]
+
+        self.x_scale = (self.tile_dims[0])/(self.image_dims[0]*(self.tile_dims[0]/240))
+        self.y_scale = (self.tile_dims[1])/(self.image_dims[1]*(self.tile_dims[1]/240))
+        self.y_scale*=-1
+
+        self.x_scale *= base_x_scale
+        self.y_scale *= base_y_scale
 
         self.map_bounds[0][1]*=self.x_scale
         self.map_bounds[1][1]*=self.y_scale
+
+        # Initializing ftu info
+        self.ftu_names = []
+        self.ftu_polys = {}
+        self.ftu_props = {}
+        self.properties_list = []
+
+        self.map_dict = {
+            'url': self.tile_url,
+            'FTUs':{}
+        }
+
+    def get_annotation_geojson(self,idx):
+        """
+        Get annotation in geojson format, extract polygon and properties information, save locally
+        """
+        if idx>=len(self.annotation_ids):
+            print(f'Uh oh! Tried to get annotation index {idx} when there are only {len(self.annotation_ids)} annotations available!')
+            raise IndexError
+        
+        this_annotation = self.annotation_ids[idx]
+        f_name = this_annotation['annotation']['name']
+        self.ftu_names.append(f_name)
+
+        if f_name not in self.ftu_colors:
+            self.ftu_colors[f_name] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+
+        save_path = f'./assets/slide_annotations/{self.item_id}/{this_annotation["_id"]}.json'
+        if not os.path.exists(save_path):
+            if not os.path.exists(f'./assets/slide_annotations/{self.item_id}'):
+                os.makedirs(f'./assets/slide_annotations/{self.item_id}')
+
+            # Step 1: Get annotation in geojson form
+            annotation_geojson = self.girder_handler.gc.get(f'/annotation/{self.annotation_ids[idx]["_id"]}/geojson?token={self.user_token}')
+            
+            # Step 2: Scale coordinates of geojson object
+            scaled_annotation = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale, c[1]*self.y_scale, c[2]), g), annotation_geojson)
+            for f in scaled_annotation['features']:
+                f['properties']['name'] = f_name
+        
+        else:
+            with open(save_path,'r') as f:
+                scaled_annotation = geojson.load(f)
+
+            f.close()
+
+        # Step 3: Recording properties and polys for that annotation
+        self.ftu_polys[f_name] = [
+            shape(g['geometry'])
+            for g in scaled_annotation['features']
+        ]
+        start_idx = sum([len(i)-1 for i in self.ftu_props])
+        self.ftu_props[f_name] = [
+            g['properties']['user'] | {'name': f_name, 'unique_index': start_idx+idx}
+            for idx,g in enumerate(scaled_annotation['features'])
+        ]
+
+        ftu_prop_list = []
+        this_ftu_props = list(self.ftu_props[f_name][0].keys())
+        for p in this_ftu_props:
+            if p in self.visualization_properties:
+                if type(self.ftu_props[f_name][0][p])==dict:
+                    ftu_prop_list.extend([
+                        f'{p} --> {i}' if not p=='Main_Cell_Types' else f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}'
+                        for i in list(self.ftu_props[f_name][0][p].keys())
+                    ])
+                else:
+                    ftu_prop_list.append(p)
+
+        if len(self.properties_list)>0:
+            self.properties_list.extend(list(set(ftu_prop_list) - set(self.properties_list)))
+        else:
+            self.properties_list = ftu_prop_list
+
+        if any(['Main_Cell_Types' in i for i in self.properties_list]) and 'Max Cell Type' not in self.properties_list:
+            self.properties_list.append('Max Cell Type')
+
+        self.map_dict['FTUs'][f_name] = {
+            'id':{'type':'ftu-bounds','index':len(self.ftu_names)-1},
+            'url':f'./assets/slide_annotations/{self.item_id}/{this_annotation["_id"]}.json',
+            'popup_id':{'type':'ftu-popup','index':len(self.ftu_names)-1},
+            'color':self.ftu_colors[f_name],
+            'hover_color':'#9caf00'
+        }
+
+        # Step 4: Save geojson locally
+        save_path = f'./assets/slide_annotations/{self.item_id}/{this_annotation["_id"]}.json'
+        if not os.path.exists(save_path):
+            with open(save_path,'w') as f:
+                geojson.dump(scaled_annotation,f)
+
+            f.close()
 
     def convert_json(self):
 
@@ -430,11 +527,13 @@ class DSASlide:
             # Grabbing values using utils function
             f_raw_vals = extract_overlay_value(self.ftu_props[f],overlay_prop)
             raw_values_list.extend(f_raw_vals)
-
+        
+        """
         if self.spatial_omics_type=='Visium':
             # Iterating through spots
             spot_raw_vals = extract_overlay_value(self.spot_props,overlay_prop)
             raw_values_list.extend(spot_raw_vals)
+        """
 
         # Check for manual ROIs
         if len(self.manual_rois)>0:

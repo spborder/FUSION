@@ -1684,6 +1684,8 @@ class LayoutHandler:
                     disabled = True
                 )
             ])
+        else:
+            special_overlay_opts = []
 
         return special_overlays_opts
 
@@ -1866,7 +1868,7 @@ class LayoutHandler:
                                 html.H6(f'Labels: {ann_progress["labels"]}')
                             ],
                             color = 'info',
-                            style = {'marginTop':'20px','marginLeft':'10px', 'width':'75%'}
+                            style = {'marginTop':'20px','marginLeft':'20px', 'width':'80%'}
                             )
                         ],align='center')
                     ],md = 4),
@@ -3000,7 +3002,26 @@ class LayoutHandler:
                         dbc.Col(
                             self.gen_info_button('Click the dropdown menu to select a slide!'),md=1
                         )
-                    ],align='center')
+                    ],align='center'),
+                    html.Div([
+                        dbc.Modal(
+                            id = 'slide-load-modal',
+                            centered = True,
+                            is_open = False
+                        ),
+                        dcc.Store(
+                            id = 'slide-info-store',
+                            data = [],
+                            storage_type='memory'
+                        ),
+                        dcc.Interval(
+                            id = 'slide-load-interval',
+                            interval = 1000,
+                            n_intervals = 0,
+                            max_intervals=-1,
+                            disabled = True
+                        )
+                    ])
                 ])
             ],style={'marginBottom':'20px','display':'none'}
         )
@@ -3301,12 +3322,28 @@ class GirderHandler:
 
         return collections_data
 
-    def get_item_name(self,item_id):
+    def get_item_info(self,item_id:str):
+        """
+        Get information for a given itemId, return None if invalid id or bad permissions
+        """
+        try:
+            # Getting the information for an item from it's unique id
+            item_info = self.gc.get(f'item/{item_id}')
+        except girder_client.HttpError:
+            item_info = None
 
-        # Getting the name of an item from it's unique id
-        item_name = self.gc.get(f'item/{item_id}')['name']
-
-        return item_name
+        return item_info
+    
+    def get_available_annotation_ids(self,item_id:str):
+        """
+        Get all available annotation id's and associated info for an item
+        """
+        try:
+            annotation_info = self.gc.get(f'/annotation',parameters= {'itemId':item_id,'limit':10000})
+        except girder_client.HttpError:
+            annotation_info = None
+        
+        return annotation_info
 
     def get_resource_id(self,resource):
         # Get unique item id from resource path to file
@@ -3953,7 +3990,12 @@ class GirderHandler:
                 # Should be a PIL.Image object
                 Image.fromarray(save_object['content']).save(f'/tmp/{save_object["filename"]}')
             elif 'tiff' in save_object['filename']:
-                tifffile.imsave(f'/tmp/{save_object["filename"]}',save_object['content'])
+                tifffile.imwrite(
+                    f'/tmp/{save_object["filename"]}',
+                    save_object['content'],
+                    shape = save_object['content'].shape,
+                    metadata={'axes':'YXC'}
+                    )
 
         print(f'Uploading: {save_object["filename"]} to {output_path_id}')
         upload_file_response = self.gc.uploadFileToFolder(
