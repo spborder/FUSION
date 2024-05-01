@@ -28,6 +28,7 @@ import requests
 from math import ceil
 import base64
 from datetime import datetime
+from time import time
 import tifffile
 
 import plotly.express as px
@@ -3522,12 +3523,9 @@ class GirderHandler:
             item_rock_path = f'{annotations_path}{it}/rock.txt'
 
             # What time was this rock put there?
-            rock_time = os.path.getmtime(item_rock_path)
-            print(f'rock_time: {rock_time}')
-            print(f'today time: {datetime.today()}')
-            print(f'number of days that rock has been there: {(datetime.fromtimestamp(rock_time) - datetime.now().today()).days}')
-
-            if (datetime.fromtimestamp(rock_time) - datetime.today()).days > days:
+            rock_time = os.stat(item_rock_path).st_atime
+            # 86400 seconds in one day times number of days
+            if time() - rock_time > (days*86400):
                 shutil.rmtree(f'{annotations_path}{it}')
 
 

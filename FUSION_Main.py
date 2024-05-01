@@ -3363,7 +3363,6 @@ class FUSION:
         """
         Populating slide visualization components after loading annotation and tile information
         """
-        print(f'load_slide_done: {load_slide_done}')
         load_slide_done = get_pattern_matching_value(load_slide_done)
         if load_slide_done:
             # Updating in the case that an FTU isn't in the previous set of ftu_colors

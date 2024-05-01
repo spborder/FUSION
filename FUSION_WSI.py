@@ -189,57 +189,61 @@ class DSASlide:
                 f['properties']['name'] = f_name
         
         else:
-            with open(save_path,'r') as f:
-                scaled_annotation = geojson.load(f)
+            try:
+                with open(save_path,'r') as f:
+                    scaled_annotation = geojson.load(f)
 
-            f.close()
+                f.close()
+            except json.decoder.JSONDecodeError:
+                scaled_annotation = None
 
-        # Step 3: Recording properties and polys for that annotation
-        self.ftu_polys[f_name] = [
-            shape(g['geometry'])
-            for g in scaled_annotation['features']
-        ]
-        start_idx = sum([len(i)-1 for i in self.ftu_props])
-        self.ftu_props[f_name] = [
-            g['properties']['user'] | {'name': f_name, 'unique_index': start_idx+idx}
-            for idx,g in enumerate(scaled_annotation['features'])
-        ]
+        if not scaled_annotation is None:
+            # Step 3: Recording properties and polys for that annotation
+            self.ftu_polys[f_name] = [
+                shape(g['geometry'])
+                for g in scaled_annotation['features']
+            ]
+            start_idx = sum([len(i)-1 for i in self.ftu_props])
+            self.ftu_props[f_name] = [
+                g['properties']['user'] | {'name': f_name, 'unique_index': start_idx+idx}
+                for idx,g in enumerate(scaled_annotation['features'])
+            ]
 
-        ftu_prop_list = []
-        this_ftu_props = list(self.ftu_props[f_name][0].keys())
-        for p in this_ftu_props:
-            if p in self.visualization_properties:
-                if type(self.ftu_props[f_name][0][p])==dict:
-                    ftu_prop_list.extend([
-                        f'{p} --> {i}' if not p=='Main_Cell_Types' else f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}'
-                        for i in list(self.ftu_props[f_name][0][p].keys())
-                    ])
-                else:
-                    ftu_prop_list.append(p)
+            ftu_prop_list = []
+            this_ftu_props = list(self.ftu_props[f_name][0].keys())
+            for p in this_ftu_props:
+                if p in self.visualization_properties:
+                    if type(self.ftu_props[f_name][0][p])==dict:
+                        ftu_prop_list.extend([
+                            f'{p} --> {i}' if not p=='Main_Cell_Types' else f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}'
+                            for i in list(self.ftu_props[f_name][0][p].keys())
+                        ])
+                    else:
+                        ftu_prop_list.append(p)
 
-        if len(self.properties_list)>0:
-            self.properties_list.extend(list(set(ftu_prop_list) - set(self.properties_list)))
-        else:
-            self.properties_list = ftu_prop_list
+            if len(self.properties_list)>0:
+                self.properties_list.extend(list(set(ftu_prop_list) - set(self.properties_list)))
+            else:
+                self.properties_list = ftu_prop_list
 
-        if any(['Main_Cell_Types' in i for i in self.properties_list]) and 'Max Cell Type' not in self.properties_list:
-            self.properties_list.append('Max Cell Type')
+            if any(['Main_Cell_Types' in i for i in self.properties_list]) and 'Max Cell Type' not in self.properties_list:
+                self.properties_list.append('Max Cell Type')
 
-        self.map_dict['FTUs'][f_name] = {
-            'id':{'type':'ftu-bounds','index':len(self.ftu_names)-1},
-            'url':f'./assets/slide_annotations/{self.item_id}/{this_annotation["_id"]}.json',
-            'popup_id':{'type':'ftu-popup','index':len(self.ftu_names)-1},
-            'color':self.ftu_colors[f_name],
-            'hover_color':'#9caf00'
-        }
+            self.map_dict['FTUs'][f_name] = {
+                'id':{'type':'ftu-bounds','index':len(self.ftu_names)-1},
+                'url':f'./assets/slide_annotations/{self.item_id}/{this_annotation["_id"]}.json',
+                'popup_id':{'type':'ftu-popup','index':len(self.ftu_names)-1},
+                'color':self.ftu_colors[f_name],
+                'hover_color':'#9caf00'
+            }
 
-        # Step 4: Save geojson locally
-        save_path = f'./assets/slide_annotations/{self.item_id}/{this_annotation["_id"]}.json'
-        if not os.path.exists(save_path):
-            with open(save_path,'w') as f:
-                geojson.dump(scaled_annotation,f)
+            # Step 4: Save geojson locally
+            save_path = f'./assets/slide_annotations/{self.item_id}/{this_annotation["_id"]}.json'
+            if not os.path.exists(save_path):
+                with open(save_path,'w') as f:
+                    geojson.dump(scaled_annotation,f)
 
-            f.close()
+                f.close()
 
     def find_intersecting_ftu(self, box_poly, ftu: str):
 
