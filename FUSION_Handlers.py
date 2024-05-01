@@ -3008,7 +3008,8 @@ class LayoutHandler:
                         dbc.Modal(
                             id = 'slide-load-modal',
                             centered = True,
-                            is_open = False
+                            is_open = False,
+                            size = 'lg'
                         ),
                         dcc.Store(
                             id = 'slide-info-store',
@@ -3527,7 +3528,6 @@ class GirderHandler:
             # 86400 seconds in one day times number of days
             if time() - rock_time > (days*86400):
                 shutil.rmtree(f'{annotations_path}{it}')
-
 
     def set_default_slides(self,default_slide_list):
         # Setting default slides with name and item information

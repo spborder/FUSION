@@ -3236,7 +3236,6 @@ class FUSION:
                 modal_children = [
                     html.Div([
                         dbc.ModalHeader(html.H4(f'Loading Annotations for: {slide_info["name"]}')),
-                        html.Hr(),
                         dbc.ModalBody([
                             html.Div(
                                 html.H6(f'Working on: {first_annotation}')
@@ -3289,7 +3288,6 @@ class FUSION:
                         modal_children = [
                             html.Div([
                                 dbc.ModalHeader(html.H4(f'Loading Annotations for: {slide_name}')),
-                                html.Hr(),
                                 dbc.ModalBody([
                                     html.Div(
                                         html.H6(f'Working on: {next_annotation}')
@@ -3308,7 +3306,6 @@ class FUSION:
                         modal_children = [
                             html.Div([
                                 dbc.ModalHeader(html.H4(f'All done!')),
-                                html.Hr(),
                                 dbc.ModalBody([
                                     dbc.Progress(
                                         id = {'type':'slide-load-progress','index':0},
@@ -3331,7 +3328,6 @@ class FUSION:
                         modal_children = [
                             html.Div([
                                 dbc.ModalHeader(html.H4(f'Loading Annotations for: {slide_name}')),
-                                html.Hr(),
                                 dbc.ModalBody([
                                     html.Div(
                                         html.H6(f'Working on: {old_ann_name}')
