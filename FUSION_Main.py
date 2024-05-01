@@ -1684,10 +1684,10 @@ class FUSION:
                         intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
                     for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
-                        intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
+                        intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
 
                     for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
-                        intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
+                        intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
                             
                 elif self.wsi.spatial_omics_type=='CODEX':
                     # Returns dictionary of intersecting tissue frame intensities
@@ -1736,10 +1736,10 @@ class FUSION:
                                 intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
                         for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
-                            intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
+                            intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
 
                         for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
-                            intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
+                            intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
 
                 self.current_ftus = intersecting_ftus
                 # Now we have main cell types, cell states, by ftu
@@ -2096,10 +2096,10 @@ class FUSION:
                         intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
                 for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
-                    intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
+                    intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
 
                 for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
-                    intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties'] for i in marked_ftu['geojson']['features']]
+                    intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
                 
                 self.current_ftus = intersecting_ftus
 
@@ -2618,10 +2618,10 @@ class FUSION:
                 ftu_idx = ftu_click['properties']['unique_index']
 
             if self.wsi.spatial_omics_type=='Visium':
-                if 'Main_Cell_Types' in ftu_click['properties']:
+                if 'Main_Cell_Types' in ftu_click['properties']['user']:
 
                     # Getting the main cell type data (only using top-n)
-                    main_cell_types = ftu_click['properties']['Main_Cell_Types']
+                    main_cell_types = ftu_click['properties']['user']['Main_Cell_Types']
                     chart_data = [main_cell_types[i] for i in main_cell_types]
 
                     if not len(chart_data)==0:
@@ -2633,7 +2633,7 @@ class FUSION:
                         chart_full_labels = [self.cell_graphics_key[i]['full'] for i in chart_labels]
 
                         # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
-                        cell_states = ftu_click['properties']['Cell_States']
+                        cell_states = ftu_click['properties']['user']['Cell_States']
                         cells_for_cell_states = list(cell_states.keys())
 
                         # Checking for non-zero cell states
@@ -2649,9 +2649,9 @@ class FUSION:
                             cs_df_list.append(cell_state_df)
 
                         # Getting other FTU/Spot properties
-                        all_properties = list(ftu_click['properties'].keys())
-                        all_properties = [i for i in all_properties if not type(ftu_click['properties'][i])==dict]
-                        all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties'][i] for i in all_properties]}
+                        all_properties = list(ftu_click['properties']['user'].keys())
+                        all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
+                        all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
                         all_properties_df = pd.DataFrame(all_props_dict)
 
                         main_cells_df = pd.DataFrame.from_dict({'Values':chart_data,'Labels':chart_labels,'Full':chart_full_labels})
@@ -2669,7 +2669,7 @@ class FUSION:
                         f_pie.update_traces(textposition='inside')
 
                         # popup divs
-                        if 'unique_index' in ftu_click['properties']:
+                        if 'unique_index' in ftu_click['properties']['user']:
                             add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
                             accordion_children = [
                                 dbc.AccordionItem([
@@ -2816,13 +2816,13 @@ class FUSION:
                         return html.Div([html.P('No cell type information')])
                 else:
                     # Getting other FTU/Spot properties
-                    all_properties = list(ftu_click['properties'].keys())
-                    all_properties = [i for i in all_properties if not type(ftu_click['properties'][i])==dict]
-                    all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties'][i] for i in all_properties]}
+                    all_properties = list(ftu_click['properties']['user'].keys())
+                    all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
+                    all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
                     all_properties_df = pd.DataFrame(all_props_dict)
 
                     # popup divs
-                    if 'unique_index' in ftu_click['properties']:
+                    if 'unique_index' in ftu_click['properties']['user']:
                         add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
                         accordion_children = [
                             dbc.AccordionItem([
@@ -2906,13 +2906,13 @@ class FUSION:
             else:
 
                 # Getting other FTU/Spot properties
-                all_properties = list(ftu_click['properties'].keys())
-                all_properties = [i for i in all_properties if not type(ftu_click['properties'][i])==dict]
-                all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties'][i] for i in all_properties]}
+                all_properties = list(ftu_click['properties']['user'].keys())
+                all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
+                all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
                 all_properties_df = pd.DataFrame(all_props_dict)
 
                 # popup divs
-                if 'unique_index' in ftu_click['properties']:
+                if 'unique_index' in ftu_click['properties']['user']:
                     add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
                     accordion_children = [
                         dbc.AccordionItem([
@@ -4261,6 +4261,9 @@ class FUSION:
             return go.Figure()
 
     def add_manual_roi(self,new_geojson):
+        """
+        Adding a rectangle, polygon, or marker annotation to the current image
+        """
         
         if not self.wsi is None:
             try:
@@ -4324,16 +4327,20 @@ class FUSION:
 
                                         agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
 
-                                    new_roi['features'][0]['properties']['Main_Cell_Types'] = main_counts_dict
-                                    new_roi['features'][0]['properties']['Cell_States'] = agg_cell_states
-                                    new_roi['features'][0]['properties']['Gene Counts'] = gene_counts_dict
+                                    new_roi['features'][0]['properties']['user'] = {
+                                        'Main_Cell_Types': main_counts_dict,
+                                        'Cell_States': agg_cell_states,
+                                        'Gene Counts': gene_counts_dict
+                                    }
+
 
                                 elif self.wsi.spatial_omics_type=='CODEX':
                                     overlap_props = self.wsi.intersecting_frame_intensity(shape(new_roi['features'][0]['geometry']),'all')
 
                                     # Adding channel intensity histogram to properties.
+                                    new_roi['features'][0]['properties']['user'] = {}
                                     for frame in overlap_props:
-                                        new_roi['features'][0]['properties'][frame] = overlap_props[frame]
+                                        new_roi['features'][0]['properties']['user'][frame] = overlap_props[frame]
 
                                 #TODO: include overlapping FTU properties in visualization within Manual ROIs
                                 # Now including properties of intersecting FTUs
@@ -4380,7 +4387,9 @@ class FUSION:
                                                             'type':'Polygon',
                                                             'coordinates':[list(overlap_poly.exterior.coords)],
                                                         },
-                                                        'properties':overlap_dict
+                                                        'properties': {
+                                                            'user': overlap_dict
+                                                        }
                                                     }
                                                 ]
                                             }
@@ -4394,7 +4403,9 @@ class FUSION:
                                                             'type':'Polygon',
                                                             'coordinates':[list(overlap_poly.exterior.coords)]
                                                         },
-                                                        'properties':overlap_dict
+                                                        'properties':{
+                                                            'user': overlap_dict
+                                                        }
                                                     },
                                                     #new_marked['features'][0]
                                                 ]
@@ -4412,7 +4423,9 @@ class FUSION:
                                                     'type':'Polygon',
                                                     'coordinates':[list(overlap_poly.exterior.coords)],
                                                 },
-                                                'properties':overlap_dict
+                                                'properties':{
+                                                    'user':overlap_dict
+                                                }
                                             }
                                         )
 
