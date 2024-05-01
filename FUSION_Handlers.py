@@ -2743,12 +2743,14 @@ class LayoutHandler:
             html.P('Happy fusing!')
         ]
 
+        with open('./assets/tutorial_content.json','r') as f:
+            tutorial_content = json.load(f)
+
         tutorial_list = ['FUSION Introduction','Preprocessing Steps','Visualization Page','Dataset Builder','Dataset Uploader']
 
         welcome_layout = [
                 dbc.Row([
-                    dbc.Col(html.Img(src='./assets/hello_fusey.svg',style={'width':'100%'}),width=4),
-                    dbc.Col(html.H1('Welcome to FUSION!',style={'width':'100%'}),width=4)
+                    dbc.Col(html.Img(src='./assets/Welcome Page Banner.svg',style={'width':'100%','height':'20vh'})),
                 ],align='center'),
                 html.Hr(),
                 html.B(),
@@ -3047,11 +3049,12 @@ class LayoutHandler:
                         children = slide_select
                     ),
                     dbc.Container([
-                        html.H1('Welcome to FUSION!'),
-                        html.Img(src='./assets/hello-fusey'),
+                        html.Img(
+                            src='./assets/Welcome Page Banner.svg',
+                            style = {'width':'100%','height':'20vh'}
+                        ),
                         ],fluid=True,id='container-content',style = {'height':'100vh'}
                     ),
-                    #html.Hr(),
                     html.Div(id='user-id-div', style={'display': 'none'}),
                     html.Div(id='dummy-div-for-userId', style={'display': 'none'}),
                     html.Div(id='dummy-div-plugin-track', style={'display': 'none'}),
@@ -3519,15 +3522,16 @@ class GirderHandler:
         Clear cached annotations with access times greater than 1 day
         """
         annotations_path = './assets/slide_annotations/'
-        item_annotations = os.listdir(annotations_path)
-        for it in item_annotations:
-            item_rock_path = f'{annotations_path}{it}/rock.txt'
+        if os.path.exists(annotations_path):
+            item_annotations = os.listdir(annotations_path)
+            for it in item_annotations:
+                item_rock_path = f'{annotations_path}{it}/rock.txt'
 
-            # What time was this rock put there?
-            rock_time = os.stat(item_rock_path).st_atime
-            # 86400 seconds in one day times number of days
-            if time() - rock_time > (days*86400):
-                shutil.rmtree(f'{annotations_path}{it}')
+                # What time was this rock put there?
+                rock_time = os.stat(item_rock_path).st_atime
+                # 86400 seconds in one day times number of days
+                if time() - rock_time > (days*86400):
+                    shutil.rmtree(f'{annotations_path}{it}')
 
     def set_default_slides(self,default_slide_list):
         # Setting default slides with name and item information
