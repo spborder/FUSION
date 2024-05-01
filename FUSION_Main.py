@@ -14,6 +14,8 @@ from PIL import Image
 from io import BytesIO
 from datetime import datetime
 
+from threading import Thread
+
 from tqdm import tqdm
 
 import shapely
@@ -1037,7 +1039,7 @@ class FUSION:
         
         # Updating tutorial slides shown
         self.app.callback(
-            Input({'type':'tutorial-name','index':ALL},'n_clicks'),
+            [Input({'type':'tutorial-name','index':ALL},'n_clicks')],
             [Output('welcome-tutorial','children'),
              Output('tutorial-name','children'),
              Output({'type':'tutorial-name','index':ALL},'style')]
@@ -1216,33 +1218,45 @@ class FUSION:
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
 
-        click_key = ['FUSION Introduction','Preprocessing Steps','Visualization Page','Dataset Builder','Dataset Uploader']
+        click_key = [i['name'] for i in self.layout_handler.tutorial_content['categories']]
 
-        tutorial_name = click_key[ctx.triggered_id["index"]]
-        new_items_list = [{
-            'key':f'{i+1}',
-            'src':f'./static/tutorials/{tutorial_name}/slide_{i}.svg',
-            'img_style':{'height':'60vh','width':'80%'}
+        if ctx.triggered_id['type']=='tutorial-name':
+            tutorial_name = click_key[ctx.triggered_id["index"]]
+            new_items_list = [{
+                'key':f'{i+1}',
+                'src':f'./static/tutorials/{tutorial_name}/slide_{i}.svg',
+                'img_style':{'height':'60vh','width':'80%'}
+                }
+                for i in range(len(os.listdir(f'./static/tutorials/{tutorial_name}/')))
+            ]
+
+            active_index = [1]*len(ctx.outputs_list[2])
+
+            new_slides = dbc.Carousel(
+                id = {'type':'welcome-tutorial-slides','index':0},
+                items = new_items_list,
+                controls = True,
+                indicators = True,
+                variant = 'dark'
+            )
+
+            # Returning style list for html.A components
+            selected_style = {
+                'background':'rgba(255,255,255,0.8)',
+                'box-shadow':'0 0 10px rgba(0,0,0,0.2)',
+                'border-radius':'5px',
             }
-            for i in range(len(os.listdir(f'./static/tutorials/{tutorial_name}/')))
-        ]
+            style_list = [{} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(click_key))]
 
-        new_slides = dbc.Carousel(
-            id = 'welcome-tutorial-slides',
-            items = new_items_list,
-            controls = True,
-            indicators = True,
-            variant = 'dark'
-        )
-
-        # Returning style list for html.A components
-        selected_style = {
-            'background':'rgba(255,255,255,0.8)',
-            'box-shadow':'0 0 10px rgba(0,0,0,0.2)',
-            'border-radius':'5px',
-        }
-        style_list = [{} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(click_key))]
-
+            sub_parts = [
+                dbc.Row([
+                    html.A(
+                        dcc.Markdown(f'* {i}',id = {'type':'tutorial-sub-part','index':idx},style ={'fontSize':8})
+                    ),
+                    html.Br()
+                ])
+                for idx,i in enumerate(self.layout_handler.tutorial_content['categories'][click_key.index(tutorial_name)])
+            ]
 
         return new_slides, html.H3(tutorial_name), style_list
 
@@ -3231,7 +3245,10 @@ class FUSION:
                     json.dumps(slide_annotation_info)
                 ]
 
-                self.wsi.get_annotation_geojson(0)
+                # Starting the get_annotation_geojson function on a new thread
+                new_thread = Thread(target = self.wsi.get_annotation_geojson, name = first_annotation, args = [0])
+                new_thread.daemon = True
+                new_thread.start()
 
                 modal_children = [
                     html.Div([
@@ -3283,7 +3300,10 @@ class FUSION:
                         next_annotation = slide_info_store['annotations'][next_ann_idx]['annotation']['name']
                         slide_info_store['loading_annotation'] = slide_info_store['annotations'][next_ann_idx]['_id']
                         
-                        self.wsi.get_annotation_geojson(next_ann_idx)
+                        # Starting the get_annotation_geojson function on a new thread
+                        new_thread = Thread(target = self.wsi.get_annotation_geojson, name = next_annotation, args = [next_ann_idx])
+                        new_thread.daemon = True
+                        new_thread.start()
 
                         modal_children = [
                             html.Div([

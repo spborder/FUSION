@@ -2744,9 +2744,10 @@ class LayoutHandler:
         ]
 
         with open('./assets/tutorial_content.json','r') as f:
-            tutorial_content = json.load(f)
+            self.tutorial_content = json.load(f)
+        f.close()
 
-        tutorial_list = ['FUSION Introduction','Preprocessing Steps','Visualization Page','Dataset Builder','Dataset Uploader']
+        tutorial_list = [i['name'] for i in self.tutorial_content['categories']]
 
         welcome_layout = [
                 dbc.Row([
@@ -2763,6 +2764,10 @@ class LayoutHandler:
                         dbc.Col([
                             dbc.Row([
                                 html.A(dcc.Markdown(f'* {i}'),id={'type':'tutorial-name','index':idx}),
+                                html.Div(
+                                    id = {'type':'tutorial-parts','index':idx},
+                                    children = []
+                                ),
                                 html.Br()
                             ])
                             for idx,i in enumerate(tutorial_list)
@@ -2793,7 +2798,7 @@ class LayoutHandler:
                             ),
                         ],align='center',md=10)
                     ])
-                ],style={})
+                ],style={'maxHeight':'70vh','overflow':'scroll'})
             ]
         
         self.current_welcome_layout = welcome_layout
