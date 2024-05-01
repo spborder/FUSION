@@ -14,7 +14,7 @@ from PIL import Image
 from io import BytesIO
 from datetime import datetime
 
-from threading import Thread
+import threading
 
 from tqdm import tqdm
 
@@ -203,6 +203,7 @@ class FUSION:
         self.filter_vals = None
         self.overlap_prop = None
         self.hex_color_key = {}
+        self.current_channels = {}
 
         # Initializing current annotation session
         self.current_ann_session = None
@@ -3246,9 +3247,10 @@ class FUSION:
                 ]
 
                 # Starting the get_annotation_geojson function on a new thread
-                new_thread = Thread(target = self.wsi.get_annotation_geojson, name = first_annotation, args = [0])
+                new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = first_annotation, args = [0])
                 new_thread.daemon = True
                 new_thread.start()
+                #print(f'new thread started: {threading.active_count()}, {threading.enumerate()}')
 
                 modal_children = [
                     html.Div([
@@ -3301,9 +3303,10 @@ class FUSION:
                         slide_info_store['loading_annotation'] = slide_info_store['annotations'][next_ann_idx]['_id']
                         
                         # Starting the get_annotation_geojson function on a new thread
-                        new_thread = Thread(target = self.wsi.get_annotation_geojson, name = next_annotation, args = [next_ann_idx])
+                        new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = next_annotation, args = [next_ann_idx])
                         new_thread.daemon = True
                         new_thread.start()
+                        #print(f'new thread started: {threading.active_count()}, {threading.enumerate()}')
 
                         modal_children = [
                             html.Div([
@@ -3337,7 +3340,9 @@ class FUSION:
                         ]
 
                 else:
-
+                    #print(f'previous_annotation_id: {previous_annotation_id}, continuing')
+                    #print(f'active threads: {threading.active_count()}')
+                    #print(f'active_thread list: {threading.enumerate()}')
                     if not previous_annotation_id=='done':
                         all_annotation_ids = [i['_id'] for i in slide_info_store['annotations']]
                         old_ann_idx = all_annotation_ids.index(previous_annotation_id)
