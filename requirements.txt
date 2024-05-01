@@ -1,7 +1,7 @@
 dash==2.13.0
 dash_bootstrap_components==1.4.2
 dash_cytoscape==0.3.0
-dash_extensions==1.0.14
+dash_extensions==1.0.4
 dash_leaflet==1.0.5
 dash_mantine_components==0.14.2
 dash_treeview_antd==0.0.1
