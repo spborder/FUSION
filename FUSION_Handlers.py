@@ -27,7 +27,7 @@ from io import BytesIO, StringIO
 import requests
 from math import ceil
 import base64
-import datetime
+from datetime import datetime
 import tifffile
 
 import plotly.express as px
@@ -3395,7 +3395,7 @@ class GirderHandler:
         for f in np.unique(folder_ids):
             if f not in list(self.slide_datasets.keys()):
                 folder_name = self.gc.get(f'/folder/{f}')['name']
-                if not folder_name=='Public':
+                if not folder_name=='Public' and not folder_name =='FUSION Annotation Sessions':
 
                     self.slide_datasets[f] = {
                         'name':folder_name
@@ -3511,6 +3511,25 @@ class GirderHandler:
                             self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
                         elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+
+    def clean_old_annotations(self, days = 1):
+        """
+        Clear cached annotations with access times greater than 1 day
+        """
+        annotations_path = './assets/slide_annotations/'
+        item_annotations = os.listdir(annotations_path)
+        for it in item_annotations:
+            item_rock_path = f'{annotations_path}{it}/rock.txt'
+
+            # What time was this rock put there?
+            rock_time = os.path.getmtime(item_rock_path)
+            print(f'rock_time: {rock_time}')
+            print(f'today time: {datetime.today()}')
+            print(f'number of days that rock has been there: {(datetime.fromtimestamp(rock_time) - datetime.now().today()).days}')
+
+            if (datetime.fromtimestamp(rock_time) - datetime.today()).days > days:
+                shutil.rmtree(f'{annotations_path}{it}')
+
 
     def set_default_slides(self,default_slide_list):
         # Setting default slides with name and item information
@@ -3631,7 +3650,7 @@ class GirderHandler:
 
         if len(folder_items)>0:
             # Getting all the updated datetime strings
-            updated_list = [datetime.datetime.fromisoformat(i['updated']) for i in folder_items]
+            updated_list = [datetime.fromisoformat(i['updated']) for i in folder_items]
             # Getting latest updated file
             latest_idx = np.argmax(updated_list)
 

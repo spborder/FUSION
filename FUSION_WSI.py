@@ -175,6 +175,11 @@ class DSASlide:
             if not os.path.exists(f'./assets/slide_annotations/{self.item_id}'):
                 os.makedirs(f'./assets/slide_annotations/{self.item_id}')
 
+                # Create placeholder file for timekeeping
+                with open(f'./assets/slide_annotations/{self.item_id}/rock.txt','w') as f:
+                    f.write('Hey look a cool rock!')
+                f.close()
+
             # Step 1: Get annotation in geojson form
             annotation_geojson = self.girder_handler.gc.get(f'/annotation/{self.annotation_ids[idx]["_id"]}/geojson?token={self.user_token}')
             
@@ -236,197 +241,20 @@ class DSASlide:
 
             f.close()
 
-    def convert_json(self):
-
-        # Translation step
-        base_x_scale = self.base_dims[0]/self.tile_dims[0]
-        base_y_scale = self.base_dims[1]/self.tile_dims[1]
-        #print(f'base_x_scale: {base_x_scale}, base_y_scale: {base_y_scale}')
-
-        # image bounds [maxX, maxY]
-        # bottom_right[0]-top_left[0] --> range of x values in target crs
-        # bottom_right[1]-top_left[1] --> range of y values in target crs
-        # scaling values so they fall into the current map (pixels)
-        # This method works for all tile sizes, leaflet container must just be expecting 240
-        x_scale = (self.tile_dims[0])/(self.image_dims[0]*(self.tile_dims[0]/240))
-        y_scale = (self.tile_dims[1])/(self.image_dims[1]*(self.tile_dims[1]/240))
-        y_scale*=-1
-
-        #print(f'x_scale: {x_scale}, y_scale: {y_scale}')
-        # y_scale has to be inverted because y is measured upward in these maps
-
-        print('Processing annotations')
-        self.ftu_names = []
-        self.ftu_polys = {}
-        self.ftu_props = {}
-        self.spot_polys = []
-        self.spot_props = []
-        self.properties_list = []
-
-        self.map_dict = {
-            'url': self.tile_url,
-            'FTUs':{}
-        }
-
-        included_props = []
-        # Emptying current ./assets/slide_annotations/ folder
-        if os.path.exists('./assets/slide_annotations/'):
-            shutil.rmtree('./assets/slide_annotations/')
-
-        # Assigning a unique integer id to each element
-        individual_geojson = {}
-        for a in tqdm(self.annotations):
-            if 'elements' in a['annotation']:
-                f_name = a['annotation']['name']
-                if not f_name in self.ftu_names:
-                    self.ftu_names.append(f_name)
-                    individual_geojson[f_name] = {'type':'FeatureCollection','features':[]}
-
-                if not f_name=='Spots':
-                    if f_name not in self.ftu_polys and f_name not in self.ftu_props:
-                        self.ftu_polys[f_name] = []
-                        self.ftu_props[f_name] = []
-
-                # Checking if this ftu is in the ftu_colors list
-                if f_name not in self.ftu_colors:
-                    self.ftu_colors[f_name] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
-
-                integer_idx = 0
-                for f in tqdm(a['annotation']['elements']):
-                    f_dict = {'type':'Feature','geometry':{'type':'Polygon','coordinates':[]},'properties':{}}
-
-                    # Checking if the shape is valid (some models output single pixel/bad predictions which aren't shapes)
-                    if self.check_validity(f):
-                        
-                        # This is only for polyline type elements
-                        if f['type']=='polyline':
-                            og_coords = np.squeeze(np.array(f['points']))
-                            
-                            scaled_coords = og_coords.tolist()
-                            scaled_coords = [i[0:-1] for i in scaled_coords]
-                            scaled_coords = [[base_x_scale*((i[0]*x_scale)),base_y_scale*((i[1]*y_scale))] for i in scaled_coords]
-                            
-                            f_dict['geometry']['coordinates'] = [scaled_coords]
-
-                        elif f['type']=='rectangle':
-                            width = f['width']
-                            height = f['height']
-                            center = f['center'][0:-1]
-                            # Coords: top left, top right, bottom right, bottom left
-                            bbox_coords = [
-                                [int(center[0])-int(width/2),int(center[1])-int(height/2)],
-                                [int(center[0])+int(width/2),int(center[1])-int(height/2)],
-                                [int(center[0])+int(width/2),int(center[1])+int(height/2)],
-                                [int(center[0])-int(width/2),int(center[1])+int(height/2)]
-                            ]
-                            scaled_coords = [[base_x_scale*(i[0]*x_scale),base_y_scale*(i[1]*y_scale)] for i in bbox_coords]
-                            f_dict['geometry']['coordinates'] = [scaled_coords]
-
-                        # Who even cares about circles and ellipses??
-                        # If any user-provided metadata is provided per element add it to "properties" key                       
-                        if 'user' in f:
-                            f_dict['properties'] = f['user']
-
-                        f_dict['properties']['name'] = f_name
-                        f_dict['properties']['unique_index'] = integer_idx
-                        integer_idx+=1
-                        individual_geojson[f_name]['features'].append(f_dict)
-
-                        if not f_name=='Spots':
-                            self.ftu_polys[f_name].append(shape(f_dict['geometry']))
-                            self.ftu_props[f_name].append(f_dict['properties'])
-                        else:
-                            self.spot_polys.append(shape(f_dict['geometry']))
-                            self.spot_props.append(f_dict['properties'])
-
-                        for p in f_dict['properties']:
-                            if p not in included_props:
-                                if p in self.visualization_properties:
-                                    
-                                    if type(f_dict['properties'][p])==dict:
-                                        included_props.append(p)
-                                        f_k = list(f_dict['properties'][p].keys())
-                                        if p=='Main_Cell_Types':
-                                            f_prop_list = [f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}' for i in f_k]
-                                        else:
-                                            f_prop_list = [f'{p} --> {i}' for i in f_k]
-
-                                    else:
-                                        included_props.append(p)
-                                        f_prop_list = [p]
-
-                                    self.properties_list.extend(f_prop_list)
-
-                if f_name not in self.map_dict['FTUs']:
-                    self.map_dict['FTUs'][f_name] = {
-                        'id':{'type':'ftu-bounds','index':len(self.ftu_names)-1},
-                        'popup_id':{'type':'ftu-popup','index':len(self.ftu_names)-1},
-                        'color':self.ftu_colors[f_name],
-                        'hover_color':'#9caf00'
-                    }
-
-                # Writing annotations to local assets
-                # Emptying current ./assets/slide_annotations/ folder
-                if not os.path.exists('./assets/slide_annotations/'):
-                    os.makedirs('./assets/slide_annotations/')
-                    
-                with open(f'./assets/slide_annotations/{f_name}.json','w') as f:
-                    json.dump(individual_geojson[f_name],f)
-        
-        self.properties_list = np.unique(self.properties_list).tolist()
-        main_cell_types_test = [1 if 'Main_Cell_Types' in i else 0 for i in self.properties_list]
-        if any(main_cell_types_test):
-            self.properties_list.append('Max Cell Type')
-        
-        return base_x_scale*x_scale, base_y_scale*y_scale
-
-    def check_validity(self,element):
-
-        # Pretty much just a check for if a polyline object has enough vertices.
-        # Rectangles will always be valid, circles and ellipses will be ignored
-        valid = False
-        try:
-            if element['type']=='polyline':
-                if len(element['points'])>=4:
-                    valid = True
-            else:
-                valid = True
-            
-            return valid
-        except KeyError:
-            # Return false if element doesn't have "type" property
-            return valid
-            
-    def find_intersecting_spots(self,box_poly):
-
-        # Finging intersecting spots
-        intersecting_spot_idxes = [i for i in range(0,len(self.spot_polys)) if self.spot_polys[i].intersects(box_poly)]
-        
-        # Returning list of dictionaries using original keys
-        intersecting_spot_props = []
-        if len(intersecting_spot_idxes)>0:
-            intersecting_spot_props = [self.spot_props[i] for i in intersecting_spot_idxes]
-
-        return intersecting_spot_props
-
     def find_intersecting_ftu(self, box_poly, ftu: str):
 
         if ftu in self.ftu_names:
+            # Finding which members of a specfied ftu group intersect with the provided box_poly
+            ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
             
-            if not ftu=='Spots':
-                # Finding which members of a specfied ftu group intersect with the provided box_poly
-                ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
-                
-                # Returning list of dictionaries that use original keys in properties
-                intersecting_ftu_props = []
-                intersecting_ftu_polys = []
+            # Returning list of dictionaries that use original keys in properties
+            intersecting_ftu_props = []
+            intersecting_ftu_polys = []
 
-                if len(ftu_intersect_idx)>0:
-                    intersecting_ftu_props = [self.ftu_props[ftu][i] for i in ftu_intersect_idx]
-                    intersecting_ftu_polys = [self.ftu_polys[ftu][i] for i in ftu_intersect_idx]
-            else:
-                intersecting_ftu_props = []
-                intersecting_ftu_polys = []
+            if len(ftu_intersect_idx)>0:
+                intersecting_ftu_props = [self.ftu_props[ftu][i] for i in ftu_intersect_idx]
+                intersecting_ftu_polys = [self.ftu_polys[ftu][i] for i in ftu_intersect_idx]
+
 
             return intersecting_ftu_props, intersecting_ftu_polys
         elif ftu=='all':
@@ -435,13 +263,12 @@ class DSASlide:
             intersecting_ftu_props = {}
             intersecting_ftu_poly = None
             for ftu in self.ftu_names:
-                if not ftu=='Spots':
-                    ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
+                ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
 
-                    if len(ftu_intersect_idx)==1:
-                        intersecting_ftu_props = self.ftu_props[ftu][ftu_intersect_idx[0]]
-                        intersecting_ftu_poly = self.ftu_polys[ftu][ftu_intersect_idx[0]]
-                
+                if len(ftu_intersect_idx)==1:
+                    intersecting_ftu_props = self.ftu_props[ftu][ftu_intersect_idx[0]]
+                    intersecting_ftu_poly = self.ftu_polys[ftu][ftu_intersect_idx[0]]
+            
             return intersecting_ftu_props, intersecting_ftu_poly
         else:
             raise ValueError
@@ -561,16 +388,6 @@ class VisiumSlide(DSASlide):
                  marked_ftus:list):
         super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
 
-    def find_intersecting_spots(self,box_poly):
-        # Finging intersecting spots within a particular region
-        intersecting_spot_idxes = [i for i in range(0,len(self.spot_polys)) if self.spot_polys[i].intersects(box_poly)]
-        
-        # Returning list of dictionaries using original keys
-        intersecting_spot_props = []
-        if len(intersecting_spot_idxes)>0:
-            intersecting_spot_props = [self.spot_props[i] for i in intersecting_spot_idxes]
-
-        return intersecting_spot_props
 
 class CODEXSlide(DSASlide):
     # Additional properties needed for CODEX slides are:

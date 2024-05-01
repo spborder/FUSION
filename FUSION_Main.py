@@ -370,7 +370,7 @@ class FUSION:
 
         # Running server
         #self.app.run_server(host = '0.0.0.0',debug=False,use_reloader=False,port=8000)
-        serve(self.app.server,host='0.0.0.0',port=8000)
+        serve(self.app.server,host='0.0.0.0',port=8000,threads = 10)
 
     def view_instructions(self,n,n2,is_open):
         # Opening collapse and populating internal div 
@@ -405,6 +405,7 @@ class FUSION:
         slide_select_value = ''
 
         self.dataset_handler.update_usability()
+        self.dataset_handler.clean_old_annotations()
 
         if pathname in self.layout_handler.layout_dict:
             self.current_page = pathname
@@ -1677,14 +1678,10 @@ class FUSION:
                 intersecting_ftus = {}
                 intersecting_ftu_polys = {}
                 if self.wsi.spatial_omics_type=='Visium':
-                    # Returns dictionary of intersecting spot properties
-                    intersecting_spots = self.wsi.find_intersecting_spots(bounds_box)
-                    intersecting_ftus['Spots'] = intersecting_spots
 
                     # Getting intersecting FTU information
                     for ftu in self.current_ftu_layers:
-                        if not ftu=='Spots':
-                            intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                        intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
                     for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
                         intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']]
@@ -2036,7 +2033,7 @@ class FUSION:
                             tab_list.append(f_tab)
 
                     if self.wsi.spatial_omics_type=='Visium' or self.wsi.spatial_omics_type=='Regular':
-                        return dbc.Tabs(tab_list,active_tab = 'tab_0'), no_update
+                        return dbc.Tabs(tab_list,active_tab = 'tab_0'), no_update, frame_label_disable
                     elif self.wsi.spatial_omics_type=='CODEX':
 
                         return_div = html.Div([
@@ -3274,19 +3271,16 @@ class FUSION:
 
                 # Checking if previous annotation is complete
                 previous_annotation_id = slide_info_store['loading_annotation']
-                print(f'previous_annotation_id: {previous_annotation_id}')
-                print(f"file is writable: {os.access(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json',os.W_OK)} and exists {os.path.exists(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json')}")
                 if os.access(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json',os.W_OK) and os.path.exists(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json'):
 
                     all_annotation_ids = [i['_id'] for i in slide_info_store['annotations']]
                     next_ann_idx = all_annotation_ids.index(previous_annotation_id) + 1
 
-                    print(f'next_ann_idx: {next_ann_idx}')
-                    print(f'all_annotation_ids: {all_annotation_ids}')
                     n_annotations = len(all_annotation_ids)
                     slide_name = slide_info_store['slide_info']['name']
 
                     if next_ann_idx<len(all_annotation_ids):
+
                         next_annotation = slide_info_store['annotations'][next_ann_idx]['annotation']['name']
                         slide_info_store['loading_annotation'] = slide_info_store['annotations'][next_ann_idx]['_id']
                         
@@ -4307,7 +4301,7 @@ class FUSION:
                                 # New geojson has no properties which can be used for overlays or anything so we have to add those
                                 if self.wsi.spatial_omics_type=='Visium':
                                     # Step 1, find intersecting spots:
-                                    overlap_props = self.wsi.find_intersecting_spots(shape(new_roi['features'][0]['geometry']))
+                                    overlap_props,_ = self.wsi.find_intersecting_ftu(shape(new_roi['features'][0]['geometry']),'Spots')
                                     # Adding Main_Cell_Types from intersecting spots data
                                     main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
                                     main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
