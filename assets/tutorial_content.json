@@ -5,11 +5,11 @@
             "parts": [
                 {
                     "label": "Background",
-                    "value": 3
+                    "value": 2
                 },
                 {
                     "label": "Introduction",
-                    "value": 8
+                    "value": 7
                 }
             ]
         },
@@ -18,19 +18,19 @@
             "parts": [
                 {
                     "label": "Automated Segmentation",
-                    "value": 3
+                    "value": 2
                 },
                 {
                     "label": "Spatial Omics",
-                    "value": 4
+                    "value": 3
                 },
                 {
                     "label": "Spatial Aggregation",
-                    "value": 8
+                    "value": 7
                 },
                 {
                     "label": "Morphometrics",
-                    "value": 10
+                    "value": 9
                 }
             ]
         },
@@ -39,31 +39,31 @@
             "parts": [
                 {
                     "label": "Accessing Visualization",
-                    "value": 3
+                    "value": 2
                 },
                 {
                     "label": "Whole Slide Image Viewer",
-                    "value": 5
+                    "value": 4
                 },
                 {
                     "label": "Overlays",
-                    "value": 18
+                    "value": 17
                 },
                 {
                     "label": "Cell Composition",
-                    "value": 24
+                    "value": 23
                 },
                 {
                     "label": "Cell Graphics",
-                    "value": 27
+                    "value": 26
                 },
                 {
                     "label": "Morphological Clustering",
-                    "value": 30
+                    "value": 29
                 },
                 {
                     "label": "Download Data",
-                    "value": 48
+                    "value": 47
                 }
             ]
         },
@@ -72,19 +72,19 @@
             "parts": [
                 {
                     "label": "Accessing Dataset Builder",
-                    "value": 5
+                    "value": 4
                 },
                 {
                     "label": "Adding WSIs to Session",
-                    "value": 6
+                    "value": 5
                 },
                 {
                     "label": "Plotting Metadata",
-                    "value": 9
+                    "value": 8
                 },
                 {
                     "label": "Go to Visualization",
-                    "value": 12
+                    "value": 11
                 }
             ]
         },
@@ -93,27 +93,27 @@
             "parts": [
                 {
                     "label": "Accessing Dataset Uploader",
-                    "value": 3
+                    "value": 2
                 },
                 {
                     "label": "Creating an Account",
-                    "value": 4
+                    "value": 3
                 },
                 {
                     "label": "Uploading Image and Omics",
-                    "value": 6
+                    "value": 5
                 },
                 {
                     "label": "Uploading Annotations",
-                    "value": 10
+                    "value": 9
                 },
                 {
                     "label": "Sub-Compartment Segmentation",
-                    "value": 12
+                    "value": 11
                 },
                 {
                     "label": "Morphometric Feature Extraction",
-                    "value": 14
+                    "value": 13
                 }
             ]
         }

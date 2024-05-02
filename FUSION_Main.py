@@ -1040,10 +1040,15 @@ class FUSION:
         
         # Updating tutorial slides shown
         self.app.callback(
-            [Input({'type':'tutorial-name','index':ALL},'n_clicks')],
+            [Input({'type':'tutorial-name','index':ALL},'n_clicks'),
+             Input({'type':'tutorial-sub-part','index':ALL},'n_clicks')],
             [Output('welcome-tutorial','children'),
              Output('tutorial-name','children'),
-             Output({'type':'tutorial-name','index':ALL},'style')]
+             Output({'type':'welcome-tutorial-slides','index':ALL},'active_index'),
+             Output({'type':'tutorial-name','index':ALL},'style'),
+             Output({'type':'tutorial-parts','index':ALL},'children'),
+             Output({'type':'tutorial-sub-part','index':ALL},'style')],
+            [State({'type':'tutorial-sub-part','index':ALL},'children')]
         )(self.get_tutorial)
 
     def upload_callbacks(self):
@@ -1214,52 +1219,83 @@ class FUSION:
             prevent_initial_call = True
         )(self.update_feat_logs)
     
-    def get_tutorial(self,a_click):
+    def get_tutorial(self,a_click, sub_click,current_parts):
 
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
 
         click_key = [i['name'] for i in self.layout_handler.tutorial_content['categories']]
+        slide_active_index = [0]*len(ctx.outputs_list[2])
+        sub_parts_style = [no_update]*len(ctx.outputs_list[-1])
+        new_slides = no_update
+
+        # Returning style list for html.A components
+        selected_style = {
+            'background':'rgba(255,255,255,0.8)',
+            'box-shadow':'0 0 10px rgba(0,0,0,0.2)',
+            'border-radius':'5px',
+        }
+
+        sub_selected_style = {
+            'background':'rgba(255,255,255,0.8)',
+            'box-shadow':'0 0 5px rgba(0,0,0,0.2)',
+            'border-radius':'3px',
+            'fontSize':12,
+            'marginLeft':'25px'
+        }
 
         if ctx.triggered_id['type']=='tutorial-name':
-            tutorial_name = click_key[ctx.triggered_id["index"]]
+            tutorial_name = html.H3(click_key[ctx.triggered_id["index"]])
             new_items_list = [{
                 'key':f'{i+1}',
-                'src':f'./static/tutorials/{tutorial_name}/slide_{i}.svg',
+                'src':f'./static/tutorials/{click_key[ctx.triggered_id["index"]]}/slide_{i}.svg',
                 'img_style':{'height':'60vh','width':'80%'}
                 }
-                for i in range(len(os.listdir(f'./static/tutorials/{tutorial_name}/')))
+                for i in range(len(os.listdir(f'./static/tutorials/{click_key[ctx.triggered_id["index"]]}/')))
             ]
-
-            active_index = [1]*len(ctx.outputs_list[2])
 
             new_slides = dbc.Carousel(
                 id = {'type':'welcome-tutorial-slides','index':0},
                 items = new_items_list,
+                active_index = 1,
                 controls = True,
                 indicators = True,
                 variant = 'dark'
             )
 
-            # Returning style list for html.A components
-            selected_style = {
-                'background':'rgba(255,255,255,0.8)',
-                'box-shadow':'0 0 10px rgba(0,0,0,0.2)',
-                'border-radius':'5px',
-            }
             style_list = [{} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(click_key))]
 
-            sub_parts = [
+            sub_parts = [[
                 dbc.Row([
                     html.A(
-                        dcc.Markdown(f'* {i}',id = {'type':'tutorial-sub-part','index':idx},style ={'fontSize':8})
+                        dcc.Markdown(f'* {i["label"]}'),
+                        id = {'type':'tutorial-sub-part','index':idx},
+                        style ={'fontSize':10,'marginLeft':'25px'}
                     ),
                     html.Br()
                 ])
-                for idx,i in enumerate(self.layout_handler.tutorial_content['categories'][click_key.index(tutorial_name)])
+                for idx,i in enumerate(self.layout_handler.tutorial_content['categories'][click_key.index(click_key[ctx.triggered_id["index"]])]['parts'])
+            ]
+            if i==ctx.triggered_id['index'] else []
+            for i in range(0,len(ctx.outputs_list[4]))
             ]
 
-        return new_slides, html.H3(tutorial_name), style_list
+        elif ctx.triggered_id['type']=='tutorial-sub-part':
+
+            tutorial_name = no_update
+            style_list = [no_update]*len(ctx.outputs_list[3])
+            sub_parts = [no_update]*len(ctx.outputs_list[4])
+            
+            tutorial_names = [[f['label'] for f in i['parts']] for i in self.layout_handler.tutorial_content['categories']]
+            part_names = [i['props']['children'].split('* ')[-1] for i in current_parts]
+            tutorial_index = tutorial_names.index(part_names)
+
+            # Updating style
+            sub_parts_style = [{'fontSize':10,'marginLeft':'25px'} if not i==ctx.triggered_id['index'] else sub_selected_style for i in range(len(ctx.outputs_list[-1]))]
+            slide_active_index = [self.layout_handler.tutorial_content['categories'][tutorial_index]['parts'][ctx.triggered_id['index']]['value']]*len(ctx.outputs_list[2])
+
+
+        return new_slides, tutorial_name, slide_active_index, style_list, sub_parts, sub_parts_style
 
     def initialize_metadata_plots(self,selected_dataset_list):
 
