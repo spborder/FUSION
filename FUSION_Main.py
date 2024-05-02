@@ -688,15 +688,11 @@ class FUSION:
 
         # Loading new WSI from dropdown selection
         self.app.callback(
-            [Output('slide-tile','url'),
+            [Output('slide-tile-holder','children'),
              Output('layer-control','children'),
              Output({'type':'edit_control','index':ALL},'editToolbar'),
              Output('slide-map','center'),
              Output('slide-map','bounds'),
-             Output('slide-tile','tileSize'),
-             Output('slide-map','maxZoom'),
-             Output('slide-tile','maxZoom'),
-             Output('slide-tile','maxNativeZoom'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children'),
@@ -3447,6 +3443,20 @@ class FUSION:
                     for c_idx,c_name in enumerate(self.wsi.channel_names)
                 ]
 
+                slide_tile_layer = []
+
+            else:
+                
+                slide_tile_layer = [
+                    dl.TileLayer(
+                        id = 'slide-tile',
+                        url = self.wsi.tile_url,
+                        tileSize = self.wsi.tile_dims[0],
+                        maxNativeZoom = self.wsi.zoom_levels-1
+                    )
+                ]
+
+
             new_children += [
                 dl.Overlay(
                     dl.LayerGroup(
@@ -3473,7 +3483,6 @@ class FUSION:
                     )
                 )
 
-            new_url = self.wsi.tile_url
             center_point = [0.5*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),0.5*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
 
             self.current_ftus = self.wsi.ftu_props
@@ -3547,7 +3556,7 @@ class FUSION:
                 for idx,struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-            return new_url, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.tile_dims[0], self.wsi.zoom_levels-1, self.wsi.zoom_levels-1, self.wsi.zoom_levels-1, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs
+            return slide_tile_layer, new_children, remove_old_edits, center_point, self.wsi.map_bounds, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs
         else:
             raise exceptions.PreventUpdate
 

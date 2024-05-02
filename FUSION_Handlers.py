@@ -156,11 +156,17 @@ class LayoutHandler:
         center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
 
         map_children = [
-            dl.TileLayer(id = 'slide-tile',
+            html.Div(
+                id = 'slide-tile-holder',
+                children = [
+                    dl.TileLayer(
+                        id = 'slide-tile',
                         url = map_url,
                         tileSize = tile_size,
                         maxNativeZoom=zoom_levels-1
-                        ),
+                    )
+                ]
+            ),
             dl.FullScreenControl(position='topleft'),
             dl.FeatureGroup(id='feature-group',
                             children = [
