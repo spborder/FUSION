@@ -74,6 +74,28 @@ In collaboration with:
 
 
 <!-- GETTING STARTED -->
+## Release History:
+- 05/02/2024:
+    ### Major updates:
+    - Progress bars (in a dcc.Modal component) indicating when annotations are currently being processed.
+    - Annotations are cached locally for increased performance. Annotations which have a last-accessed date more than 1 day old are removed.
+    - New threads are started for loading and scaling GeoJSON annotations.
+  - Multiple filters can now be added for removing structures outside of specified ranges (e.g. Show structures with cell type 1 > 50% and cell type 2 < 10%)
+  - Added Annotation Station tab for logged-in users. 
+    - Allows users who are signed in to make intra-structural annotations using plotly figure annotations. Annotation masks are saved in OME-TIFF format with one channel for each class. Text annotations are saved as metadata for images.
+    - Users can create an annotation session and preset annotation classes (and colors), labels, and users (still need to update how annotation sessions are shared with other users).
+    - Roadmap: add annotation helpers (Segment Anything Model, other annotation fillers), allow annotation session admins to train segmentation models, active-learning approaches, etc.
+  - CODEX visualization enabled:
+    - Overlay different channels with user-specified colors
+    - Dynamically extract frame-level histograms, plotting frame-level mean values for annotated structures (DeepCell plugin used for nuclei segmentation and feature extraction), UMAP for multiple channels included
+    - Roadmap: Run clustering algorithms on generated plots, applying labels to nuclei based on clustering and manual annotation of UMAP clusters, recording cell type labeling rationale for reproducibility
+
+    ### Minor updates
+  - Adding sub-navigation clickable components on the Welcome page documentation.
+  - Changing login popover component so that it closes when anywhere else in the window is clicked.
+  - Adding a dcc.Loading component on the Login and Create Account buttons indicating that login information is being communicated to the server.
+
+
 
 
 <!-- LICENSE -->
