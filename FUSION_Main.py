@@ -179,9 +179,7 @@ class FUSION:
 
         # Specifying available properties with visualizations implemented
         self.visualization_properties = [
-            'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
-            'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction','Max Cell Type',
-            'Gene Counts'
+            'Cluster','Main_Cell_Types','Max Cell Type','Gene Counts','Morphometrics'
         ]
 
         # Initializing some parameters

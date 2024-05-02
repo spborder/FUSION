@@ -2929,8 +2929,8 @@ class LayoutHandler:
                     html.Div(id = 'create-user-extras',children = []),
                     dbc.Row(
                         children = html.Div([
-                            dbc.Button('Login',color='primary',id='login-submit'),
-                            dbc.Button('Create Account',color='secondary',id='create-user-submit')
+                            dcc.Loading(dbc.Button('Login',color='primary',id='login-submit')),
+                            dcc.Loading(dbc.Button('Create Account',color='secondary',id='create-user-submit'))
                         ],className='d-grid gap-2 d-md-flex')
                     )
                 ])

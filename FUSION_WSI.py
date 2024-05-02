@@ -41,9 +41,7 @@ class DSASlide:
         self.n_frames = 1
 
         self.visualization_properties = [
-            'Area', 'Arterial Area', 'Average Cell Thickness', 'Average TBM Thickness', 'Cluster',
-            'Luminal Fraction','Main_Cell_Types','Mesangial Area','Mesangial Fraction',
-            'Gene Counts'
+            'Main_Cell_Types','Gene Counts','Morphometrics','Cluster'
         ]
 
         # Adding ftu hierarchy property. This just stores which structures contain which other structures.
