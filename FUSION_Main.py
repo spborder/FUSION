@@ -2092,7 +2092,7 @@ class FUSION:
                             ])
                         ])
 
-                        return return_div, no_update
+                        return return_div, no_update, frame_label_disable
 
                 else:
                     return html.P('No FTUs in current view'), [no_update], frame_label_disable
@@ -3261,8 +3261,8 @@ class FUSION:
                             ),
                             dbc.Progress(
                             id = {'type':'slide-load-progress','index':0},
-                            value = int(100*(1/n_annotations)),
-                            label = f'{int(100*(1/n_annotations))}%'
+                            value = 0,
+                            label = f'0%'
                             )
                         ])
                     ])
@@ -3288,63 +3288,64 @@ class FUSION:
             if len(slide_info_store['annotations'])>0:
 
                 # Checking if previous annotation is complete
+                all_annotation_ids = [i['_id'] for i in slide_info_store['annotations']]
                 previous_annotation_id = slide_info_store['loading_annotation']
-                if os.access(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json',os.W_OK) and os.path.exists(f'./assets/slide_annotations/{self.wsi.item_id}/{previous_annotation_id}.json'):
+                
+                if not previous_annotation_id == 'done':
+                    previous_annotation_name = slide_info_store['annotations'][all_annotation_ids.index(previous_annotation_id)]['annotation']['name']
 
-                    all_annotation_ids = [i['_id'] for i in slide_info_store['annotations']]
-                    next_ann_idx = all_annotation_ids.index(previous_annotation_id) + 1
+                    # Getting names of current threads to see if that one is still active
+                    thread_names = [i.name for i in threading.enumerate()]
 
-                    n_annotations = len(all_annotation_ids)
-                    slide_name = slide_info_store['slide_info']['name']
+                    if not previous_annotation_name in thread_names:
 
-                    if next_ann_idx<len(all_annotation_ids):
+                        next_ann_idx = all_annotation_ids.index(previous_annotation_id) + 1
 
-                        next_annotation = slide_info_store['annotations'][next_ann_idx]['annotation']['name']
-                        slide_info_store['loading_annotation'] = slide_info_store['annotations'][next_ann_idx]['_id']
-                        
-                        # Starting the get_annotation_geojson function on a new thread
-                        new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = next_annotation, args = [next_ann_idx])
-                        new_thread.daemon = True
-                        new_thread.start()
-                        #print(f'new thread started: {threading.active_count()}, {threading.enumerate()}')
+                        n_annotations = len(all_annotation_ids)
+                        slide_name = slide_info_store['slide_info']['name']
 
-                        modal_children = [
-                            html.Div([
-                                dbc.ModalHeader(html.H4(f'Loading Annotations for: {slide_name}')),
-                                dbc.ModalBody([
-                                    html.Div(
-                                        html.H6(f'Working on: {next_annotation}')
-                                    ),
-                                    dbc.Progress(
-                                        id = {'type':'slide-load-progress','index':0},
-                                        value = int(100*((next_ann_idx)/n_annotations)),
-                                        label = f'{int(100*((next_ann_idx)/n_annotations))}%'
-                                    )
+                        if next_ann_idx<len(all_annotation_ids):
+
+                            next_annotation = slide_info_store['annotations'][next_ann_idx]['annotation']['name']
+                            slide_info_store['loading_annotation'] = slide_info_store['annotations'][next_ann_idx]['_id']
+                            
+                            # Starting the get_annotation_geojson function on a new thread
+                            new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = next_annotation, args = [next_ann_idx])
+                            new_thread.daemon = True
+                            new_thread.start()
+
+                            modal_children = [
+                                html.Div([
+                                    dbc.ModalHeader(html.H4(f'Loading Annotations for: {slide_name}')),
+                                    dbc.ModalBody([
+                                        html.Div(
+                                            html.H6(f'Working on: {next_annotation}')
+                                        ),
+                                        dbc.Progress(
+                                            id = {'type':'slide-load-progress','index':0},
+                                            value = int(100*((next_ann_idx)/n_annotations)),
+                                            label = f'{int(100*((next_ann_idx)/n_annotations))}%'
+                                        )
+                                    ])
                                 ])
-                            ])
-                        ]
+                            ]
+                        else:
+                            slide_info_store['loading_annotation'] = 'done'
+
+                            modal_children = [
+                                html.Div([
+                                    dbc.ModalHeader(html.H4(f'All done!')),
+                                    dbc.ModalBody([
+                                        dbc.Progress(
+                                            id = {'type':'slide-load-progress','index':0},
+                                            value = 100,
+                                            label = f'100%'
+                                        )
+                                    ])
+                                ])
+                            ]
+
                     else:
-                        slide_info_store['loading_annotation'] = 'done'
-
-                        modal_children = [
-                            html.Div([
-                                dbc.ModalHeader(html.H4(f'All done!')),
-                                dbc.ModalBody([
-                                    dbc.Progress(
-                                        id = {'type':'slide-load-progress','index':0},
-                                        value = 100,
-                                        label = f'100%'
-                                    )
-                                ])
-                            ])
-                        ]
-
-                else:
-                    #print(f'previous_annotation_id: {previous_annotation_id}, continuing')
-                    #print(f'active threads: {threading.active_count()}')
-                    #print(f'active_thread list: {threading.enumerate()}')
-                    if not previous_annotation_id=='done':
-                        all_annotation_ids = [i['_id'] for i in slide_info_store['annotations']]
                         old_ann_idx = all_annotation_ids.index(previous_annotation_id)
                         old_ann_name = slide_info_store['annotations'][old_ann_idx]['annotation']['name']
                         n_annotations = len(all_annotation_ids)
@@ -3365,10 +3366,11 @@ class FUSION:
                                 ])
                             ])
                         ]
-                    else:
-                        modal_children = []
-                        disable_slide_load = True
-                        modal_open = False
+
+                else:
+                    modal_children = []
+                    disable_slide_load = True
+                    modal_open = False
 
                 slide_info_store_data = [
                     json.dumps(slide_info_store)
@@ -3394,7 +3396,23 @@ class FUSION:
 
             special_overlays_opts = self.layout_handler.gen_special_overlay_opts(self.wsi)
 
-            new_children = [
+            new_children = []
+            if self.wsi.spatial_omics_type=='CODEX':
+                # Adding the different frames to the layers control object
+                new_children+=[
+                    dl.BaseLayer(
+                        dl.TileLayer(
+                            url = self.wsi.channel_tile_url[c_idx],
+                            tileSize = 240,
+                            id = {'type':'codex-tile-layer','index':c_idx}
+                        ),
+                        name = c_name,
+                        checked = c_name== self.wsi.channel_names[0]
+                    )
+                    for c_idx,c_name in enumerate(self.wsi.channel_names)
+                ]
+
+            new_children += [
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(url = self.wsi.map_dict['FTUs'][struct]['url'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
