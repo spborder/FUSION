@@ -3438,6 +3438,7 @@ class FUSION:
                         dl.TileLayer(
                             url = self.wsi.channel_tile_url[c_idx],
                             tileSize = 240,
+                            maxNativeZoom = self.wsi.zoom_levels-1,
                             id = {'type':'codex-tile-layer','index':c_idx}
                         ),
                         name = c_name,
