@@ -597,13 +597,12 @@ class FUSION:
              Output('cell-sub-select-div','children'),Output({'type':'gene-info-div','index':ALL},'style'),
              Output({'type':'gene-info-div','index':ALL},'children')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
-             Input('filter-slider','value'), Input({'type':'added-filter-slider','index':ALL},'value'),Input({'type':'added-filter-drop-drop','index':ALL},'value'),
+             Input('filter-slider','value'), Input({'type':'added-filter-slider','index':ALL},'value'),
              Input({'type':'added-filter-drop','index':ALL},'value'),
              Input({'type':'ftu-bound-color-butt','index':ALL},'n_clicks'),
              Input({'type':'cell-sub-drop','index':ALL},'value')],
             [State({'type':'ftu-bound-color','index':ALL},'value'),
-             State({'type':'added-filter-slider-div','index':ALL},'style'),
-             State({'type':'added-filter-drop-drop','index':ALL},'style')],
+             State({'type':'added-filter-slider-div','index':ALL},'style')],
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -632,9 +631,6 @@ class FUSION:
             [
                 Output({'type':'added-filter-slider','index':MATCH},'min'),
                 Output({'type':'added-filter-slider','index':MATCH},'max'),
-                Output({'type':'added-filter-drop-drop','index':MATCH},'options'),
-                Output({'type':'added-filter-drop-drop','index':MATCH},'value'),
-                Output({'type':'added-filter-drop-drop','index':MATCH},'style'),
                 Output({'type':'added-filter-slider-div','index':MATCH},'style')
             ],
             Input({'type':'added-filter-drop','index':MATCH},'value'),
@@ -2219,7 +2215,7 @@ class FUSION:
         else:
             self.hex_color_key = {}
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_drop,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style,added_drop_style):
+    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style):
 
         print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
 
@@ -2564,13 +2560,16 @@ class FUSION:
             ]
 
             # Processing the add-on filters:
+            """
             repeated_filter_keys = [i for i in added_filter_keys for _ in range(2)]
             repeated_filter_values = []
             repeated_filter_styles = []
             for j in range(len(added_filter_slider)):
                 repeated_filter_values.extend([added_filter_slider[j],added_filter_drop[j]])
                 repeated_filter_styles.extend([added_slide_style[j],added_drop_style[j]])
-            processed_filters = process_filters(repeated_filter_keys,repeated_filter_values,repeated_filter_styles,self.cell_names_key)
+            """
+            #processed_filters = process_filters(repeated_filter_keys,repeated_filter_values,repeated_filter_styles,self.cell_names_key)
+            processed_filters = process_filters(added_filter_keys, added_filter_slider,added_slide_style, self.cell_names_key)
 
             self.filter_vals.extend(processed_filters)
 
@@ -6841,22 +6840,22 @@ class FUSION:
                     m_prop = filter_val
                     val = None
                 
-                if m_prop == 'Max Cell Type':
-                    m_prop = 'Main_Cell_Types'
-                    val = 'max'
+                #if m_prop == 'Max Cell Type':
+                #    m_prop = 'Main_Cell_Types'
+                #    val = 'max'
 
                 unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
                 value_types = [type(i) for i in unique_values][0]
                 if value_types in [int,float]:
                     value_disable = False
                     value_display = {'display':'inline-block','margin':'auto','width':'100%'}
-                    str_disable = True
-                    str_display = {'display':'none','margin':'auto','width':'100%'}
+                    #str_disable = True
+                    #str_display = {'display':'none','margin':'auto','width':'100%'}
                 else:
                     value_disable = True
                     value_display = {'display':'none','margin':'auto','width':'100%'}
-                    str_disable = False
-                    str_display = {'display': 'inline-block','margin':'auto','width':'100%'}
+                    #str_disable = False
+                    #str_display = {'display': 'inline-block','margin':'auto','width':'100%'}
 
                 value_slider = html.Div(
                         dcc.RangeSlider(
@@ -6874,6 +6873,7 @@ class FUSION:
                     )
                 
                 # "slider" but for categorical
+                """
                 str_slider = dcc.Dropdown(
                     id = {'type':'added-filter-drop-drop','index':butt_click},
                     options = unique_values,
@@ -6882,14 +6882,14 @@ class FUSION:
                     disabled = str_disable,
                     style = str_display
                 )
-
+                """
                 def new_filter_item():
                     return html.Div([
                         dbc.Row([
                             dbc.Col(
                                 dcc.Dropdown(
-                                    options = self.wsi.properties_list,
-                                    value = self.wsi.properties_list[0],
+                                    options = [i for i in self.wsi.properties_list if not i=='Max Cell Type'],
+                                    value = [i for i in self.wsi.properties_list if not i=='Max Cell Type'][0],
                                     placeholder = 'Select new property to filter FTUs',
                                     id = {'type':'added-filter-drop','index':butt_click}
                                 ),
@@ -6906,7 +6906,6 @@ class FUSION:
                             )
                         ],align='center'),
                         value_slider,
-                        str_slider
                     ])
 
                 patched_list.append(new_filter_item())
@@ -6941,20 +6940,20 @@ class FUSION:
             m_prop = filter_val
             val = None
 
-            if m_prop=='Max Cell Type':
-                m_prop = 'Main_Cell_Types'
-                val = 'max'
+            #if m_prop=='Max Cell Type':
+            #    m_prop = 'Main_Cell_Types'
+            #    val = 'max'
 
         unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
         value_types = [type(i) for i in unique_values][0]
         if value_types in [int,float]:
             slider_style = {'display':'inline-block','margin':'auto','width':'100%'}
-            drop_style = {'display':'none','margin':'auto','width':'100%'}
-            return np.min(unique_values), np.max(unique_values), no_update, no_update,drop_style,slider_style
-        elif value_types in [str]:
-            slider_style = {'display':'none','margin':'auto','width':'100%'}
-            drop_style = {'display':'inline-block','margin':'auto','width':'100%'}
-            return no_update, no_update, unique_values, unique_values,drop_style,slider_style
+            #drop_style = {'display':'none','margin':'auto','width':'100%'}
+            return np.min(unique_values), np.max(unique_values), slider_style
+        #elif value_types in [str]:
+        #    slider_style = {'display':'none','margin':'auto','width':'100%'}
+        #    drop_style = {'display':'inline-block','margin':'auto','width':'100%'}
+        #    return no_update, no_update, unique_values, unique_values,drop_style,slider_style
         else:
             raise exceptions.PreventUpdate
 
