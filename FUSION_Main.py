@@ -738,6 +738,7 @@ class FUSION:
             [Input('gen-plot-butt','n_clicks'),
              Input('label-select','value')],
             [Output('cluster-graph','figure'),
+             Output('label-select','options'),
              Output('label-info','children'),
              Output('filter-info','children'),
              Output('plot-report-tab','active_tab'),
@@ -3653,22 +3654,40 @@ class FUSION:
                 u_l_data.append(one_u_l)
 
             label_pie_data = pd.DataFrame.from_records(u_l_data)
-            label_pie = px.pie(
-                data_frame = label_pie_data,
-                names='label',
-                values='count',
-                title = '<br>'.join(
-                    textwrap.wrap('Count of samples in each label category',width=20)
+
+            if type(unique_labels[0]) == str:
+                label_pie = px.pie(
+                    data_frame = label_pie_data,
+                    names='label',
+                    values='count',
+                    title = '<br>'.join(
+                        textwrap.wrap('Count of samples in each label category',width=20)
+                    )
                 )
-            )
-            label_pie.update_traces(textposition='inside')
-            label_pie.update_layout(
-                uniformtext_minsize=12,
-                uniformtext_mode='hide',
-                showlegend=False,
-                autosize=True,
-                margin={'b':0,'l':0,'r':0}
+                label_pie.update_traces(textposition='inside')
+                label_pie.update_layout(
+                    uniformtext_minsize=12,
+                    uniformtext_mode='hide',
+                    showlegend=False,
+                    autosize=True,
+                    margin={'b':0,'l':0,'r':0}
+                    )
+
+            elif type(unique_labels[0]) in [int,float]:
+                label_pie = px.bar(
+                    data_frame = label_pie_data,
+                    x = 'label',
+                    y = 'count',
+                    title = '<br>'.join(
+                        textwrap.wrap('Count of samples in each label category',width = 20)
+                    )
                 )
+                label_pie.update_layout(
+                    showlegend = False,
+                    autosize = True,
+                    margin = {'b':0,'l':0,'r':0}
+                )
+
 
             label_info_children = [
                 dbc.Button(
@@ -3721,6 +3740,7 @@ class FUSION:
             if self.clustering_data.empty:
                 print(f'Getting new clustering data')
                 self.clustering_data = self.dataset_handler.load_clustering_data()
+
 
             feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
             cell_features = [i for i in feature_names if i in self.cell_names_key]
@@ -3805,9 +3825,14 @@ class FUSION:
             for f in feature_data.columns.tolist():
                 feature_data[f] = pd.to_numeric(feature_data[f],errors='coerce')
 
+            label_options = ['FTU','Slide Name','Folder Name'] 
+
             # Getting the label data
-            if label in self.clustering_data.columns:
-                label_data = self.clustering_data[label].tolist()
+            if label in self.clustering_data.columns or label in feature_data.columns:
+                if label in self.clustering_data.columns:
+                    label_data = self.clustering_data[label].tolist()
+                else:
+                    label_data = feature_data[label].tolist()
             else:
                 sample_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
                 unique_ids = np.unique(sample_ids).tolist()
@@ -3936,6 +3961,8 @@ class FUSION:
                 print(f'Generating a scatter plot')
                 feature_columns = feature_names
 
+                label_options += [i for i in feature_data.columns.tolist() if not i == 'Hidden']
+
                 # Adding "Hidden" column with image grabbing info
                 feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()     
                 feature_data['label'] = label_data
@@ -3974,18 +4001,21 @@ class FUSION:
                         )
                 ))
 
-                figure.update_layout(
-                    legend = dict(
-                        orientation='h',
-                        y = 0,
-                        yanchor='top',
-                        xanchor='left'
-                    ),
-                    margin = {'r':0,'b':25}
-                )
+                if not self.feature_data['label'].dtype == np.number:
+                    figure.update_layout(
+                        legend = dict(
+                            orientation='h',
+                            y = 0,
+                            yanchor='top',
+                            xanchor='left'
+                        ),
+                        margin = {'r':0,'b':25}
+                    )
 
             elif len(feature_names)>2:
                 print(f'Running UMAP and returning a scatter plot')
+
+                label_options += [i for i in feature_data.columns.tolist() if not i == 'Hidden']
 
                 # Scaling and reducing feature data using UMAP
                 feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()
@@ -4049,13 +4079,17 @@ class FUSION:
                     )
                 ))
 
+                if not type(label_data[0]) in [int,float]:
+                    figure.update_layout(
+                        legend = dict(
+                            orientation='h',
+                            y = 0,
+                            yanchor='top',
+                            xanchor='left'
+                        )
+                    )
+
                 figure.update_layout(
-                    legend = dict(
-                        orientation='h',
-                        y = 0,
-                        yanchor='top',
-                        xanchor='left'
-                    ),
                     margin = {'r':0,'b':25,'l':0},
                     yaxis = dict(
                         title = {'text':''},
@@ -4075,7 +4109,7 @@ class FUSION:
                 label_info_children = []
                 filter_info_children = no_update
 
-            return figure, label_info_children, filter_info_children, report_active_tab, download_plot_disable
+            return figure, label_options, label_info_children, filter_info_children, report_active_tab, download_plot_disable
         
         elif ctx.triggered_id=='label-select':
             self.reports_generated = {}
@@ -4083,11 +4117,15 @@ class FUSION:
 
             # Enabling download plot data button
             download_plot_disable = False
+            label_options = no_update
 
             if not self.feature_data is None:
                 # Getting the label data
-                if label in self.clustering_data.columns:
-                    label_data = self.clustering_data[label].tolist()
+                if label in self.clustering_data.columns or label in self.feature_data.columns:
+                    if label in self.clustering_data.columns:
+                        label_data = self.clustering_data[label].tolist()
+                    else:
+                        label_data = self.feature_data[label].tolist()
                 else:
                     sample_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
                     unique_ids = np.unique(sample_ids).tolist()
@@ -4139,6 +4177,11 @@ class FUSION:
                 # So for a violin plot the shape should be nX5
                 self.feature_data.loc[:,'label'] = [label_data[i] for i in list(self.feature_data.index)]
 
+                print(label_data)
+                print(type(label_data[0]))
+                if type(label_data[0]) in [int,float]:
+                    self.feature_data['label'] = self.feature_data['label'].astype(float)
+
                 # Generating labels_info_children
                 labels_left = self.feature_data['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
@@ -4154,7 +4197,7 @@ class FUSION:
                     
                     feature_columns = self.feature_data.columns.tolist()
 
-                    figure = go.Figure(data = px.scatter(
+                    figure = go.Figure(px.scatter(
                         data_frame=self.feature_data,
                         x = feature_columns[0],
                         y = feature_columns[1],
@@ -4168,15 +4211,16 @@ class FUSION:
                             )
                     ))
 
-                    figure.update_layout(
-                        legend = dict(
-                            orientation='h',
-                            y = 0,
-                            yanchor='top',
-                            xanchor='left'
-                        ),
-                        margin = {'r':0,'b':25}
-                    )
+                    if not type(label_data[0]) in [int,float]:
+                        figure.update_layout(
+                            legend = dict(
+                                orientation='h',
+                                y = 0,
+                                yanchor='top',
+                                xanchor='left'
+                            ),
+                            margin = {'r':0,'b':25}
+                        )
 
                 elif feature_number>2:
 
@@ -4196,13 +4240,17 @@ class FUSION:
                         )
                     ))
 
+                    if not type(label_data[0]) in [int,float]:
+                        figure.update_layout(
+                            legend = dict(
+                                orientation='h',
+                                y = 0,
+                                yanchor='top',
+                                xanchor='left'
+                            )
+                        )
+
                     figure.update_layout(
-                        legend = dict(
-                            orientation='h',
-                            y = 0,
-                            yanchor='top',
-                            xanchor='left'
-                        ),
                         margin = {'r':0,'b':25,'l':0},
                         yaxis = {
                             'title':{'text':''},
@@ -4216,7 +4264,7 @@ class FUSION:
                         }
                     )
                 
-                return figure, label_info_children, filter_info_children, report_active_tab, download_plot_disable
+                return figure, label_options, label_info_children, filter_info_children, report_active_tab, download_plot_disable
             else:
                 raise exceptions.PreventUpdate
         else:

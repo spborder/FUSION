@@ -921,6 +921,9 @@ class LayoutHandler:
         unique_labels = np.unique(feature_data['label'].tolist()).tolist()
         feature_data = feature_data.copy()
 
+        if type(unique_labels[0]) in [int,float]:
+            return 'Plot report only implemented for string labels!'
+
         # Generating a different report depending on the type 
         # one of ['feat-summ-tab','feat-stat-tab','feat-cluster-tab']
         if child_type=='feat-summ-tab':
