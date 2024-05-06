@@ -7287,6 +7287,9 @@ class FUSION:
                     else:
                         ftu_idx +=1 
 
+            if ctx.triggered_id['type'] in ['annotation-previous-button','annotation-next-button']:
+                annotations = []
+
             ftu_bbox_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
             
             ftu_bbox = np.array(self.wsi.convert_map_coords(ftu_bbox_coords))
