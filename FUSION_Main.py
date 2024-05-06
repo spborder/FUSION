@@ -57,7 +57,9 @@ from FUSION_Utils import (
     get_pattern_matching_value, extract_overlay_value, 
     gen_umap,
     gen_violin_plot, process_filters,
-    path_to_mask)
+    path_to_mask,
+    make_marker_geojson,
+    gen_clusters)
 
 from upload_component import UploadComponent
 
@@ -641,13 +643,18 @@ class FUSION:
         self.app.callback(
             [Output('roi-pie-holder','children'),
              Output('annotation-session-div','children'),
-             Output({'type':'frame-label-drop','index':ALL},'disabled')],
+             Output({'type':'frame-label-drop','index':ALL},'disabled'),
+             Output({'type':'cluster-label-store','index':ALL},'data')],
             [Input('slide-map','bounds'),
              Input({'type':'roi-view-data','index':ALL},'value'),
-             Input({'type':'frame-data-butt','index':ALL},'n_clicks')],
+             Input({'type':'frame-data-butt','index':ALL},'n_clicks'),
+             Input({'type':'cell-label-cluster','index':ALL},'n_clicks')],
             [State('tools-tabs','active_tab'),
              State({'type':'frame-histogram-drop','index':ALL},'value'),
-             State({'type':'frame-label-drop','index':ALL},'value')],
+             State({'type':'frame-label-drop','index':ALL},'value'),
+             State({'type':'cell-label-eps','index':ALL},'value'),
+             State({'type':'cell-label-min-samples','index':ALL},'value'),
+             State({'type':'cluster-label-store','index':ALL},'data')],
             prevent_initial_call = True
         )(self.update_viewport_data)      
 
@@ -903,10 +910,15 @@ class FUSION:
             [
                 Output({'type':'extracted-cell-labeling','index':ALL},'children'),
                 Output({'type':'cell-labeling-criteria','index':ALL},'children'),
+                Output({'type':'edit_control','index':ALL},'geojson'),
+                Output('marker-add-div','children')
             ],
             [
                 Input({'type':'ftu-cell-pie','index':ALL},'selectedData'),
-                Input({'type':'cell-labeling-channel-drop','index':ALL},'value')
+            ],
+            [
+                State({'type':'cell-checkbox','index':ALL},'value'),
+                State({'type':'ftu-cell-pie','index':ALL},'selectedData')
             ],
             prevent_initial_call = True
         )(self.cell_labeling_initialize)
@@ -1690,11 +1702,13 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
-    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,current_tab,frame_list,frame_label):
+    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,cluster_click,current_tab,frame_list,frame_label, cluster_eps, cluster_min_samples,cluster_labels):
         """
         Updating data used for current viewport visualizations
         """
-        frame_label_disable = [no_update]*len(ctx.outputs_list[-1])
+        frame_label_disable = [no_update]*len(ctx.outputs_list[-2])
+
+        cluster_labels_store = [json.dumps({'cluster_labels':[]})]*len(ctx.outputs_list[-1])
 
         if not self.wsi is None:
             if not bounds is None:
@@ -1755,7 +1769,6 @@ class FUSION:
                             frame_list = [self.wsi.channel_names[0]]
 
                     frame_label = get_pattern_matching_value(frame_label)
-                    print(frame_label)
                     if len(frame_list)<2:
                         frame_label = None
 
@@ -1773,19 +1786,19 @@ class FUSION:
                     if cell_view_type=='features' or cell_view_type=='cell':
 
                         for ftu in self.current_ftu_layers:
-                            if not ftu=='Spots':
-                                intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                            intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
 
                         for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
-                            intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
+                            intersecting_ftus[f'Manual ROI: {m_idx+1}'], intersecting_ftu_polys[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']], [shape(i['geometry']) for i in m_ftu['geojson']['features']]
 
                         for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
-                            intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
+                            intersecting_ftus[f'Marked FTUs: {marked_idx+1}'], intersecting_ftu_polys[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']], [shape(i['geometry']) for i in marked_ftu['geojson']['features']]
 
                 self.current_ftus = intersecting_ftus
                 # Now we have main cell types, cell states, by ftu
                 included_ftus = list(intersecting_ftus.keys())
                 included_ftus = [i for i in included_ftus if len(intersecting_ftus[i])>0]
+                print(f'included_ftus: {included_ftus}')
 
                 if len(included_ftus)>0:
 
@@ -1825,6 +1838,8 @@ class FUSION:
                                 counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
                                 first_chart_label = 'Nucleus Features'
 
+                                current_cluster_labels = json.loads(get_pattern_matching_value(cluster_labels))['cluster_labels']
+
                                 # Getting all clustering information for structures in current viewport
                                 counts_data_list = []
                                 counts_data = pd.DataFrame()
@@ -1844,6 +1859,12 @@ class FUSION:
                                         
                                         if 'Cluster' in ind_ftu:
                                             cell_features['Cluster'] = ind_ftu['Cluster']
+                                        elif len(current_cluster_labels)==len(intersecting_ftus[f]):
+                                            cell_features['Cluster'] = current_cluster_labels[ftu_idx]
+                                        
+                                        # Adding label with other channel mean value
+                                        if not frame_label is None and frame_label in self.wsi.channel_names:
+                                            cell_features[frame_label] = ind_ftu['Channel Means'][self.wsi.channel_names.index(frame_label)]
                                         
                                         cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
 
@@ -1851,7 +1872,7 @@ class FUSION:
                                 
                                 if len(counts_data_list)>0:
                                     counts_data = pd.DataFrame.from_records(counts_data_list)
-                            
+
                             elif cell_view_type == 'cell':
                                 counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
                                 first_chart_label = 'Cell Compositions'
@@ -1903,7 +1924,12 @@ class FUSION:
                                 # For CODEX images, have the tissue tab be one histogram                                    
                                 # Getting one of the channels. Maybe just the first one
                                 #print(f'counts_data shape: {counts_data.shape}')
+                                cluster_disable = True
+                                eps = 0.3
+                                min_samples = 10
+
                                 if cell_view_type=='channel_hist':
+                                    cluster_disable = True
                                     f_pie = px.bar(
                                         data_frame = counts_data,
                                         x = 'Intensity',
@@ -1938,6 +1964,21 @@ class FUSION:
                                             label_and_custom_cols=[i for i in counts_data.columns.tolist() if not 'Channel' in i]
                                         )
 
+                                        cluster_disable = False
+
+                                        if not ctx.triggered_id=='slide-map':
+                                            if ctx.triggered_id['type']=='cell-label-cluster':
+                                                # Get clustering labels:
+                                                eps = get_pattern_matching_value(cluster_eps)
+                                                min_samples = get_pattern_matching_value(cluster_min_samples)
+                                                cluster_labels = gen_clusters(f_umap_data,['UMAP1','UMAP2'],eps=eps, min_samples=min_samples)
+
+                                                f_umap_data['Cluster'] = cluster_labels
+                                                cluster_labels_store = [json.dumps({'cluster_labels':cluster_labels})]
+
+                                                frame_label = 'Cluster'
+
+
                                         f_pie = px.scatter(
                                             data_frame = f_umap_data,
                                             x = 'UMAP1',
@@ -1947,7 +1988,7 @@ class FUSION:
                                         )
 
                                 elif cell_view_type=='cell':
-
+                                    cluster_disable = True
                                     counts_data = counts_data['Cluster'].value_counts().to_dict()
                                     pie_chart_data = []
                                     for key,val in counts_data.items():
@@ -2050,8 +2091,8 @@ class FUSION:
                                                         'label': i,
                                                         'value': i
                                                     }
-                                                    if not i=='Unsupervised Labels' else {'label':i, 'value': i, 'disabled': True if len(frame_list)<2 else False}
-                                                    for i in self.wsi.channel_names+['Unsupervised Clusters']
+                                                    if not i=='Cluster' else {'label':i, 'value': i, 'disabled': True if 'Cluster' in counts_data.columns else False}
+                                                    for i in self.wsi.channel_names+['Cluster']
                                                 ],
                                                 value = frame_label,
                                                 id = {'type':'frame-label-drop','index':0},
@@ -2067,14 +2108,58 @@ class FUSION:
                                                 figure = go.Figure(f_pie)
                                             )
                                         ],md=12)
-                                    ])],
+                                    ]),
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Label('Clustering parameters',html_for={'type':'cell-label-cluster','index':len(tab_list)}),
+                                            md = 3
+                                        ),
+                                        dbc.Col(
+                                            dcc.Input(
+                                                id = {'type':'cell-label-eps','index':len(tab_list)},
+                                                placeholder = 'Epsilon (0.01-1.0)',
+                                                type = 'number',
+                                                value = eps,
+                                                min = 0.0,
+                                                step = 0.001,
+                                                max = 10000000
+                                            ),
+                                            md = 2,
+                                            style = {'marginLeft':'1px'}
+                                        ),
+                                        dbc.Col(
+                                            dcc.Input(
+                                                id = {'type':'cell-label-min-samples','index':len(tab_list)},
+                                                placeholder = 'Minimum number per cluster',
+                                                type = 'number',
+                                                value = min_samples,
+                                                step = 1,
+                                                min = 1,
+                                                max = counts_data.shape[0]
+                                            ),
+                                            md = 2,
+                                            style = {'marginLeft':'1px'}
+                                        ),
+                                        dbc.Col(
+                                            dbc.Button(
+                                                'Cluster it!',
+                                                id = {'type':'cell-label-cluster','index':len(tab_list)},
+                                                className = 'd-grid col-12 mx-auto',
+                                                n_clicks = 0,
+                                                disabled = cluster_disable
+                                            ),
+                                            style = {'marginLeft':'1px'}
+                                        )
+                                    ],
+                                    style = {'marginTop':'10px'})
+                                    ],
                                     label = f+f' ({len(intersecting_ftus[f])})',tab_id = f'tab_{len(tab_list)}'
                                 )
 
                             tab_list.append(f_tab)
 
                     if self.wsi.spatial_omics_type=='Visium' or self.wsi.spatial_omics_type=='Regular':
-                        return dbc.Tabs(tab_list,active_tab = 'tab_0'), no_update, frame_label_disable
+                        return dbc.Tabs(tab_list,active_tab = 'tab_0'), no_update, frame_label_disable, cluster_labels_store
                     elif self.wsi.spatial_omics_type=='CODEX':
 
                         return_div = html.Div([
@@ -2118,16 +2203,16 @@ class FUSION:
                             ])
                         ])
 
-                        return return_div, no_update, frame_label_disable
+                        return return_div, no_update, frame_label_disable, cluster_labels_store
 
                 else:
-                    return html.P('No FTUs in current view'), [no_update], frame_label_disable
+                    return html.P('No FTUs in current view'), [no_update], frame_label_disable, cluster_labels_store
             else:
-                return html.P('Select a slide to get started!'), [no_update], frame_label_disable
+                return html.P('Select a slide to get started!'), [no_update], frame_label_disable, cluster_labels_store
     
         elif current_tab=='annotation-tab':
             if self.dataset_handler.username=='fusionguest':
-                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable
+                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable, cluster_labels_store
             else:
                 
                 # Getting intersecting FTU information
@@ -2162,7 +2247,7 @@ class FUSION:
                         )
                 ])
 
-                return html.Div(), annotation_tab_group, frame_label_disable
+                return html.Div(), annotation_tab_group, frame_label_disable, cluster_labels_store
         
         else:
             raise exceptions.PreventUpdate
@@ -6957,49 +7042,90 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def cell_labeling_initialize(self, selectedData, channel_select):
+    def cell_labeling_initialize(self, selectedData, checked_cells, current_selectedData):
         """
         Takes as input some selected cells, a frame to plot their distribution of intensities, and then a Set button that labels those cells
         """
         selectedData = get_pattern_matching_value(selectedData)
-        channel_select = get_pattern_matching_value(channel_select)
         return_div = html.Div()
+        updated_cell_geojson = [no_update]
+        cell_markers = no_update
 
+        print(ctx.triggered_id)
+        if ctx.triggered_id is None:
+            raise exceptions.PreventUpdate
+        
         if ctx.triggered_id['type'] in ['ftu-cell-pie', 'cell-labeling-channel-drop']:
 
-            print('Pulling new cells from clusters')
-            # Pulling customdata from each point object
-            labeling_cells = [i['customdata'] for i in selectedData['points']]
+            if not selectedData is None:
+                print('Pulling new cells from clusters')
+                # Pulling customdata from each point object
+                labeling_cells = [i['customdata'] for i in selectedData['points']]
 
-            if not ctx.triggered_id['type']=='cell-labeling-channel-drop':
-                channel_val = []
+                if not ctx.triggered_id['type']=='cell-labeling-channel-drop':
+                    channel_val = []
 
-            return_div = html.Div([
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Row(html.H6('Selected Cells')),
-                        dbc.Card(
-                            dbc.CardBody(
-                                children = [
-                                    html.Div(
-                                        f'Cell {idx} Bounding Box: {json.dumps(i)}'
+                updated_cell_geojson, cell_markers = make_marker_geojson([i[0]['Bbox'] if type(i)==list else i['Bbox'] for i in labeling_cells],convert_coords = True, wsi = self.wsi)
+
+                return_div = html.Div([
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Row(html.H6('Selected Cells')),
+                            dbc.Card(
+                                dbc.CardBody(
+                                    children = [
+                                        dcc.Checklist(
+                                            options = [
+                                                {'label':f'Cell {idx}','value':'_'.join([str(j) for j in i[0]['Bbox']]) if type(i)==list else '_'.join([str(j) for j in i['Bbox']])}
+                                                for idx,i in enumerate(labeling_cells)
+                                            ],
+                                            value = ['_'.join([str(j) for j in i[0]['Bbox']]) if type(i)==list else '_'.join([str(j) for j in i['Bbox']]) for i in labeling_cells]
+                                        )
+                                        ],
+                                    style = {'maxHeight':'60vh','overflow':'scroll'}
                                     )
-                                    for idx,i in enumerate(labeling_cells)
-                                    ],
-                                style = {'maxHeight':'60vh','overflow':'scroll'}
                                 )
-                            )
-                        ], md = 4),
-                    dbc.Col([
-                        dbc.Row(html.H6('Selected Cell Plot')),
-                        dbc.Row([
-                            "Something should go here for assigning a label to the selected cell types"
-                        ])
+                            ],
+                            md = 4
+                        ),
+                        dbc.Col([
+                            dbc.Row(html.H6('Selected Cell Labeling')),
+                            dbc.Row([
+                                dbc.Col(
+                                    'Label for Checked Cells: ',
+                                    md = 3
+                                ),
+                                dbc.Col(
+                                    dcc.Input(
+                                        id = {'type':'checked-cell-label','index':0},
+                                        placeholder = 'Type cell label here'
+                                    ),
+                                    md = 6
+                                ),
+                                dbc.Col(
+                                    dbc.Button(
+                                        'Submit',
+                                        className = 'd-grid col-12 mx-auto',
+                                        id = {'type':'checked-cell-label-butt','index':0}
+                                    ),
+                                    md = 3
+                                )
+                            ]),
+                            dbc.Row([
+                                html.Div(
+                                    id = 'cell-labeling-rationale',
+                                    children = [
+                                        'This is where the cell labeling rationale goes'
+                                    ]
+                                )
+                            ])
+                        ],md = 8)
                     ])
                 ])
-            ])
+            else:
+                raise exceptions.PreventUpdate
 
-        return [return_div], [f'{len(selectedData["points"])} Cells selected']
+        return [return_div], [f'{len(selectedData["points"])} Cells selected'], [updated_cell_geojson], cell_markers
 
     def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types):
 

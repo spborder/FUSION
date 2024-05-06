@@ -14,8 +14,12 @@ import plotly.graph_objects as go
 import plotly.express as px
 import textwrap
 
+import dash_leaflet as dl
+
 from skimage import draw
 from scipy import ndimage
+
+from sklearn.cluster import DBSCAN
 
 from umap import UMAP
 
@@ -130,6 +134,31 @@ def gen_umap(feature_data, feature_cols, label_and_custom_cols):
 
     return umap_df
 
+def gen_clusters(feature_data, feature_cols, eps = 0.3, min_samples = 10):
+    """
+    Implementation of DBSCAN for generating cluster labels and noise labels
+    """
+
+    if feature_data.shape[0]<min_samples:
+        return None
+
+    quant_data = feature_data.loc[:,[i for i in feature_cols if i in feature_data.columns]].values
+    #label_data = feature_data.loc[:,[i for i in label_and_custom_cols if i in feature_data.columns]]
+
+    feature_data_means = np.nanmean(quant_data,axis=0)
+    feature_data_stds = np.nanstd(quant_data,axis=0)
+
+    scaled_data = (quant_data-feature_data_means)/feature_data_stds
+    scaled_data[np.isnan(scaled_data)] = 0.0
+    scaled_data[~np.isfinite(scaled_data)] = 0.0
+
+    clusterer = DBSCAN(eps = eps, min_samples = min_samples).fit(scaled_data)
+    cluster_labels = clusterer.labels_
+
+    string_labels = [f'Cluster {i}' if not i==-1 else 'Noise' for i in cluster_labels]
+
+    return string_labels
+
 def process_filters(input_keys,input_values,input_styles,cell_names_key=None):
     """
     Taking keys, values, and styles and returning a list of filter dictionaries that can be used to remove unwanted FTUs
@@ -185,8 +214,43 @@ def path_to_mask(path, shape):
     mask = ndimage.binary_fill_holes(mask)
     return mask
 
+def make_marker_geojson(bbox_list,convert_coords = True, wsi = None):
+    """
+    Make GeoJSON-formatted markers where the coordinates are equal to the center point of the bounding boxes
+    
+    use convert_coords = True and provide WSI if giving bounding boxes in terms of slide coordinates as the
+    GeoJSON has to be rendered in map coordinates
 
+    bounding boxes should be in [minx, miny, maxx, maxy] format 
+    """
 
+    marker_geojson = {
+        'type':'FeatureCollection',
+        'features': []
+    }
+    marker_list = []
+
+    for bbox in bbox_list:
+
+        # Converting the original coordinates (if using map)
+        #if convert_coords:
+        #    bbox = wsi.convert_slide_coords([[bbox[0],bbox[1]],[bbox[2],bbox[3]]])
+        #    bbox = [bbox[0][0],bbox[0][1],bbox[1][0],bbox[1][1]]
+
+        # Finding average of extrema
+        bbox_center = [(bbox[0]+bbox[2])/2, (bbox[1]+bbox[3])/2]
+
+        marker_geojson['features'].append({
+            'type': 'Feature',
+            'properties':{'type':'marker'},
+            'geometry':{'type':'Point','coordinates': bbox_center}
+        })
+        
+        marker_list.append(
+            dl.Marker(position = bbox_center[::-1])
+        )
+
+    return marker_geojson, marker_list
 
 
 

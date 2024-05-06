@@ -44,6 +44,7 @@ import dash_cytoscape as cyto
 import dash_leaflet as dl
 import dash_mantine_components as dmc
 import dash_treeview_antd as dta
+import dash_draggable as drag
 
 from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function
@@ -227,6 +228,13 @@ class LayoutHandler:
                     children = [
                         'Move around on the slide to initialize cell composition view.'
                     ]
+                ),
+                html.Div(
+                    dcc.Store(
+                        id = {'type':'cluster-label-store','index':0},
+                        storage_type='memory',
+                        data = []
+                    )
                 )
             ])
         ])
@@ -869,8 +877,35 @@ class LayoutHandler:
             dbc.Row(
                 id="app-content",
                 children=[
-                    dbc.Col(wsi_view,md=6),
-                    dbc.Col(tools,md=6)
+                    html.Div(
+                        children = [
+                            drag.ResponsiveGridLayout(
+                                children = [
+                                    dbc.Col(
+                                        wsi_view,
+                                        style = {
+                                            'min-height':"0",
+                                            "flex-grow":"1",
+                                            'height':'100%'
+                                        }),
+                                    dbc.Col(
+                                        tools,
+                                        style = {
+                                            "min-height":"0",
+                                            "flex-grow":"1",
+                                            'height':'100%'
+                                        })
+                                ],
+                                style = {
+                                    'height':'100%',
+                                    'width':'100%',
+                                    'display':'flex',
+                                    'flex-direction':'column',
+                                    'flex-grow':'0'
+                                }
+                            )
+                        ]
+                    )
                 ],style={"height":"90vh",'marginBottom':'10px'}
             )
         ]
