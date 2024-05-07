@@ -3649,9 +3649,28 @@ class FUSION:
         if len(leftover_labels)>0:
             unique_labels = np.unique(leftover_labels).tolist()
             u_l_data = []
-            for u in unique_labels:
-                one_u_l = {'label':u, 'count': leftover_labels.count(u)}
-                u_l_data.append(one_u_l)
+
+            if type(unique_labels[0]) in [int,float]:
+                quantile_labels = np.quantile(leftover_labels,[0,0.25,0.5,0.75,1.0])
+                quantile_labels = [
+                    [quantile_labels[0],quantile_labels[1]],
+                    [quantile_labels[1],quantile_labels[2]],
+                    [quantile_labels[2],quantile_labels[3]],
+                    [quantile_labels[3],quantile_labels[4]]
+                ]
+
+                for q in quantile_labels:
+                    q_label = '-->'.join([str(round(i,2)) for i in q])
+                    q_count = ((leftover_labels > q[0]) & (leftover_labels < q[1])).sum()
+                    u_l_data.append({
+                        'label': q_label,
+                        'count': q_count
+                    })
+
+            else:
+                for u in unique_labels:
+                    one_u_l = {'label':u, 'count': leftover_labels.count(u)}
+                    u_l_data.append(one_u_l)
 
             label_pie_data = pd.DataFrame.from_records(u_l_data)
 
@@ -3704,7 +3723,7 @@ class FUSION:
                             )
                         )
                     ),
-                    trigger='click',
+                    trigger='legacy',
                     target = 'label-dist'
                 )
             ]
@@ -3828,11 +3847,15 @@ class FUSION:
             label_options = ['FTU','Slide Name','Folder Name'] 
 
             # Getting the label data
+            label_data = []
             if label in self.clustering_data.columns or label in feature_data.columns:
                 if label in self.clustering_data.columns:
                     label_data = self.clustering_data[label].tolist()
                 else:
-                    label_data = feature_data[label].tolist()
+                    # This has to have an index portion just so they line up consistently
+                    label_data = [0]*(max(list(self.feature_data.index))+1)
+                    for idx in list(self.feature_data.index):
+                        label_data[idx] = float(self.feature_data.loc[idx,label])
             else:
                 sample_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
                 unique_ids = np.unique(sample_ids).tolist()
@@ -3857,6 +3880,10 @@ class FUSION:
                         folder_names.append(self.dataset_handler.slide_datasets[folderId]['name'])
                     
                     label_data = [folder_names[unique_ids.index(i)] for i in sample_ids]
+
+                elif label in self.cell_names_key:
+                    # For labeling with cell type
+                    label_data = [float(i[self.cell_names_key[label]]) if self.cell_names_key[label] in i else 0 for i in self.clustering_data['Main_Cell_Types'].tolist()]
 
                 else:
                     # Default labels just to FTU
@@ -3911,7 +3938,7 @@ class FUSION:
 
                 # Adding "Hidden" column with image grabbing info
                 feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()       
-                feature_data['label'] = label_data
+                feature_data['label'] = [label_data[i] for i in list(feature_data.index)]
                 if 'Main_Cell_Types' in self.clustering_data.columns:
                     feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types'].tolist()
                     feature_data['Cell_States'] = self.clustering_data['Cell_States'].tolist()
@@ -4072,7 +4099,7 @@ class FUSION:
                                 'colorscale':'jet'
                             },
                             text = self.umap_df['label'].values,
-                            hovertemplate = "label: %{customdata[0]}"
+                            hovertemplate = "label: %{text}"
 
                         )
                     )
@@ -4119,13 +4146,17 @@ class FUSION:
             download_plot_disable = False
             label_options = no_update
 
+            label_data = []
             if not self.feature_data is None:
                 # Getting the label data
                 if label in self.clustering_data.columns or label in self.feature_data.columns:
                     if label in self.clustering_data.columns:
                         label_data = self.clustering_data[label].tolist()
                     else:
-                        label_data = self.feature_data[label].tolist()
+                        # This has to have an index portion just so they line up consistently
+                        label_data = [0]*(max(list(self.feature_data.index))+1)
+                        for idx in list(self.feature_data.index):
+                            label_data[idx] = float(self.feature_data.loc[idx,label])
                 else:
                     sample_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
                     unique_ids = np.unique(sample_ids).tolist()
@@ -4151,27 +4182,14 @@ class FUSION:
                         
                         label_data = [folder_names[unique_ids.index(i)] for i in sample_ids]
 
-                    elif label=='Cell Type':
-                        #TODO: Get this selectable as a label
-                        label_data = ['tba' for i in range(len(sample_ids))]
-                    
-                    elif label == 'Morphometric':
-                        #TODO: Get this selectable as a label
-                        label_data = ['tba' for i in range(len(sample_ids))]
-                    
+                    elif label in self.cell_names_key:
+                        # For labeling with cell type
+                        label_data = [float(i[self.cell_names_key[label]]) if self.cell_names_key[label] in i else 0 for i in self.clustering_data['Main_Cell_Types'].tolist()]
+
                     else:
-                        # Used for slide-level metadata keys
-                        slide_meta = []
-                        for u in unique_ids:
-                            item_data = self.dataset_handler.gc.get(f'/item/{u}')
-                            if label in item_data['meta']:
-                                slide_meta.append(item_data['meta'][label])
-                            else:
-                                # This one will get removed from the final df after .dropna()
-                                slide_meta.append(None)
-                        
-                        label_data = [slide_meta[unique_ids.index(i)] for i in sample_ids]
-                
+                        label = 'FTU'
+                        label_data = self.clustering_data[label].tolist()
+
                 # Needs an alignment step going from the full self.clustering_data to the na-dropped and filtered self.feature_data
                 # self.feature_data contains the features included in the current plot, label, Hidden, Main_Cell_Types, and Cell_States
                 # So for a violin plot the shape should be nX5
@@ -4265,7 +4283,7 @@ class FUSION:
                                     'colorscale':'jet'
                                 },
                                 text = self.umap_df['label'].tolist(),
-                                hovertemplate = "label: {customdata[0]}"
+                                hovertemplate = "label: %{text}"
                             )
                         )
 
