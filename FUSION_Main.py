@@ -3858,27 +3858,12 @@ class FUSION:
                     
                     label_data = [folder_names[unique_ids.index(i)] for i in sample_ids]
 
-                elif label=='Cell Type':
-                    #TODO: Get this selectable as a label
-                    label_data = ['tba' for i in range(len(sample_ids))]
-                
-                elif label == 'Morphometric':
-                    #TODO: Get this selectable as a label
-                    label_data = ['tba' for i in range(len(sample_ids))]
-                
                 else:
-                    # Used for slide-level metadata keys
-                    slide_meta = []
-                    for u in unique_ids:
-                        item_data = self.dataset_handler.gc.get(f'/item/{u}')
-                        if label in item_data['meta']:
-                            slide_meta.append(item_data['meta'][label])
-                        else:
-                            # This one will get removed from the final df after .dropna()
-                            slide_meta.append(None)
-                    
-                    label_data = [slide_meta[unique_ids.index(i)] for i in sample_ids]
-            
+                    # Default labels just to FTU
+                    label = 'FTU'
+                    label_data = self.clustering_data[label].tolist()
+
+
             # Now filtering labels according to any selected filter labels
             filter_label_names = [i['title'] for i in self.dataset_handler.filter_keys if i['key'] in filter_labels]
             filter_idx = []
@@ -4036,50 +4021,33 @@ class FUSION:
                 for h_i,h in enumerate(hidden_col):
                     h['Index'] = h_i
 
-                label_col = self.feature_data['label'].tolist()
-                main_cell_types_col = self.feature_data['Main_Cell_Types'].tolist()
-                cell_states_col = self.feature_data['Cell_States'].tolist()
-                feature_data = self.feature_data.loc[:,[i for i in feature_names if i in self.feature_data.columns]].values
-                # Scaling feature_data
-                feature_data_means = np.nanmean(feature_data,axis=0)
-                feature_data_stds = np.nanstd(feature_data,axis=0)
+                self.feature_data['Hidden'] = hidden_col
 
-                scaled_data = (feature_data-feature_data_means)/feature_data_stds
-                scaled_data[np.isnan(scaled_data)] = 0.0
-                scaled_data[~np.isfinite(scaled_data)] = 0.0
-
-                umap_reducer = UMAP()
-                embeddings = umap_reducer.fit_transform(scaled_data)
-
-                umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'])
-                
+                umap_df = gen_umap(self.feature_data, feature_names, ['Hidden','label','Main_Cell_Types','Cell_States'])
                 # Saving this so we can update the label separately without re-running scaling or reduction
                 self.umap_df = umap_df
-
-                self.umap_df['Hidden'] = hidden_col
-                self.umap_df['label'] = label_col
-                self.umap_df['Main_Cell_Types'] = main_cell_types_col
-                self.umap_df['Cell_States'] = cell_states_col
                 
                 # Generating labels_info_children and filter_info_children
                 labels_left = self.umap_df['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
-                figure = go.Figure(data = px.scatter(
-                    data_frame = self.umap_df,
-                    x = 'UMAP1',
-                    y = 'UMAP2',
-                    color = 'label',
-                    custom_data = 'Hidden',
-                    title = '<br>'.join(
-                        textwrap.wrap(
-                            f'UMAP of selected features labeled with {label}',
-                            width=30
-                        )
-                    )
-                ))
 
                 if not type(label_data[0]) in [int,float]:
+
+                    figure = go.Figure(px.scatter(
+                        data_frame = self.umap_df,
+                        x = 'UMAP1',
+                        y = 'UMAP2',
+                        color = 'label',
+                        custom_data = 'Hidden',
+                        title = '<br>'.join(
+                            textwrap.wrap(
+                                f'UMAP of selected features labeled with {label}',
+                                width=30
+                            )
+                        )
+                    ))
+
                     figure.update_layout(
                         legend = dict(
                             orientation='h',
@@ -4087,6 +4055,38 @@ class FUSION:
                             yanchor='top',
                             xanchor='left'
                         )
+                    )
+                else:
+
+                    figure = go.Figure(
+                        go.Scatter(
+                            x = self.umap_df['UMAP1'].values,
+                            y = self.umap_df['UMAP2'].values,
+                            customdata = self.umap_df['Hidden'].tolist(),
+                            mode = 'markers',
+                            marker = {
+                                'color': self.umap_df['label'].values,
+                                'colorbar':{
+                                    'title': 'label'
+                                },
+                                'colorscale':'jet'
+                            },
+                            text = self.umap_df['label'].values,
+                            hovertemplate = "label: %{customdata[0]}"
+
+                        )
+                    )
+
+                    figure.update_layout(
+                        showlegend = False,
+                        title = {
+                            'text': '<br>'.join(
+                                textwrap.wrap(
+                                    f'UMAP of selected features labeled with {label}',
+                                    width=30
+                                )
+                            )
+                        }
                     )
 
                 figure.update_layout(
@@ -4175,10 +4175,9 @@ class FUSION:
                 # Needs an alignment step going from the full self.clustering_data to the na-dropped and filtered self.feature_data
                 # self.feature_data contains the features included in the current plot, label, Hidden, Main_Cell_Types, and Cell_States
                 # So for a violin plot the shape should be nX5
-                self.feature_data.loc[:,'label'] = [label_data[i] for i in list(self.feature_data.index)]
+                self.feature_data = self.feature_data.drop(columns = ['label'])
+                self.feature_data['label'] = [label_data[i] for i in list(self.feature_data.index)]
 
-                print(label_data)
-                print(type(label_data[0]))
                 if type(label_data[0]) in [int,float]:
                     self.feature_data['label'] = self.feature_data['label'].astype(float)
 
@@ -4226,21 +4225,22 @@ class FUSION:
 
                     self.umap_df.loc[:,'label']=[label_data[i] for i in list(self.feature_data.index)]
                     
-                    figure = go.Figure(data = px.scatter(
-                        data_frame = self.umap_df,
-                        x = 'UMAP1',
-                        y = 'UMAP2',
-                        color = 'label',
-                        custom_data = 'Hidden',
-                        title = '<br>'.join(
-                            textwrap.wrap(
-                                f'UMAP of selected features labeled with {label}',
-                                width=30
-                            )
-                        )
-                    ))
-
                     if not type(label_data[0]) in [int,float]:
+
+                        figure = go.Figure(px.scatter(
+                            data_frame = self.umap_df,
+                            x = 'UMAP1',
+                            y = 'UMAP2',
+                            color = 'label',
+                            custom_data = 'Hidden',
+                            title = '<br>'.join(
+                                textwrap.wrap(
+                                    f'UMAP of selected features labeled with {label}',
+                                    width=30
+                                )
+                            )
+                        ))
+
                         figure.update_layout(
                             legend = dict(
                                 orientation='h',
@@ -4248,6 +4248,37 @@ class FUSION:
                                 yanchor='top',
                                 xanchor='left'
                             )
+                        )
+                    else:
+
+                        figure = go.Figure(
+                            go.Scatter(
+                                x = self.umap_df['UMAP1'].values,
+                                y = self.umap_df['UMAP2'].values,
+                                customdata = self.umap_df['Hidden'].tolist(),
+                                mode = 'markers',
+                                marker = {
+                                    'color': self.umap_df['label'].values,
+                                    'colorbar':{
+                                        'title': 'label'
+                                    },
+                                    'colorscale':'jet'
+                                },
+                                text = self.umap_df['label'].tolist(),
+                                hovertemplate = "label: {customdata[0]}"
+                            )
+                        )
+
+                        figure.update_layout(
+                            showlegend = False,
+                            title = {
+                                'text': '<br>'.join(
+                                    textwrap.wrap(
+                                        f'UMAP of selected features labeled with {label}',
+                                        width=30
+                                    )
+                                )
+                            }
                         )
 
                     figure.update_layout(

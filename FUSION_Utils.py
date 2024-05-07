@@ -127,9 +127,9 @@ def gen_umap(feature_data, feature_cols, label_and_custom_cols):
 
     umap_reducer = UMAP()
     embeddings = umap_reducer.fit_transform(scaled_data)
-    umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'])
+    umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'],index = label_data.index)
 
-    umap_df = pd.concat((umap_df,label_data),axis=1,ignore_index=True)
+    umap_df = pd.concat((umap_df,label_data),axis=1)
     umap_df.columns = ['UMAP1','UMAP2'] + label_and_custom_cols
 
     return umap_df
