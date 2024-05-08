@@ -1883,11 +1883,54 @@ class LayoutHandler:
 
         return tab_list, first_tab, first_session
 
-    def gen_annotation_content(self,new,current_ftus,classes=None,labels=None,ann_progress = None):
+    def gen_annotation_content(self,new,current_ftus,classes=None,labels=None,ann_progress = None, user_type = 'annotator'):
         """
         Generate annotation content for current ftus
         """
         if not new:
+
+            if user_type=='admin':
+                admin_children = [
+                    html.Hr(),
+                    dbc.Label('Session Admin Components',html_for={'type':'annotation-admin-components','index':0}),
+                    html.Div(
+                        id = {'type':'annotation-admin-components','index':0},
+                        children = [
+                            html.Div('Placeholder for annotators progress'),
+                            html.Hr(),
+                            dbc.Row([
+                                dbc.Label('Who should see this annotation session?',html_for = {'type':'annotation-session-users','index':0}),
+                                html.Div(
+                                    id = {'type':'annotation-session-users-parent','index':0},
+                                    children = [
+                                        html.Div(
+                                            id = {'type':'annotation-add-user-div','index':0},
+                                            children = [
+                                                html.I(
+                                                    className='bi bi-x-fill fa-2x',
+                                                    n_clicks = 0,
+                                                    id = {'type':'delete-annotation-user','index':0},
+                                                    style = {'display':'none'}
+                                                )
+                                            ]
+                                        )
+                                    ]
+                                ),
+                                html.Div(
+                                    html.I(
+                                        className = 'bi bi-person-plus fa-2x',
+                                        n_clicks = 0,
+                                        id = {'type':'add-annotation-user','index':0},
+                                        style = {'display':'inline-block','position':'relative','left':'45%','right':'50%'}
+                                    ),
+                                    style = {'marginBottom':'10px'}
+                                )
+                            ],align='center',style={'marginLeft':'5px','marginBottom':'20px','marginTop':'10px'})
+                        ]
+                    )
+                ]
+
+
             first_tab = html.Div([
                 dbc.Row([
                     dbc.Col([
@@ -2060,7 +2103,12 @@ class LayoutHandler:
                         ),
                         md = 1
                     ),
-                ],align = 'center',style = {'marginBottom':'20px'})
+                ],align = 'center',style = {'marginBottom':'20px'}),
+                dbc.Row([
+                    html.Div(
+                        admin_children
+                    )
+                ],align = 'center')
                 ],
             style = {'maxHeight':'70vh','overflow':'scroll'}
             )
@@ -4165,7 +4213,8 @@ class GirderHandler:
         session_info = {
             'name':'',
             'Annotations':[],
-            'Labels':[]
+            'Labels':[],
+            'user_type': 'annotator'
         }
 
         path_to_ann_sessions = f'/user/{self.username}/Public/FUSION Annotation Sessions/{session_name}'
@@ -4174,6 +4223,9 @@ class GirderHandler:
         session_info['name'] = folder_id['name']
         session_info['Annotations'] = folder_id['meta']['Annotations']
         session_info['Labels'] = folder_id['meta']['Labels']
+
+        if 'Users' in folder_id['meta']:
+            session_info['user_type'] = 'admin'
 
         # Getting slide count
         all_folders = self.gc.get(f'/folder',parameters = {'parentType':'folder','parentId':folder_id["_id"],'limit':100000})

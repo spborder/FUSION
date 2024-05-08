@@ -7235,7 +7235,9 @@ class FUSION:
         return [return_div], [f'{len(selectedData["points"])} Cells selected'], [updated_cell_geojson], cell_markers
 
     def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types):
-
+        """
+        Populating annotation station tab with necessary information
+        """
         return_div = [no_update]
         new_annotation_tab_group = [no_update]
 
@@ -7301,7 +7303,7 @@ class FUSION:
                 first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = self.current_ftus)
             else:
                 session_progress, self.current_ann_session = self.dataset_handler.get_annotation_session_progress(session_name)
-                first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = self.current_ftus, classes = self.current_ann_session['Annotations'], labels = self.current_ann_session['Labels'], ann_progress = session_progress)
+                first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = self.current_ftus, classes = self.current_ann_session['Annotations'], labels = self.current_ann_session['Labels'], ann_progress = session_progress, user_type = self.current_ann_session['user_type'])
 
             return_div = [first_tab]
 
