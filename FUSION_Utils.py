@@ -209,6 +209,11 @@ def path_to_mask(path, shape):
     """
     cols, rows = path_to_indices(path).T
     rr, cc = draw.polygon(rows, cols)
+
+    # Clipping values for rows and columns to "shape" (annotations on the edge are counted as dimension+1)
+    rr = np.clip(rr,a_min=0,a_max=int(shape[0]-1))
+    cc = np.clip(cc,a_min=0,a_max=int(shape[1]-1))
+
     mask = np.zeros(shape, dtype=bool)
     mask[rr, cc] = True
     mask = ndimage.binary_fill_holes(mask)

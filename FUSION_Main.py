@@ -992,7 +992,9 @@ class FUSION:
                 Output({'type':'annotation-class-label','index':ALL},'value'),
                 Output({'type':'annotation-image-label','index':ALL},'value'),
                 Output({'type':'annotation-station-ftu-idx','index':ALL},'children'),
-                Output({'type':'annotation-save-button','index':ALL},'color')
+                Output({'type':'annotation-save-button','index':ALL},'color'),
+                Output({'type':'annotation-session-progress','index':ALL},'value'),
+                Output({'type':'annotation-session-progress','index':ALL},'label')
             ],
             [
                 Input({'type':'annotation-station-ftu','index':ALL},'n_clicks'),
@@ -7274,7 +7276,7 @@ class FUSION:
             #TODO: Find some way to share this with indicated users
 
             updated_tabs,first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus)
-            session_progress, self.current_ann_session = self.dataset_handler.get_annotation_session_progress(first_session)
+            session_progress, self.current_ann_session = self.dataset_handler.get_annotation_session_progress(first_session['name'])
 
             new_annotation_tab_group = [html.Div([
                 dbc.Tabs(
@@ -7315,6 +7317,8 @@ class FUSION:
         class_labels = [no_update]*len(ctx.outputs_list[2])
         image_labels = [no_update]*len(ctx.outputs_list[3])
         save_button_style = ['primary']
+        session_ftu_progress = [no_update]*len(ctx.outputs_list[6])
+        session_ftu_progress_label = [no_update]*len(ctx.outputs_list[7])
 
         line_slide = get_pattern_matching_value(line_slide)
         if line_slide is None:
@@ -7323,7 +7327,6 @@ class FUSION:
         ann_class_color = ann_class
 
         all_annotations = get_pattern_matching_value(all_annotations)
-        #TODO: Process "line"s and shapes together
         if not all_annotations is None:
             annotations = []
             if 'shapes' in all_annotations.keys():
@@ -7578,7 +7581,10 @@ class FUSION:
 
             save_button_style = ['success']
 
-        return current_structure_fig, ftu_styles, class_labels, image_labels, [f'{clicked_ftu_name}:{ftu_idx}'], save_button_style
+        session_ftu_progress = [int(100*(ftu_idx+1)/len(intersecting_ftu_polys))]
+        session_ftu_progress_label = [f'{clicked_ftu_name}: {session_ftu_progress[0]}%']
+        
+        return current_structure_fig, ftu_styles, class_labels, image_labels, [f'{clicked_ftu_name}:{ftu_idx}'], save_button_style, session_ftu_progress, session_ftu_progress_label
 
     def add_annotation_class(self,add_click,delete_click):
         """

@@ -2008,6 +2008,18 @@ class LayoutHandler:
                         ])
                     ],md = 8)
                 ],align='top'),
+                dbc.Row(
+                    html.Div(
+                        dbc.Progress(
+                            id = {'type':'annotation-session-progress','index':0},
+                            min = 0,
+                            max = 100,
+                            value = 0
+                        )
+                    ),
+                    align = 'center',
+                    style = {'marginTop':'5px'}
+                ),
                 html.Hr(),
                 dbc.Row(
                     html.P('Add a text label for the image')
@@ -2017,7 +2029,6 @@ class LayoutHandler:
                         dcc.Dropdown(
                             placeholder='Add a class label type',
                             options = labels,
-                            value = labels[0],
                             id = {'type':'annotation-class-label','index':0},
                             style = {'width':'100%'}
                         ),
