@@ -1977,33 +1977,35 @@ class LayoutHandler:
                             ])
                         ],style = {'marginBottom':'20px'}),
                         dbc.Row([
-                            dbc.Col(
-                                dbc.Button(
-                                    'Previous',
-                                    id = {'type':'annotation-previous-button','index':0},
-                                    n_clicks = 0,
-                                    className = 'd-grid col-12 mx-auto'
+                            dcc.Loading(
+                                dbc.Col(
+                                    dbc.Button(
+                                        'Previous',
+                                        id = {'type':'annotation-previous-button','index':0},
+                                        n_clicks = 0,
+                                        className = 'd-grid col-12 mx-auto'
+                                    ),
+                                    md = 3
                                 ),
-                                md = 3
-                            ),
-                            dbc.Col(
-                                dbc.Button(
-                                    'Save',
-                                    id = {'type':'annotation-save-button','index':0},
-                                    n_clicks = 0,
-                                    className = 'd-grid col-12 mx-auto',
-                                    color = 'primary'
+                                dbc.Col(
+                                    dbc.Button(
+                                        'Save',
+                                        id = {'type':'annotation-save-button','index':0},
+                                        n_clicks = 0,
+                                        className = 'd-grid col-12 mx-auto',
+                                        color = 'primary'
+                                    ),
+                                    md = 6
                                 ),
-                                md = 6
-                            ),
-                            dbc.Col(
-                                dbc.Button(
-                                    'Next',
-                                    id = {'type':'annotation-next-button','index':0},
-                                    n_clicks = 0,
-                                    className = 'd-grid col-12 mx-auto'
-                                ),
-                                md = 3
+                                dbc.Col(
+                                    dbc.Button(
+                                        'Next',
+                                        id = {'type':'annotation-next-button','index':0},
+                                        n_clicks = 0,
+                                        className = 'd-grid col-12 mx-auto'
+                                    ),
+                                    md = 3
+                                )
                             )
                         ])
                     ],md = 8)
