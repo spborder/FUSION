@@ -3760,7 +3760,6 @@ class FUSION:
                 print(f'Getting new clustering data')
                 self.clustering_data = self.dataset_handler.load_clustering_data()
 
-
             feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
             cell_features = [i for i in feature_names if i in self.cell_names_key]
             feature_data = pd.DataFrame()
@@ -3840,8 +3839,15 @@ class FUSION:
                 feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
                 feature_data = feature_data.reset_index(drop=True)
 
+            # Removing duplicate columns
+            print(feature_names)
+            print(checked_feature)
+            feature_data = feature_data.loc[:,~feature_data.columns.duplicated()].copy()
+
             # Coercing dtypes of columns in feature_data
+            print(feature_data.columns.tolist())
             for f in feature_data.columns.tolist():
+                print(f)
                 feature_data[f] = pd.to_numeric(feature_data[f],errors='coerce')
 
             label_options = ['FTU','Slide Name','Folder Name'] 
@@ -4190,11 +4196,13 @@ class FUSION:
                         label = 'FTU'
                         label_data = self.clustering_data[label].tolist()
 
+
+                label_data = [label_data[i] for i in list(self.feature_data.index)]
                 # Needs an alignment step going from the full self.clustering_data to the na-dropped and filtered self.feature_data
                 # self.feature_data contains the features included in the current plot, label, Hidden, Main_Cell_Types, and Cell_States
                 # So for a violin plot the shape should be nX5
                 self.feature_data = self.feature_data.drop(columns = ['label'])
-                self.feature_data['label'] = [label_data[i] for i in list(self.feature_data.index)]
+                self.feature_data['label'] = label_data
 
                 if type(label_data[0]) in [int,float]:
                     self.feature_data['label'] = self.feature_data['label'].astype(float)
@@ -4241,7 +4249,7 @@ class FUSION:
 
                 elif feature_number>2:
 
-                    self.umap_df.loc[:,'label']=[label_data[i] for i in list(self.feature_data.index)]
+                    self.umap_df.loc[:,'label'] = label_data
                     
                     if not type(label_data[0]) in [int,float]:
 

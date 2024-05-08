@@ -4020,7 +4020,12 @@ class GirderHandler:
                 cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={self.user_token}').content)
                 try:
                     cluster_data = pd.DataFrame.from_dict(cluster_json)
+
+                    # Fixing columns that say PAS
+                    cluster_data.columns = [i.replace('PAS','Eosinophilic') for i in cluster_data.columns.tolist()]
                     print('Clustering data loaded')
+                    cluster_data = cluster_data.loc[:,~cluster_data.columns.duplicated()].copy()
+
                 except ValueError:
                     cluster_data = pd.DataFrame()    
 
