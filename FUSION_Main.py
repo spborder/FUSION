@@ -7374,6 +7374,8 @@ class FUSION:
             
             # Grab the first member of the clicked ftu
             if not 'Manual' in clicked_ftu_name and not 'Marked' in clicked_ftu_name:
+                if clicked_ftu_name=='FTU':
+                    clicked_ftu_name = ftu_names[0][0].split(':')[0]
                 intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
             elif 'Manual' in clicked_ftu_name:
                 print(clicked_ftu_name)
