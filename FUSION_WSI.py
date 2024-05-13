@@ -163,10 +163,6 @@ class DSASlide:
         
         this_annotation = self.annotation_ids[idx]
         f_name = this_annotation['annotation']['name']
-        self.ftu_names.append(f_name)
-
-        if f_name not in self.ftu_colors:
-            self.ftu_colors[f_name] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
 
         save_path = f'./assets/slide_annotations/{self.item_id}/{this_annotation["_id"]}.json'
         if not os.path.exists(save_path):
@@ -183,19 +179,35 @@ class DSASlide:
             
             # Step 2: Scale coordinates of geojson object
             scaled_annotation = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale, c[1]*self.y_scale, c[2]), g), annotation_geojson)
-            for f in scaled_annotation['features']:
-                f['properties']['name'] = f_name
-        
+            
+            if len(scaled_annotation['features'])>0:
+                for f in scaled_annotation['features']:
+                    f['properties']['name'] = f_name
+
+                    if not 'user' in f['properties']:
+                        f['user'] = {}
+
+                self.ftu_names.append(f_name)
+
+                if f_name not in self.ftu_colors:
+                    self.ftu_colors[f_name] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+                
         else:
             try:
                 with open(save_path,'r') as f:
                     scaled_annotation = geojson.load(f)
 
                 f.close()
+
+                self.ftu_names.append(f_name)
+
+                if f_name not in self.ftu_colors:
+                    self.ftu_colors[f_name] = '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+                
             except json.decoder.JSONDecodeError:
                 scaled_annotation = None
 
-        if not scaled_annotation is None:
+        if not scaled_annotation is None and len(scaled_annotation['features'])>0:
             # Step 3: Recording properties and polys for that annotation
             self.ftu_polys[f_name] = [
                 shape(g['geometry'])
@@ -205,27 +217,29 @@ class DSASlide:
             self.ftu_props[f_name] = [
                 g['properties']['user'] | {'name': f_name, 'unique_index': start_idx+idx}
                 for idx,g in enumerate(scaled_annotation['features'])
+                if 'user' in g['properties']
             ]
 
             ftu_prop_list = []
-            this_ftu_props = list(self.ftu_props[f_name][0].keys())
-            for p in this_ftu_props:
-                if p in self.visualization_properties:
-                    if type(self.ftu_props[f_name][0][p])==dict:
-                        ftu_prop_list.extend([
-                            f'{p} --> {i}' if not p=='Main_Cell_Types' else f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}'
-                            for i in list(self.ftu_props[f_name][0][p].keys())
-                        ])
-                    else:
-                        ftu_prop_list.append(p)
+            if len(self.ftu_props[f_name])>0:
+                this_ftu_props = list(self.ftu_props[f_name][0].keys())
+                for p in this_ftu_props:
+                    if p in self.visualization_properties:
+                        if type(self.ftu_props[f_name][0][p])==dict:
+                            ftu_prop_list.extend([
+                                f'{p} --> {i}' if not p=='Main_Cell_Types' else f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}'
+                                for i in list(self.ftu_props[f_name][0][p].keys())
+                            ])
+                        else:
+                            ftu_prop_list.append(p)
 
-            if len(self.properties_list)>0:
-                self.properties_list.extend(list(set(ftu_prop_list) - set(self.properties_list)))
-            else:
-                self.properties_list = ftu_prop_list
+                if len(self.properties_list)>0:
+                    self.properties_list.extend(list(set(ftu_prop_list) - set(self.properties_list)))
+                else:
+                    self.properties_list = ftu_prop_list
 
-            if any(['Main_Cell_Types' in i for i in self.properties_list]) and 'Max Cell Type' not in self.properties_list:
-                self.properties_list.append('Max Cell Type')
+                if any(['Main_Cell_Types' in i for i in self.properties_list]) and 'Max Cell Type' not in self.properties_list:
+                    self.properties_list.append('Max Cell Type')
 
             self.map_dict['FTUs'][f_name] = {
                 'id':{'type':'ftu-bounds','index':len(self.ftu_names)-1},

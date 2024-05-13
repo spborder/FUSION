@@ -3076,6 +3076,16 @@ class LayoutHandler:
                         disabled=False
                     ),
                     html.Div(id='logged-in-user',children = [f'Welcome, {initial_user}!']),
+                    html.Div(
+                        id = 'user-store-div',
+                        children = [
+                            dcc.Store(
+                                id = 'user-store',
+                                data = {'userId':initial_user},
+                                storage_type = 'memory'
+                            )
+                        ]
+                    ),
                     dbc.Collapse(
                         dbc.Row(
                             dbc.Col(
@@ -3149,6 +3159,16 @@ class LayoutHandler:
                 html.Div([
                     dcc.Location(id='url'),
                     html.Div(id='ga-invisible-div', style={'display': 'none'}),
+                    html.Div(
+                        id = 'fusion-store-div',
+                        children = [
+                            dcc.Store(
+                                id = 'fusion-store',
+                                data = {},
+                                storage_type = 'memory'
+                            )
+                        ]
+                    ),
                     header,
                     html.B(),
                     dbc.Row(dbc.Col(html.Div(sider))),
@@ -3422,7 +3442,7 @@ class GirderHandler:
                             })
 
 
-        return user_info
+        return user_info, user_details
 
     def get_token(self):
         # Getting session token for accessing private collections
@@ -3513,8 +3533,10 @@ class GirderHandler:
         folder_ids = [i['folderId'] for i in folder_contents]
         for f in np.unique(folder_ids):
             if f not in list(self.slide_datasets.keys()):
-                folder_name = self.gc.get(f'/folder/{f}')['name']
-                if not folder_name=='Public' and not folder_name =='FUSION Annotation Sessions':
+                folder_info = self.gc.get(f'/folder/{f}')
+                folder_name = folder_info['name']
+
+                if not folder_name=='Public' and folder_info['parentId'] == folder_id:
 
                     self.slide_datasets[f] = {
                         'name':folder_name
@@ -3567,12 +3589,14 @@ class GirderHandler:
             # Reducing list to only images
             collection_slides = [i for i in collection_contents if 'largeImage' in i and not 'png' in i['name']]
             # folderIds for each item (determining ordering of slides)
+
             slide_folderIds = [i['folderId'] for i in collection_slides]
             # Assigning each slide to a dictionary by shared folderId
             for f in np.unique(slide_folderIds):
                 self.slide_datasets[f] = {}
-                folder_name = self.gc.get(f'/folder/{f}')['name']
-                if not folder_name=='histoqc_outputs' or folder_name == 'FUSION Annotation Sessions':
+                folder_info = self.gc.get(f'/folder/{f}')
+                folder_name = folder_info['name']
+                if not folder_name=='histoqc_outputs' and folder_info['parentId'] in self.current_collection['id']:
                     self.slide_datasets[f]['name'] = folder_name
                 
                     folder_slides = [i for i in collection_slides if i['folderId']==f]

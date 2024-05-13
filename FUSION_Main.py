@@ -536,22 +536,29 @@ class FUSION:
 
         # Logging in to DSA instance
         self.app.callback(
-            [Output('login-submit','color'),
+            [   
+                Output('login-submit','color'),
                 Output('login-submit','children'),
                 Output('logged-in-user','children'),
                 Output('upload-sidebar','disabled'),
                 Output('create-user-extras','children'),
                 Output('user-id-div', 'children'),
                 Output({'type':'usability-sign-up','index':ALL},'style'),
-                Output({'type':'usability-butt','index':ALL},'style')],
-            [Input('login-submit','n_clicks'),
-                Input('create-user-submit','n_clicks')],
-            [State('username-input','value'),
+                Output({'type':'usability-butt','index':ALL},'style'),
+                Output('user-store','data')
+            ],
+            [
+                Input('login-submit','n_clicks'),
+                Input('create-user-submit','n_clicks')
+            ],
+            [
+                State('username-input','value'),
                 State('pword-input','value'),
                 State({'type':'email-input','index':ALL},'value'),
                 State({'type':'first-name-input','index':ALL},'value'),
-                State({'type':'last-name-input','index':ALL},'value')],
-                prevent_initial_call=True
+                State({'type':'last-name-input','index':ALL},'value')
+            ],
+            prevent_initial_call=True
         )(self.girder_login)
 
         # Loading new tutorial slides
@@ -1703,6 +1710,7 @@ class FUSION:
                     for i in self.dataset_handler.default_slides if i['folderId']==f
                 ])
 
+
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
     def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,cluster_click,current_tab,frame_list,frame_label, cluster_eps, cluster_min_samples,cluster_labels):
@@ -2335,7 +2343,7 @@ class FUSION:
         else:
             triggered_id = ctx.triggered_id
 
-        #TODO: Add a button to update FTU/boundary structure colors instead of making it responsive to the color selector
+        #TODO: Add a button to update FTU/boundary structure colors instead of making it responsive to the color selector-=
         try:
             if triggered_id['type']=='ftu-bound-color-butt':
                 if not ftu_bound_color is None:
@@ -2807,7 +2815,7 @@ class FUSION:
                                 dbc.AccordionItem([
                                     html.Div([
                                         dbc.Row([
-                                            dbc.Col(
+                                            dbc.Col(-
                                                 dcc.Graph(figure = f_pie),
                                                 md='auto')
                                             ],style={'height':'100%','width':'100%'})
@@ -5250,6 +5258,9 @@ class FUSION:
         print(f'login ctx.triggered_id: {ctx.triggered_id}')
         usability_signup_style = no_update
         usability_butt_style = no_update
+
+        user_data_output = no_update
+
         if ctx.triggered_id=='login-submit':
 
             try:
@@ -5261,6 +5272,12 @@ class FUSION:
                 button_text = 'Success!'
                 logged_in_user = f'Welcome: {username}'
                 upload_disabled = False
+
+                user_data_output = {
+                    'user_info': user_info,
+                    'user_details': user_details,
+                    'token': self.dataset_handler.user_token
+                }
 
                 if not user_info is None:
                     usability_signup_style = {'display':'none'}
@@ -5274,7 +5291,7 @@ class FUSION:
                 logged_in_user = 'Welcome: fusionguest'
                 upload_disabled = True
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style]
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output
         
         elif ctx.triggered_id=='create-user-submit':
             if len(email)==0 or len(firstname)==0 or len(lastname)==0:
@@ -5299,18 +5316,24 @@ class FUSION:
                 logged_in_user = 'Welcome: fusionguest'
                 upload_disabled = True
 
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style]
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], user_data_output
 
 
             else:
                 create_user_children = no_update
                 try:
-                    user_info = self.dataset_handler.create_user(username,pword,email,firstname,lastname)
+                    user_info, user_details = self.dataset_handler.create_user(username,pword,email,firstname,lastname)
 
                     button_color = 'success',
                     button_text = 'Success!',
                     logged_in_user = f'Welcome: {username}'
                     upload_disabled = False
+
+                    user_data_output = {
+                        'user_info': user_info,
+                        'user_details': user_details,
+                        'token': self.dataset_handler.user_token
+                    }
 
                     if not user_info is None:
                         usability_signup_style = {'display':'none'}
@@ -5324,7 +5347,7 @@ class FUSION:
                     logged_in_user = f'Welcome: fusionguest'
                     upload_disabled = True
             
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style]
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output
 
         else:
             raise exceptions.PreventUpdate
@@ -5545,7 +5568,6 @@ class FUSION:
 
                     print(f'Running segmentation!')
                     self.segmentation_job_info = self.prep_handler.segment_image(self.upload_wsi_id,structure_selection)
-                    print(f'Running spot annotation!')
                     #TODO: Make it so you don't have to run segmentation to access cell deconvolution/spot stuff
                     if not self.upload_omics_id is None:
                         self.cell_deconv_job_info = self.prep_handler.run_cell_deconvolution(self.upload_wsi_id,self.upload_omics_id)
@@ -5991,9 +6013,10 @@ class FUSION:
         if ctx.triggered_id['type']=='start-feat':
             # Prepping input arguments to feature extraction
             include_ftus = get_pattern_matching_value(include_ftus)
+            include_ftus = [self.feature_extract_ftus[i]['label'].split(' (')[0] for i in include_ftus]
             include_features = get_pattern_matching_value(include_features)
             include_features = ','.join(include_features)
-            ignore_ftus = ','.join([i for i in self.feature_extract_ftus if i not in include_ftus])
+            ignore_ftus = ','.join([i['label'].split(' (')[0] for i in self.feature_extract_ftus if not i['label'].split(' (')[0] in include_ftus])
 
             self.feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params,include_features,ignore_ftus)
 
