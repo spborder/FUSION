@@ -1668,6 +1668,11 @@ class LayoutHandler:
         """
         special_overlays_opts = []
         if wsi.spatial_omics_type=='Visium':
+            
+            if any(['Main_Cell_Types' in i for i in wsi.properties_list]):
+                disable_sub_types = False
+            else:
+                disable_sub_types = True
 
             special_overlays_opts.extend([
                 html.Div(children = [],id = {'type':'gene-info-div','index':0}),
@@ -1675,7 +1680,7 @@ class LayoutHandler:
                 self.gen_info_button('Select a cell type below to add the cell subtypes of that cell type to the list of overlaid visualizations'),
                 dbc.Row([
                     dbc.Col(
-                        dcc.Dropdown(
+                        dcc.Loading(dcc.Dropdown(
                             id = {'type':'cell-subtype-drop','index':0},
                             options = [
                                 {'label': i.split(' --> ')[-1], 'value': i.split(' --> ')[-1]}
@@ -1683,17 +1688,17 @@ class LayoutHandler:
                             ],
                             value = [],
                             multi = True,
-                            disabled = True
-                        ),
+                            disabled = disable_sub_types
+                        )),
                         md = 8
                     ),
                     dbc.Col(
-                        dbc.Button(
+                        dcc.Loading(dbc.Button(
                             'Add Sub-Types!',
                             id = {'type':'cell-subtype-butt','index':0},
                             className = 'd-grid col-12 mx-auto',
-                            disabled = True
-                        ),
+                            disabled = disable_sub_types
+                        )),
                         md = 4
                     )
                 ])

@@ -390,6 +390,14 @@ class DSASlide:
 
         return raw_values_list
 
+    
+
+
+
+
+
+
+
 
 class VisiumSlide(DSASlide):
     # Additional properties for Visium slides are:
@@ -403,6 +411,43 @@ class VisiumSlide(DSASlide):
                  manual_rois:list,
                  marked_ftus:list):
         super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
+
+        self.change_level_plugin = {
+            'plugin_name': 'samborder2256_change_level_latest/ChangeLevel',
+            'definitions_file': '64fa0f782d82d04be3e5daa3'
+        }
+
+    def run_change_level(self,main_cell_types):
+        """
+        Getting cell sub-types for a set of main cell types
+
+        """
+        job_id = None
+        change_type = {
+            "ACTION":"SUBTYPE",
+            "SELECTOR": [
+                {
+                    "MAINS":main_cell_types
+                }
+            ]
+        }
+
+
+        item_files = self.girder_handler.gc.get(f'/item/{self.item_id}/files')
+        counts_file = [i for i in item_files if 'rds' in i['exts'] or 'h5ad' in i['exts']][0]
+
+        job_id = self.girder_handler.gc.post(f'/slicer_cli_web/{self.change_level_plugin["plugin_name"]}/run',
+                                    parameters = {
+                                        'rds_file': counts_file,
+                                        'definitions_file': self.change_level_plugin["plugin_name"],
+                                        'input_files': self.item_id,
+                                        'change_type': json.dumps(change_type)
+                                    }
+                                )['_id']
+
+
+
+        return job_id
 
 
 class CODEXSlide(DSASlide):

@@ -1023,6 +1023,22 @@ class FUSION:
             prevent_initial_call = True
         )(self.update_current_annotation)
 
+        # Adding cell subtypes to current annotations based on contents of molecular data file
+        self.app.callback(
+            [
+                Output('cell-drop','options'),
+                Output({'type':'cell-subtype-drop','index':ALL},'options'),
+                Output({'type':'cell-subtype-drop','index':ALL},'value')
+            ],
+            [
+                Input({'type':'cell-subtype-butt','index':ALL},'n_clicks')
+            ],
+            [
+                State({'type':'cell-subtype-drop','index':ALL},'value')
+            ],
+            prevent_initial_call = True
+        )(self.add_cell_subtypes)
+
     def builder_callbacks(self):
 
         # Initializing plot after selecting dataset(s)
@@ -3850,14 +3866,10 @@ class FUSION:
                 feature_data = feature_data.reset_index(drop=True)
 
             # Removing duplicate columns
-            print(feature_names)
-            print(checked_feature)
             feature_data = feature_data.loc[:,~feature_data.columns.duplicated()].copy()
 
             # Coercing dtypes of columns in feature_data
-            print(feature_data.columns.tolist())
             for f in feature_data.columns.tolist():
-                print(f)
                 feature_data[f] = pd.to_numeric(feature_data[f],errors='coerce')
 
             label_options = ['FTU','Slide Name','Folder Name'] 
@@ -7790,6 +7802,38 @@ class FUSION:
 
         return [patched_list]
 
+    def add_cell_subtypes(self,butt_click,main_cell_types):
+        """
+        Extracting subtypes for a given "Main Cell Type" and adding those as a visualizable property for overlaid heatmaps
+        """
+
+        main_cell_types = get_pattern_matching_value(main_cell_types)
+
+        print(ctx.triggered_id)
+        print(main_cell_types)
+
+        new_cell_droptions = no_update
+        new_sub_cell_droptions = [no_update]
+        new_sub_cell_value = [no_update]
+
+        if not main_cell_types is None:
+            # Running change-level plugin with these options
+            job_id = self.wsi.run_change_level(main_cell_types)        
+            job_status = self.dataset_handler.get_job_status(job_id)
+            # Checking progress of the job
+            while not job_status==3:
+                time.sleep(1)
+                job_status = self.dataset_handler.get_job_status(job_id)
+                print(f'change_level job status: {job_status}')
+
+
+
+        return new_cell_droptions, new_sub_cell_droptions, new_sub_cell_value
+
+
+
+
+
 
 
 
@@ -7838,7 +7882,6 @@ def app(*args):
     print('Getting initial items metadata')
     dataset_handler.set_default_slides(initial_collection_contents)
     dataset_handler.initialize_folder_structure(initial_collection,path_type)
-    #dataset_handler.get_collection_annotation_meta([i['_id'] for i in initial_collection_contents])
 
     # Getting graphics_reference.json from the FUSION Assets folder
     print(f'Getting asset items')
