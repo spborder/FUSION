@@ -434,14 +434,16 @@ class VisiumSlide(DSASlide):
 
 
         item_files = self.girder_handler.gc.get(f'/item/{self.item_id}/files')
-        counts_file = [i for i in item_files if 'rds' in i['exts'] or 'h5ad' in i['exts']][0]
+        counts_file = [i for i in item_files if 'rds' in i['exts'] or 'h5ad' in i['exts']][0]['_id']
 
         job_id = self.girder_handler.gc.post(f'/slicer_cli_web/{self.change_level_plugin["plugin_name"]}/run',
                                     parameters = {
                                         'rds_file': counts_file,
                                         'definitions_file': self.change_level_plugin["plugin_name"],
-                                        'input_files': self.item_id,
-                                        'change_type': json.dumps(change_type)
+                                        'image_id': self.item_id,
+                                        'change_type': json.dumps(change_type),
+                                        'girderApiUrl': self.girder_handler.apiUrl,
+                                        'girderToken': self.girder_handler.user_token
                                     }
                                 )['_id']
 

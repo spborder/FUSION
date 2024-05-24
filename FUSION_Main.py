@@ -7810,7 +7810,14 @@ class FUSION:
         main_cell_types = get_pattern_matching_value(main_cell_types)
 
         print(ctx.triggered_id)
+        print(ctx.triggered)
         print(main_cell_types)
+
+        if len(main_cell_types)==0:
+            raise exceptions.PreventUpdate
+        
+        if not ctx.triggered:
+            raise exceptions.PreventUpdate
 
         new_cell_droptions = no_update
         new_sub_cell_droptions = [no_update]
@@ -7819,6 +7826,7 @@ class FUSION:
         if not main_cell_types is None:
             # Running change-level plugin with these options
             job_id = self.wsi.run_change_level(main_cell_types)        
+            print(job_id)
             job_status = self.dataset_handler.get_job_status(job_id)
             # Checking progress of the job
             while not job_status==3:
