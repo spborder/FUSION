@@ -7,7 +7,7 @@ External file to hold the WholeSlide class used in FUSION
 import os
 import numpy as np
 
-from shapely.geometry import shape
+from shapely.geometry import shape, Polygon
 import random
 import json
 import geojson
@@ -41,7 +41,7 @@ class DSASlide:
         self.n_frames = 1
 
         self.visualization_properties = [
-            'Main_Cell_Types','Gene Counts','Morphometrics','Cluster'
+            'Main_Cell_Types','Gene Counts','Morphometrics','Cluster','Cell_Subtypes'
         ]
 
         # Adding ftu hierarchy property. This just stores which structures contain which other structures.
@@ -227,7 +227,7 @@ class DSASlide:
                     if p in self.visualization_properties:
                         if type(self.ftu_props[f_name][0][p])==dict:
                             ftu_prop_list.extend([
-                                f'{p} --> {i}' if not p=='Main_Cell_Types' else f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}'
+                                f'{p} --> {i}' if not p in ['Main_Cell_Types','Cell_Subtypes'] else f'{p} --> {self.girder_handler.cell_graphics_key[i]["full"]}'
                                 for i in list(self.ftu_props[f_name][0][p].keys())
                             ])
                         else:
@@ -256,6 +256,47 @@ class DSASlide:
                     geojson.dump(scaled_annotation,f)
 
                 f.close()
+
+    def update_annotation_geojson(self,new_annotations):
+        """
+        Updating local annotations with new ones (converting from large_image to GeoJSON)
+        """
+        for new_ann in new_annotations:
+            new_ann_id = new_ann['_id']
+            save_path = f'./assets/slide_annotations/{self.item_id}/{new_ann_id}.json'
+
+            geojson_root = {
+                'type':'FeatureCollection',
+                'features': []
+            }
+
+            for el in new_ann['annotation']['elements']:
+
+                feature_dict = {
+                    'type':'Feature',
+                    'geometry': {
+                        'type':'Polygon',
+                        'coordinates': [[i[0] * self.x_scale,i[1] * self.y_scale] for i in el['points']]
+                    },
+                    'properties': {
+                        'user': el['user']
+                    }
+                }
+
+                geojson_root['features'].append(feature_dict)
+            
+            with open(save_path,'w') as f:
+                geojson.dump(geojson_root,f)
+
+            f.close()
+
+
+
+
+
+
+
+
 
     def find_intersecting_ftu(self, box_poly, ftu: str):
 
@@ -390,10 +431,40 @@ class DSASlide:
 
         return raw_values_list
 
-    
+    def update_ftu_props(self,new_annotation):
+        """
+        Updating ftu_props according to changelevel runs (adding cell subtypes or readcounts)
+        """
 
+        new_annotation_names = [i['annotation']['name'] for i in new_annotation]
+        new_properties_list = []
+        for f in new_annotation_names:
+            self.ftu_props[f] = [
+                f_prop | new_annotation[new_annotation_names.index(f)]['annotation']['elements'][f_idx]['user']
+                for f_idx,f_prop in enumerate(self.ftu_props[f])
+            ]
 
+        for el in new_annotation['annotation']['elements']:
+            add_keys = list(el['user'].keys())
+            edited_keys = []
+            for a_k in add_keys:
+                if a_k in self.visualization_properties:
+                    if type(el['user'][a_k])==dict:
+                        for sub_key in list(el['user'][a_k].keys()):
+                            if not a_k in ['Main_Cell_Types','Cell_Subtypes']:
+                                edited_keys.append(f'{a_k} --> {sub_key}')
+                            else:
+                                edited_keys.append(f'{a_k} --> {self.girder_handler.cell_graphics_key[i]["full"]}')
+                    else:
+                        edited_keys.append(a_k)
+                
+            new_properties_list.extend(edited_keys)
 
+        self.properties_list = list(set(self.prperties_list) - set(new_properties_list))
+        
+        if not 'Max Cell Type' in self.properties_list:
+            if any(['Main_Cell_Types' in i for i in self.properties_list]):
+                self.properties_list.append('Max Cell Type')
 
 
 
@@ -450,6 +521,7 @@ class VisiumSlide(DSASlide):
 
 
         return job_id
+
 
 
 class CODEXSlide(DSASlide):

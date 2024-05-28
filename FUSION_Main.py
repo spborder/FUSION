@@ -181,7 +181,7 @@ class FUSION:
 
         # Specifying available properties with visualizations implemented
         self.visualization_properties = [
-            'Cluster','Main_Cell_Types','Max Cell Type','Gene Counts','Morphometrics'
+            'Cluster','Main_Cell_Types','Max Cell Type','Gene Counts','Morphometrics','Cell_Subtypes'
         ]
 
         # Initializing some parameters
@@ -1027,7 +1027,6 @@ class FUSION:
         self.app.callback(
             [
                 Output('cell-drop','options'),
-                Output({'type':'cell-subtype-drop','index':ALL},'options'),
                 Output({'type':'cell-subtype-drop','index':ALL},'value')
             ],
             [
@@ -2642,9 +2641,14 @@ class FUSION:
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
-                filter_min_val = np.min(list(self.hex_color_key.keys()))
-                filter_max_val = np.max(list(self.hex_color_key.keys()))
-                filter_disable = False
+                if not len(list(self.hex_color_key.keys()))==0:
+                    filter_min_val = np.min(list(self.hex_color_key.keys()))
+                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                    filter_disable = False
+                else:
+                    filter_min_val = 0
+                    filter_max_val = 1.0
+                    filter_disable = True
 
         else:
             self.overlay_prop = {
@@ -7820,23 +7824,34 @@ class FUSION:
             raise exceptions.PreventUpdate
 
         new_cell_droptions = no_update
-        new_sub_cell_droptions = [no_update]
-        new_sub_cell_value = [no_update]
+        new_cell_subtype_dropue = [no_update]
 
         if not main_cell_types is None:
             # Running change-level plugin with these options
             job_id = self.wsi.run_change_level(main_cell_types)        
             print(job_id)
-            job_status = self.dataset_handler.get_job_status(job_id)
+            job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
             # Checking progress of the job
-            while not job_status==3:
+            while not job_status==3 and not job_status==4:
                 time.sleep(1)
-                job_status = self.dataset_handler.get_job_status(job_id)
+                job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
                 print(f'change_level job status: {job_status}')
 
+            if job_status==4:
+                raise exceptions.PreventUpdate
+            
+            # Grabbing from user "Supplemental_Annotations" folder
+            updated_annotations_file = f'{self.wsi.item_id}.json'
+            updated_annotations = self.dataset_handler.grab_from_user_folder(updated_annotations_file,'Supplemental_Annotations')
+
+            self.wsi.update_ftu_props(updated_annotations)
+            self.wsi.update_annotation_geojson(updated_annotations)
+
+            new_cell_droptions = self.wsi.properties_list
+            new_cell_subtype_dropue= ['']
 
 
-        return new_cell_droptions, new_sub_cell_droptions, new_sub_cell_value
+        return new_cell_droptions, new_cell_subtype_dropue
 
 
 
