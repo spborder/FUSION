@@ -7094,7 +7094,7 @@ class FUSION:
 
                 patched_list = Patch()
                 # Find min and max vals
-                filter_val = self.wsi.properties_list[0]
+                filter_val = [i for i in self.wsi.properties_list if not 'Cell_Subtypes' in i and not i=='Max Cell Type'][0]
                 if '-->' in filter_val:
                     filter_val_parts = filter_val.split(' --> ')
                     m_prop = filter_val_parts[0]
@@ -7106,22 +7106,14 @@ class FUSION:
                     m_prop = filter_val
                     val = None
                 
-                #if m_prop == 'Max Cell Type':
-                #    m_prop = 'Main_Cell_Types'
-                #    val = 'max'
-
                 unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
                 value_types = [type(i) for i in unique_values][0]
                 if value_types in [int,float]:
                     value_disable = False
                     value_display = {'display':'inline-block','margin':'auto','width':'100%'}
-                    #str_disable = True
-                    #str_display = {'display':'none','margin':'auto','width':'100%'}
                 else:
                     value_disable = True
                     value_display = {'display':'none','margin':'auto','width':'100%'}
-                    #str_disable = False
-                    #str_display = {'display': 'inline-block','margin':'auto','width':'100%'}
 
                 value_slider = html.Div(
                         dcc.RangeSlider(
@@ -7138,24 +7130,13 @@ class FUSION:
                         id = {'type':'added-filter-slider-div','index':butt_click}  
                     )
                 
-                # "slider" but for categorical
-                """
-                str_slider = dcc.Dropdown(
-                    id = {'type':'added-filter-drop-drop','index':butt_click},
-                    options = unique_values,
-                    multi=True,
-                    value = unique_values,
-                    disabled = str_disable,
-                    style = str_display
-                )
-                """
                 def new_filter_item():
                     return html.Div([
                         dbc.Row([
                             dbc.Col(
                                 dcc.Dropdown(
-                                    options = [i for i in self.wsi.properties_list if not i=='Max Cell Type'],
-                                    value = [i for i in self.wsi.properties_list if not i=='Max Cell Type'][0],
+                                    options = [i for i in self.wsi.properties_list if not i=='Max Cell Type' and not 'Cell_Subtypes' in i],
+                                    value = [i for i in self.wsi.properties_list if not i=='Max Cell Type' and not 'Cell_Subtypes' in i][0],
                                     placeholder = 'Select new property to filter FTUs',
                                     id = {'type':'added-filter-drop','index':butt_click}
                                 ),
@@ -7206,20 +7187,12 @@ class FUSION:
             m_prop = filter_val
             val = None
 
-            #if m_prop=='Max Cell Type':
-            #    m_prop = 'Main_Cell_Types'
-            #    val = 'max'
-
         unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
         value_types = [type(i) for i in unique_values][0]
         if value_types in [int,float]:
             slider_style = {'display':'inline-block','margin':'auto','width':'100%'}
-            #drop_style = {'display':'none','margin':'auto','width':'100%'}
             return np.min(unique_values), np.max(unique_values), slider_style
-        #elif value_types in [str]:
-        #    slider_style = {'display':'none','margin':'auto','width':'100%'}
-        #    drop_style = {'display':'inline-block','margin':'auto','width':'100%'}
-        #    return no_update, no_update, unique_values, unique_values,drop_style,slider_style
+
         else:
             raise exceptions.PreventUpdate
 

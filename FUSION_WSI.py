@@ -402,8 +402,6 @@ class DSASlide:
         # Iterating through each ftu in each group:
         for f in self.ftu_props:
             # Grabbing values using utils function
-            print(f)
-            print(overlay_prop)
             f_raw_vals = extract_overlay_value(self.ftu_props[f],overlay_prop)
             raw_values_list.extend(f_raw_vals)
 
