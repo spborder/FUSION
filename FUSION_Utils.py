@@ -43,7 +43,6 @@ def extract_overlay_value(structure_list,overlay_prop):
     """
     Used to pull out raw value to add to list used to generate heatmaps/colorbars
     """
-    #print(overlay_prop)
     raw_values_list = []
     if not overlay_prop['name'] is None:
         for st in structure_list:

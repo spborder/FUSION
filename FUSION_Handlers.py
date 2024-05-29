@@ -224,6 +224,18 @@ class LayoutHandler:
                 ]),
                 html.Hr(),
                 html.Div(
+                    dmc.Switch(
+                        id = 'viewport-data-update',
+                        size = 'lg',
+                        onLabel = 'ON',
+                        offLabel = 'OFF',
+                        checked = True,
+                        label = 'Update viewport data',
+                        description = 'Update values below when moving around in the image'
+                    )
+                ),
+                html.Hr(),
+                html.Div(
                     id = 'roi-pie-holder',
                     children = [
                         'Move around on the slide to initialize cell composition view.'

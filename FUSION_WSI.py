@@ -591,8 +591,10 @@ class CODEXSlide(DSASlide):
                                                             'bottom': max_y,
                                                             'right': max_x,
                                                             'frame': frame,
+                                                            'bins':100,
+                                                            'rangeMax':255,
                                                             'roundRange': True, 
-                                                            'density': True
+                                                            #'density': True
                                                             }
                                                         )
 

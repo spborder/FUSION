@@ -657,6 +657,7 @@ class FUSION:
              Input({'type':'frame-data-butt','index':ALL},'n_clicks'),
              Input({'type':'cell-label-cluster','index':ALL},'n_clicks')],
             [State('tools-tabs','active_tab'),
+             State('viewport-data-update','checked'),
              State({'type':'frame-histogram-drop','index':ALL},'value'),
              State({'type':'frame-label-drop','index':ALL},'value'),
              State({'type':'cell-label-eps','index':ALL},'value'),
@@ -918,7 +919,6 @@ class FUSION:
             [
                 Output({'type':'extracted-cell-labeling','index':ALL},'children'),
                 Output({'type':'cell-labeling-criteria','index':ALL},'children'),
-                Output({'type':'edit_control','index':ALL},'geojson'),
                 Output('marker-add-div','children')
             ],
             [
@@ -1728,29 +1728,29 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
 
-    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,cluster_click,current_tab,frame_list,frame_label, cluster_eps, cluster_min_samples,cluster_labels):
+    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,cluster_click,current_tab,update_data,frame_list,frame_label, cluster_eps, cluster_min_samples,cluster_labels):
         """
         Updating data used for current viewport visualizations
         """
         frame_label_disable = [no_update]*len(ctx.outputs_list[-2])
-
         cluster_labels_store = [json.dumps({'cluster_labels':[]})]*len(ctx.outputs_list[-1])
+        
+        if update_data:
+            if not self.wsi is None:
+                if not bounds is None:
+                    if len(bounds)==2:
+                        bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
+                    else:
+                        bounds_box = shapely.geometry.box(*bounds)
 
-        if not self.wsi is None:
-            if not bounds is None:
-                if len(bounds)==2:
-                    bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
+                    # Storing current slide boundaries
+                    self.current_slide_bounds = bounds_box
                 else:
-                    bounds_box = shapely.geometry.box(*bounds)
-
-                # Storing current slide boundaries
-                self.current_slide_bounds = bounds_box
+                    self.current_slide_bounds = self.wsi.map_bounds
             else:
-                self.current_slide_bounds = self.wsi.map_bounds
-        else:
-            self.current_slide_bounds = None
+                self.current_slide_bounds = None
 
-            raise exceptions.PreventUpdate
+                raise exceptions.PreventUpdate
         
         # Making a box-poly from the bounds
         if current_tab=='cell-compositions-tab':
@@ -1762,7 +1762,7 @@ class FUSION:
 
                     # Getting intersecting FTU information
                     for ftu in self.current_ftu_layers:
-                        intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                        intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(self.current_slide_bounds,ftu)
 
                     for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
                         intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
@@ -1801,7 +1801,7 @@ class FUSION:
                     if cell_view_type in ['channel_hist']:
 
                         try:
-                            intersecting_region = self.wsi.intersecting_frame_intensity(bounds_box,frame_list)
+                            intersecting_region = self.wsi.intersecting_frame_intensity(self.current_slide_bounds,frame_list)
                         except girder_client.HttpError:
                             print('encountered negative bounds value')
                             print(f'bounds: {bounds}')
@@ -1812,7 +1812,7 @@ class FUSION:
                     if cell_view_type=='features' or cell_view_type=='cell':
 
                         for ftu in self.current_ftu_layers:
-                            intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                            intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.wsi.find_intersecting_ftu(self.current_slide_bounds,ftu)
 
                         for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
                             intersecting_ftus[f'Manual ROI: {m_idx+1}'], intersecting_ftu_polys[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']], [shape(i['geometry']) for i in m_ftu['geojson']['features']]
@@ -1956,6 +1956,9 @@ class FUSION:
 
                                 if cell_view_type=='channel_hist':
                                     cluster_disable = True
+                                    print('Channel Histogram counts data')
+                                    print(counts_data)
+                                    print(f'min intensity: {counts_data["Intensity"].min()}, max intensity: {counts_data["Intensity"].max()}')
                                     f_pie = px.bar(
                                         data_frame = counts_data,
                                         x = 'Intensity',
@@ -2474,7 +2477,6 @@ class FUSION:
                 else:
                     cell_sub_select_children = []
 
-
                 if cell_sub_val == 'All':
                     self.overlay_prop = {
                         'name': m_prop,
@@ -2505,7 +2507,6 @@ class FUSION:
                     id = f'colorbar{random.randint(0,100)}',
                     style = color_bar_style
                 )
-
 
                 if len(list(self.hex_color_key.keys()))==0:
                     filter_min_val = 0.0
@@ -3430,7 +3431,6 @@ class FUSION:
                 new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = first_annotation, args = [0])
                 new_thread.daemon = True
                 new_thread.start()
-                #print(f'new thread started: {threading.active_count()}, {threading.enumerate()}')
 
                 modal_children = [
                     html.Div([
@@ -3833,7 +3833,6 @@ class FUSION:
                 feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
                 feature_data = feature_data.reset_index(drop=True)
 
-                #print(f'shape of feature_data: {feature_data.shape}')
                 if 'Main_Cell_Types' in self.clustering_data.columns:
                     cell_values = self.clustering_data['Main_Cell_Types'].tolist()
                     state_values = self.clustering_data['Cell_States'].tolist()
@@ -4407,7 +4406,6 @@ class FUSION:
         return img_list        
 
     def update_selected(self,click,selected):
-        #print(click)
         if click is not None:
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
                 # Custom data contains Slide_Id and BBox coordinates for pulling images
@@ -4522,8 +4520,6 @@ class FUSION:
             if 'Main_Cell_Types' in self.feature_data.columns:
                 # Preparing figure containing cell types + cell states info
                 main_cell_types_list = self.feature_data['Main_Cell_Types'].tolist()
-                #print(f'size of main_cell_types_list: {len(main_cell_types_list)}')
-                #print(f'sample_index: {sample_index}')
                 counts_data = pd.DataFrame([main_cell_types_list[i] for i in sample_index]).sum(axis=0).to_frame()
                 counts_data.columns = ['Selected Data Points']
                 counts_data = counts_data.reset_index()
@@ -4570,7 +4566,6 @@ class FUSION:
             return go.Figure(), go.Figure(), go.Figure(),[]
     
     def update_selected_state_bar(self, selected_cell_click):
-        #print(f'Selected cell click: {selected_cell_click}, is None: {selected_cell_click is None}')
         if not selected_cell_click is None:
             cell_type = selected_cell_click['points'][0]['label']
 
@@ -7202,10 +7197,8 @@ class FUSION:
         """
         selectedData = get_pattern_matching_value(selectedData)
         return_div = html.Div()
-        updated_cell_geojson = [no_update]
         cell_markers = no_update
 
-        print(ctx.triggered_id)
         if ctx.triggered_id is None:
             raise exceptions.PreventUpdate
         
@@ -7279,7 +7272,7 @@ class FUSION:
             else:
                 raise exceptions.PreventUpdate
 
-        return [return_div], [f'{len(selectedData["points"])} Cells selected'], [updated_cell_geojson], cell_markers
+        return [return_div], [f'{len(selectedData["points"])} Cells selected'], cell_markers
 
     def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types):
         """
@@ -7425,7 +7418,6 @@ class FUSION:
                     clicked_ftu_name = ftu_names[0][0].split(':')[0]
                 intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
             elif 'Manual' in clicked_ftu_name:
-                print(clicked_ftu_name)
                 manual_idx = int(clicked_ftu_name.split(':')[-1])-1
                 intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson']['features'][0]['geometry'])]
             elif 'Marked' in clicked_ftu_name:
@@ -7837,7 +7829,6 @@ class FUSION:
         if not main_cell_types is None:
             # Running change-level plugin with these options
             job_id = self.wsi.run_change_level(main_cell_types)        
-            print(job_id)
             job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
             # Checking progress of the job
             while not job_status==3 and not job_status==4:
@@ -7860,13 +7851,6 @@ class FUSION:
 
 
         return new_cell_droptions, new_cell_subtype_dropue
-
-
-
-
-
-
-
 
 
 
