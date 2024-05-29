@@ -2393,7 +2393,7 @@ class FUSION:
                     self.overlay_prop = {
                         'name': m_prop,
                         'value': cell_name,
-                        'sub_value': None
+                        'sub_value': cell_sub_val
                     }
 
                     if cell_name in self.cell_graphics_key:
@@ -2420,18 +2420,6 @@ class FUSION:
                         'value': cell_name,
                         'sub_value': cell_sub_val
                     }
-                    self.update_hex_color_key()
-                    color_bar_style['width'] = '350px'
-
-                    color_bar = dl.Colorbar(
-                        colorscale = list(self.hex_color_key.values()),
-                        width=300,height=10,position='bottomleft',
-                        id=f'colorbar{random.randint(0,100)}',
-                        style = color_bar_style)
-                    
-                    filter_min_val = np.min(list(self.hex_color_key.keys()))
-                    filter_max_val = np.max(list(self.hex_color_key.keys()))
-                    filter_disable = False
                 
                 elif cell_sub_val=='All':
                     self.overlay_prop = {
@@ -2439,18 +2427,6 @@ class FUSION:
                         'value': cell_name,
                         'sub_value': None
                     }
-                    self.update_hex_color_key()
-                    color_bar_style['width'] = '350px'
-
-                    color_bar = dl.Colorbar(
-                        colorscale = list(self.hex_color_key.values()),
-                        width=300,height=10,position='bottomleft',
-                        id=f'colorbar{random.randint(0,100)}',
-                        style = color_bar_style)
-                    
-                    filter_min_val = np.min(list(self.hex_color_key.keys()))
-                    filter_max_val = np.max(list(self.hex_color_key.keys()))
-                    filter_disable = False
                 
                 else:
                     # Visualizing a sub-property of a main cell type
@@ -2459,19 +2435,87 @@ class FUSION:
                         'value': cell_name,
                         'sub_value': cell_sub_val
                     }
-                    self.update_hex_color_key()
-                    color_bar_style['width'] = '350px'
+                self.update_hex_color_key()
+                color_bar_style['width'] = '350px'
 
-                    color_bar = dl.Colorbar(
-                        colorscale = list(self.hex_color_key.values()),
-                        width=300,height=10,position='bottomleft',
-                        id=f'colorbar{random.randint(0,100)}',
-                        style = color_bar_style)
+                color_bar = dl.Colorbar(
+                    colorscale = list(self.hex_color_key.values()),
+                    width=300,height=10,position='bottomleft',
+                    id=f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style)
 
+                filter_min_val = np.min(list(self.hex_color_key.keys()))
+                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_disable = False
+            
+            elif m_prop == 'Cell_Subtypes':
+
+                if cell_val in self.cell_names_key:
+                    cell_name = self.cell_names_key[cell_val]
+                else:
+                    cell_name = cell_val
+
+                if cell_name in self.cell_graphics_key:
+
+                    if ctx.triggered_id=='cell-drop':
+                        cell_sub_val = None
+                        # Getting all possible cell sub-types:
+                        possible_cell_subtypes = np.unique(self.cell_graphics_key[cell_name]['subtypes'])
+
+                        cell_sub_select_children = [
+                            dcc.Dropdown(
+                                options = [{'label':p,'value':p,'disabled':False} for p in possible_cell_subtypes] + [{'label':'All','value':'All','disabled':False}],
+                                placeholder = 'Select A Cell Subtype Value',
+                                id = {'type':'cell-sub-drop','index':0}
+                            )
+                        ]
+                    else:
+                        cell_sub_select_children = no_update
+                else:
+                    cell_sub_select_children = []
+
+
+                if cell_sub_val == 'All':
+                    self.overlay_prop = {
+                        'name': m_prop,
+                        'value':cell_name,
+                        'sub_value':None
+                    }
+
+                elif not cell_sub_val is None:
+                    self.overlay_prop = {
+                        'name': m_prop,
+                        'value':cell_name,
+                        'sub_value': cell_sub_val
+                    }
+
+                else:
+                    self.overlay_prop = {
+                        'name': 'Main_Cell_Types',
+                        'value': cell_name,
+                        'sub_value': None
+                    }
+                
+                self.update_hex_color_key()
+                color_bar_style['width'] = '350px'
+
+                color_bar = dl.Colorbar(
+                    colorscale = list(self.hex_color_key.values()),
+                    width = 300,height = 10,position = 'bottomleft',
+                    id = f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style
+                )
+
+
+                if len(list(self.hex_color_key.keys()))==0:
+                    filter_min_val = 0.0
+                    filter_max_val = 1.0
+                    filter_disable = True
+                else:
                     filter_min_val = np.min(list(self.hex_color_key.keys()))
                     filter_max_val = np.max(list(self.hex_color_key.keys()))
                     filter_disable = False
-            
+
             elif m_prop == 'Cell_States':
                 # Selecting a specific cell state value for overlays
                 self.overlay_prop = {
@@ -2676,15 +2720,6 @@ class FUSION:
             ]
 
             # Processing the add-on filters:
-            """
-            repeated_filter_keys = [i for i in added_filter_keys for _ in range(2)]
-            repeated_filter_values = []
-            repeated_filter_styles = []
-            for j in range(len(added_filter_slider)):
-                repeated_filter_values.extend([added_filter_slider[j],added_filter_drop[j]])
-                repeated_filter_styles.extend([added_slide_style[j],added_drop_style[j]])
-            """
-            #processed_filters = process_filters(repeated_filter_keys,repeated_filter_values,repeated_filter_styles,self.cell_names_key)
             processed_filters = process_filters(added_filter_keys, added_filter_slider,added_slide_style, self.cell_names_key)
 
             self.filter_vals.extend(processed_filters)

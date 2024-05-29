@@ -276,10 +276,11 @@ class DSASlide:
                     'type':'Feature',
                     'geometry': {
                         'type':'Polygon',
-                        'coordinates': [[i[0] * self.x_scale,i[1] * self.y_scale] for i in el['points']]
+                        'coordinates': [[[i[0] * self.x_scale,i[1] * self.y_scale] for i in el['points']]]
                     },
                     'properties': {
-                        'user': el['user']
+                        'user': el['user'],
+                        'name': el['name']
                     }
                 }
 
@@ -289,14 +290,6 @@ class DSASlide:
                 geojson.dump(geojson_root,f)
 
             f.close()
-
-
-
-
-
-
-
-
 
     def find_intersecting_ftu(self, box_poly, ftu: str):
 
@@ -409,15 +402,10 @@ class DSASlide:
         # Iterating through each ftu in each group:
         for f in self.ftu_props:
             # Grabbing values using utils function
+            print(f)
+            print(overlay_prop)
             f_raw_vals = extract_overlay_value(self.ftu_props[f],overlay_prop)
             raw_values_list.extend(f_raw_vals)
-        
-        """
-        if self.spatial_omics_type=='Visium':
-            # Iterating through spots
-            spot_raw_vals = extract_overlay_value(self.spot_props,overlay_prop)
-            raw_values_list.extend(spot_raw_vals)
-        """
 
         # Check for manual ROIs
         if len(self.manual_rois)>0:
@@ -444,30 +432,27 @@ class DSASlide:
                 for f_idx,f_prop in enumerate(self.ftu_props[f])
             ]
 
-        for el in new_annotation['annotation']['elements']:
-            add_keys = list(el['user'].keys())
-            edited_keys = []
-            for a_k in add_keys:
-                if a_k in self.visualization_properties:
-                    if type(el['user'][a_k])==dict:
-                        for sub_key in list(el['user'][a_k].keys()):
-                            if not a_k in ['Main_Cell_Types','Cell_Subtypes']:
-                                edited_keys.append(f'{a_k} --> {sub_key}')
-                            else:
-                                edited_keys.append(f'{a_k} --> {self.girder_handler.cell_graphics_key[i]["full"]}')
-                    else:
-                        edited_keys.append(a_k)
-                
-            new_properties_list.extend(edited_keys)
+            for el in self.ftu_props[f]:
+                add_keys = list(el.keys())
+                edited_keys = []
+                for a_k in add_keys:
+                    if a_k in self.visualization_properties:
+                        if type(el[a_k])==dict:
+                            for sub_key in list(el[a_k].keys()):
+                                if not a_k in ['Main_Cell_Types','Cell_Subtypes']:
+                                    edited_keys.append(f'{a_k} --> {sub_key}')
+                                else:
+                                    edited_keys.append(f'{a_k} --> {self.girder_handler.cell_graphics_key[sub_key]["full"]}')
+                        else:
+                            edited_keys.append(a_k)
+                    
+                new_properties_list.extend(edited_keys)
 
-        self.properties_list = list(set(self.prperties_list) - set(new_properties_list))
-        
+        self.properties_list = np.unique(self.properties_list+np.unique(new_properties_list).tolist()).tolist()
+
         if not 'Max Cell Type' in self.properties_list:
             if any(['Main_Cell_Types' in i for i in self.properties_list]):
                 self.properties_list.append('Max Cell Type')
-
-
-
 
 
 class VisiumSlide(DSASlide):
@@ -510,7 +495,7 @@ class VisiumSlide(DSASlide):
         job_id = self.girder_handler.gc.post(f'/slicer_cli_web/{self.change_level_plugin["plugin_name"]}/run',
                                     parameters = {
                                         'rds_file': counts_file,
-                                        'definitions_file': self.change_level_plugin["plugin_name"],
+                                        'definitions_file': self.change_level_plugin["definitions_file"],
                                         'image_id': self.item_id,
                                         'change_type': json.dumps(change_type),
                                         'girderApiUrl': self.girder_handler.apiUrl,

@@ -1684,7 +1684,7 @@ class LayoutHandler:
                             id = {'type':'cell-subtype-drop','index':0},
                             options = [
                                 {'label': i.split(' --> ')[-1], 'value': i.split(' --> ')[-1]}
-                                for i in wsi.properties_list if 'Main_Cell_Types' in i
+                                for i in wsi.properties_list if 'Main_Cell_Types' in i and not i.replace('Main_Cell_Types','Cell_Subtypes') in wsi.properties_list
                             ],
                             value = [],
                             multi = True,
@@ -4184,6 +4184,8 @@ class GirderHandler:
         if folder is None:
             # Checking user public folder by default
             public_folder_path = f'/user/{self.username}/Public'
+        else:
+            public_folder_path = f'/user/{self.username}/Public/{folder}'
         
         public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
         public_folder_items = self.gc.get(f'/resource/{public_folder_id}/items?token={self.user_token}',parameters= {'type':'folder','limit':10000})
