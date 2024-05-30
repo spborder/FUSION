@@ -1737,10 +1737,11 @@ class FUSION:
         """
         frame_label_disable = [no_update]*len(ctx.outputs_list[-2])
         viewport_store_data = ['']*len(ctx.outputs_list[-1])
-
-        print(bounds)
+        cell_view_type = get_pattern_matching_value(cell_view_type)
+        if cell_view_type is None:
+            cell_view_type = 'channel_hist'
         
-        if update_data:
+        if update_data or ctx.triggered_id=='roi-view-data':
             if not self.wsi is None:
                 if not bounds is None:
                     if len(bounds)==2:
@@ -1764,6 +1765,11 @@ class FUSION:
                 frame_label = get_pattern_matching_value(frame_label)
                 if len(frame_list)<2:
                     frame_label = None
+                
+                frame_list = get_pattern_matching_value(frame_list)
+                print(f'frame_list: {frame_list}')
+                if frame_list is None:
+                    frame_list = [self.wsi.channel_names[0]]
 
                 if update_data:
                     if self.wsi.spatial_omics_type=='Visium':
@@ -1772,13 +1778,7 @@ class FUSION:
 
                     elif self.wsi.spatial_omics_type=='CODEX':
                         # Returns dictionary of intersecting tissue frame intensities
-                        if len(cell_view_type)==0:
-                            cell_view_type = 'channel_hist'
-                        else:
-                            cell_view_type = cell_view_type[0]
-                            if cell_view_type is None:
-                                cell_view_type = 'channel_hist'
-
+                        print(cell_view_type)
                         intersecting_ftus, intersecting_ftu_polys = self.wsi.update_viewport_data(bounds_box,cell_view_type,frame_list)
                     
                     self.current_ftus = intersecting_ftus
@@ -1844,6 +1844,7 @@ class FUSION:
 
                                         viewport_store_data[f]['data'] = counts_data.to_dict('records')
                                         viewport_store_data[f]['count'] = len(counts_dict_list)
+                                        viewport_store_data[f]['view_type'] = cell_view_type
                                 
                                 elif cell_view_type == 'features':
                                     
@@ -1883,10 +1884,11 @@ class FUSION:
                                             counts_data = pd.DataFrame.from_records(counts_data_list)
 
                                             viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                            viewport_store_data[f]['count'] = len(counts_data_list)
                                         else:
                                             viewport_store_data[f]['data'] = []
-                                            viewport_store_data[f]['count'] = len(counts_data_list)
+
+                                        viewport_store_data[f]['count'] = len(counts_data_list)
+                                        viewport_store_data[f]['view_type'] = cell_view_type
 
                                 elif cell_view_type == 'cell':
                                     counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
@@ -1918,10 +1920,11 @@ class FUSION:
                                         counts_data = pd.DataFrame.from_records(counts_data_list)
 
                                         viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                        viewport_store_data[f]['count'] = len(counts_data_list)
                                     else:
                                         viewport_store_data[f]['data'] = []
-                                        viewport_store_data[f]['count'] = len(counts_data_list)
+
+                                    viewport_store_data[f]['count'] = len(counts_data_list)
+                                    viewport_store_data[f]['view_type'] = cell_view_type
 
                 else:
                     current_data = get_pattern_matching_value(current_data)
@@ -1942,16 +1945,15 @@ class FUSION:
 
                         elif self.wsi.spatial_omics_type=='CODEX':
                             
+                            counts_data = pd.DataFrame.from_records(counts_data)
+
                             if cell_view_type == 'channel_hist':
-                                counts_data = pd.DataFrame.from_records(counts_data)
                                 first_chart_label = 'Channel Intensity Histogram'
 
                             elif cell_view_type == 'features':
-                                counts_data = pd.DataFrame.from_records(counts_data)
                                 first_chart_label = 'Nucleus Features'
 
                             elif cell_view_type == 'cell':
-                                counts_data = pd.DataFrame.from_records(counts_data)
                                 first_chart_label = 'Cell Compositions'
 
                         if not counts_data.empty:
@@ -2206,7 +2208,7 @@ class FUSION:
                                     ],
                                     style = {'marginTop':'10px'})
                                     ],
-                                    label = f+f' ({len(intersecting_ftus[f])})',tab_id = f'tab_{len(tab_list)}'
+                                    label = f+f' ({viewport_store_data[f]["count"]})',tab_id = f'tab_{len(tab_list)}'
                                 )
 
                             tab_list.append(f_tab)
@@ -6638,12 +6640,11 @@ class FUSION:
     def update_question_div(self,question_tab,logged_in_user):
 
         logged_in_username = logged_in_user.split(' ')[-1]
-        print(f'logged_in_username: {logged_in_username}')
         # Updating the questions that the user sees in the usability questions tab
         usability_info = self.dataset_handler.update_usability()
         #TODO: Verify that this value is robust to multiple concurrent users
         # Username is also present in the welcome div thing
-        user_info = self.dataset_handler.check_usability(self.dataset_handler.username)
+        user_info = self.dataset_handler.check_usability(logged_in_username)
         user_type = user_info['type']
 
         # Getting questions for that type

@@ -659,20 +659,6 @@ class CODEXSlide(DSASlide):
                 intersecting_ftus[f'Marked FTUs: {marked_idx+1}'], intersecting_ftu_polys[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']], [shape(i['geometry']) for i in marked_ftu['geojson']['features']]
 
         elif view_type=='channel_hist':
-            if len(frame_list)==0:
-                # For empty list
-                frame_list = [self.channel_names[0]]
-            else:
-                # For first list element
-                frame_list = frame_list[0]
-                if not frame_list is None:
-                    if len(frame_list)==0:
-                        frame_list = [self.channel_names[0]]
-                    if any([type(i)==list for i in frame_list]):
-                        # channel histograms are only for general tissue
-                        frame_list = [self.channel_names[0]]
-                else:
-                    frame_list = [self.channel_names[0]]
 
             intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,frame_list)
 
