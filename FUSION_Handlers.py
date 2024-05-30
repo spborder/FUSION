@@ -1350,15 +1350,12 @@ class LayoutHandler:
 
         return report_children
         
-    def gen_usability_report(self,dataset_handler):
+    def gen_usability_report(self,user_info,usability_info):
 
         # Generate a usability report/questionnaire based on the user type
         # If the user is able to click the usability button they are already in the 
         # usability study, it's just a question of whether they are an admin or a 
         # user and then if they are a user, what type of user are they?
-
-        user_info = dataset_handler.check_usability(dataset_handler.username)
-        usability_info = dataset_handler.usability_users
 
         usability_children = []
         if user_info['type']=='admin':

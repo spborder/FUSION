@@ -375,7 +375,7 @@ class FUSION:
         #self.app.run_server(host = '0.0.0.0',debug=False,use_reloader=False,port=8000)
         serve(self.app.server,host='0.0.0.0',port=8000,threads = 10)
 
-    def view_instructions(self,n,n2,is_open):
+    def view_instructions(self,n,n2,is_open,user_data_store):
         # Opening collapse and populating internal div 
         if ctx.triggered_id['type']=='collapse-descrip':
             collapse_children = self.layout_handler.description_dict[self.current_page]
@@ -383,7 +383,8 @@ class FUSION:
         elif ctx.triggered_id['type']=='usability-butt':
             if n2:
                 self.dataset_handler.update_usability()
-                collapse_children = self.layout_handler.gen_usability_report(self.dataset_handler)
+                user_info = user_data_store['user_info']
+                collapse_children = self.layout_handler.gen_usability_report(user_info,self.dataset_handler.usability_users)
                 if not is_open[-1]:
                     usability_color = ['success']
                 else:
@@ -515,7 +516,8 @@ class FUSION:
              Output({'type':'usability-butt','index':ALL},'color')],
             [Input({'type':'collapse-descrip','index':ALL},'n_clicks'),
              Input({'type':'usability-butt','index':ALL},'n_clicks')],
-            [State({'type':'collapse-content','index':ALL},'is_open')],
+            [State({'type':'collapse-content','index':ALL},'is_open'),
+             State('user-store','data')],
             prevent_initial_call=True
         )(self.view_instructions)
 
@@ -6642,7 +6644,6 @@ class FUSION:
         logged_in_username = logged_in_user.split(' ')[-1]
         # Updating the questions that the user sees in the usability questions tab
         usability_info = self.dataset_handler.update_usability()
-        #TODO: Verify that this value is robust to multiple concurrent users
         # Username is also present in the welcome div thing
         user_info = self.dataset_handler.check_usability(logged_in_username)
         user_type = user_info['type']
@@ -6660,7 +6661,6 @@ class FUSION:
 
                 # Checking if the user has already responded to this question
                 if f'Level {level_index}' in list(user_info['responses'].keys()):
-                    #TODO: Make this more robust, checks for if responses are there but doesn't check that the number is the same or anything
                     if len(user_info['responses'][f'Level {level_index}'])>q_idx:
                         q_val = user_info['responses'][f'Level {level_index}'][q_idx]
                     else:
@@ -6809,7 +6809,6 @@ class FUSION:
                 html.Div(id = {'type':'questions-submit-alert','index':0})
                 ])
             )
-
 
         question_return = dbc.Form(question_list,style = {'maxHeight':'55vh','overflow':'scroll'})
 
