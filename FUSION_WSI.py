@@ -505,7 +505,25 @@ class VisiumSlide(DSASlide):
 
         return job_id
 
+    def update_viewport_data(self,bounds_box):
+        """
+        Find intersecting structures, including marked and manual.
 
+        Grabbing Main_Cell_Types, Cell_States, and (TODO) Gene_Counts
+        """
+        intersecting_ftus = {}
+        intersecting_ftu_polys = {}
+
+        for ftu in self.ftu_names:
+            intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
+
+        for m_idx,m_ftu in enumerate(self.manual_rois):
+            intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
+
+        for marked_idx, marked_ftu in enumerate(self.marked_ftus):
+            intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
+
+        return intersecting_ftus, intersecting_ftu_polys
 
 class CODEXSlide(DSASlide):
     # Additional properties needed for CODEX slides are:
@@ -621,4 +639,56 @@ class CODEXSlide(DSASlide):
         styled_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style='+json.dumps(style_dict)
 
         return styled_url
+
+    def update_viewport_data(self,bounds_box,view_type,frame_list,):
+        """
+        Finding viewport data according to view selection
+        """
+
+        intersecting_ftus = {}
+        intersecting_ftu_polys = {}
+        if view_type in ['cell','features']:
+            
+            for ftu in self.ftu_names:
+                intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
+            
+            for m_idx, m_ftu in enumerate(self.manual_rois):
+                intersecting_ftus[f'Manual ROI: {m_idx+1}'], intersecting_ftu_polys[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']], [shape(i['geometry']) for i in m_ftu['geojson']['features']]
+
+            for marked_idx, marked_ftu in enumerate(self.marked_ftus):
+                intersecting_ftus[f'Marked FTUs: {marked_idx+1}'], intersecting_ftu_polys[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']], [shape(i['geometry']) for i in marked_ftu['geojson']['features']]
+
+        elif view_type=='channel_hist':
+            if len(frame_list)==0:
+                # For empty list
+                frame_list = [self.channel_names[0]]
+            else:
+                # For first list element
+                frame_list = frame_list[0]
+                if not frame_list is None:
+                    if len(frame_list)==0:
+                        frame_list = [self.channel_names[0]]
+                    if any([type(i)==list for i in frame_list]):
+                        # channel histograms are only for general tissue
+                        frame_list = [self.channel_names[0]]
+                else:
+                    frame_list = [self.channel_names[0]]
+
+            intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,frame_list)
+
+
+        return intersecting_ftus, intersecting_ftu_polys
+
+
+
+
+
+
+
+
+
+
+
+
+
 

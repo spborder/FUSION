@@ -243,7 +243,7 @@ class LayoutHandler:
                 ),
                 html.Div(
                     dcc.Store(
-                        id = {'type':'cluster-label-store','index':0},
+                        id = {'type':'viewport-store-data','index':0},
                         storage_type='memory',
                         data = []
                     )
