@@ -375,6 +375,11 @@ class LayoutHandler:
             dbc.Row([
                 html.P('Use this tab to dynamically view clustering results of morphological properties for select FTUs')
             ]),
+            dcc.Store(
+                id = 'cluster-store',
+                data = json.dumps({'clustering_data':[],'feature_data':[],'umap_df':[]}),
+                storage_type = 'memory'
+            ),
             html.Hr(),
             dbc.Row(html.Div(id='get-data-div',style={'display':'flex'})),
             html.Hr(),
@@ -912,7 +917,7 @@ class LayoutHandler:
                                     'height':'100%',
                                     'width':'100%',
                                     'display':'flex',
-                                    'flex-direction':'column',
+                                    'flex-direction':'row',
                                     'flex-grow':'0'
                                 }
                             )
@@ -929,9 +934,9 @@ class LayoutHandler:
 
     def gen_report_child(self,feature_data,child_type):
 
-        # Generate new report of feature data
+        # Generate new report of feature data        
+        feature_data = pd.DataFrame.from_records(feature_data).copy()
         unique_labels = np.unique(feature_data['label'].tolist()).tolist()
-        feature_data = feature_data.copy()
 
         if type(unique_labels[0]) in [int,float]:
             return 'Plot report only implemented for string labels!'
@@ -1391,7 +1396,7 @@ class LayoutHandler:
             usability_children.extend([
                 dbc.Row([
                     dbc.Col([
-                        html.Div(html.H3(f'Admin View: {dataset_handler.username}')),
+                        html.Div(html.H3(f'Admin View: {user_info["login"]}')),
                         html.Div(
                             dcc.Graph(
                                 figure = go.Figure(response_burst)
@@ -2289,7 +2294,7 @@ class LayoutHandler:
 
         return user_ftu_labels_children
 
-    def gen_builder_layout(self, dataset_handler):
+    def gen_builder_layout(self, dataset_handler, user_info):
 
         # This builds the layout for the Dataset Builder functionality, 
         # allowing users to select which datasets/slides are incorporated into their 
@@ -2929,7 +2934,7 @@ class LayoutHandler:
         self.layout_dict['welcome'] = welcome_layout
         self.description_dict['welcome'] = welcome_description
 
-    def gen_initial_layout(self,slide_names,initial_user:str):
+    def gen_initial_layout(self,slide_names,initial_user,default_slides):
 
         # welcome layout after initialization and information and buttons to go to other areas
         # Header
@@ -3008,7 +3013,7 @@ class LayoutHandler:
         )
 
         # Turning off upload capability if user is "fusionguest"
-        if initial_user=='fusionguest':
+        if initial_user['login']=='fusionguest':
             upload_disable = True
         else:
             upload_disable = False
@@ -3089,13 +3094,13 @@ class LayoutHandler:
                         style={'marginLeft':'5px','display':'none'},
                         disabled=False
                     ),
-                    html.Div(id='logged-in-user',children = [f'Welcome, {initial_user}!']),
+                    html.Div(id='logged-in-user',children = [f'Welcome, {initial_user["login"]}!']),
                     html.Div(
                         id = 'user-store-div',
                         children = [
                             dcc.Store(
                                 id = 'user-store',
-                                data = {'userId':initial_user},
+                                data = json.dumps(initial_user),
                                 storage_type = 'memory'
                             )
                         ]
@@ -3155,6 +3160,11 @@ class LayoutHandler:
                             id = 'slide-info-store',
                             data = [],
                             storage_type='memory'
+                        ),
+                        dcc.Store(
+                            id = 'visualization-session-store',
+                            data = json.dumps(default_slides),
+                            storage_type = 'memory'
                         ),
                         dcc.Interval(
                             id = 'slide-load-interval',
@@ -3389,7 +3399,7 @@ class GirderHandler:
 
         self.usability_group = '65e5e9ceadb89a58fea146ba'
 
-        user_info, user_details = self.authenticate(username, password)
+        self.user_info, self.user_details = self.authenticate(username, password)
 
         # Name of plugin used for fetching clustering/plotting metadata
         self.get_cluster_data_plugin = 'samborder2256_get_cluster_data_latest/clustering_data'
@@ -3411,9 +3421,10 @@ class GirderHandler:
 
             user_info = self.check_usability(self.username)
             self.get_token()
+            self.user_details['token'] = self.user_token
 
             if not self.base_path is None:
-                self.initialize_folder_structure()
+                self.initialize_folder_structure(self.username)
 
             return user_info, self.user_details
         
@@ -3422,6 +3433,7 @@ class GirderHandler:
 
             user_info = self.check_usability(self.username.lower())
             self.get_token()
+            self.user_details['token'] = self.user_token
 
             if not self.base_path is None:
                 self.initialize_folder_structure()
@@ -3538,10 +3550,10 @@ class GirderHandler:
 
         return cli
 
-    def update_folder_structure(self):
+    def update_folder_structure(self,username):
 
         # Adding Public folders if any "FUSION_Upload" are in there
-        user_folder_path = f'/user/{self.username}/Public'
+        user_folder_path = f'/user/{username}/Public'
         folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder_path})['_id']
         folder_contents = self.gc.get(f'/resource/{folder_id}/items',parameters={'type':'folder','limit':10000})
         folder_ids = [i['folderId'] for i in folder_contents]
@@ -3572,7 +3584,7 @@ class GirderHandler:
                         elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
 
-    def initialize_folder_structure(self,path=None,path_type=None):
+    def initialize_folder_structure(self,username,path=None,path_type=None):
 
         if not path is None and not path_type is None:
             self.base_path = path
@@ -3640,7 +3652,7 @@ class GirderHandler:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
     
         # Adding Public folders if any "FUSION_Upload" are in there
-        user_folder_path = f'/user/{self.username}/Public'
+        user_folder_path = f'/user/{username}/Public'
         folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder_path})['_id']
         folder_contents = self.gc.get(f'/resource/{folder_id}/items',parameters={'type':'folder','limit':10000})
         folder_ids = [i['folderId'] for i in folder_contents]
@@ -3780,10 +3792,10 @@ class GirderHandler:
 
         return image_region
 
-    def get_user_folder_id(self,folder_name:str):
+    def get_user_folder_id(self,folder_name:str,username:str):
 
         # Finding current user's private folder and returning the parent ID
-        user_folder = f'/user/{self.gc.get("/user/me")["login"]}/{folder_name}'
+        user_folder = f'/user/{username}/{folder_name}'
         print(f'user_folder: {user_folder}')
         try:
             folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder})['_id']
@@ -4109,18 +4121,18 @@ class GirderHandler:
             ]
         }
 
-    def load_clustering_data(self):
+    def load_clustering_data(self,user_info):
         # Grabbing feature clustering info from user's public folder
         try:
-            public_folder_id = self.gc.get('/resource/lookup',parameters={'path':f'/user/{self.username}/Public'})['_id']
-            public_folder_contents = self.gc.get(f'/resource/{public_folder_id}/items?token={self.user_token}',parameters={'type':'folder','limit':10000})
+            public_folder_id = self.gc.get('/resource/lookup',parameters={'path':f'/user/{user_info["login"]}/Public'})['_id']
+            public_folder_contents = self.gc.get(f'/resource/{public_folder_id}/items?token={user_info["token"]}',parameters={'type':'folder','limit':10000})
 
             public_folder_names = [i['name'] for i in public_folder_contents]
             if 'FUSION_Clustering_data.json' in public_folder_names:
                 print('Found clustering data')
                 cluster_data_id = public_folder_contents[public_folder_names.index('FUSION_Clustering_data.json')]['_id']
 
-                cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={self.user_token}').content)
+                cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={user_info["token"]}').content)
                 try:
                     cluster_data = pd.DataFrame.from_dict(cluster_json)
 
@@ -4140,13 +4152,13 @@ class GirderHandler:
             # Maybe just load the default clustering data if there's an error?
             return pd.DataFrame()
 
-    def save_to_user_folder(self,save_object, output_path = None):
+    def save_to_user_folder(self,save_object, username, output_path = None):
 
         if not os.path.exists('/tmp'):
             os.makedirs('/tmp')
 
         if output_path is None:
-            output_path = f'/user/{self.username}/Public'
+            output_path = f'/user/{username}/Public'
         output_path_id = self.gc.get('/resource/lookup',parameters={'path':output_path})['_id']
 
         # Removing file if there's a duplicate
@@ -4188,13 +4200,13 @@ class GirderHandler:
 
         return upload_file_response
 
-    def grab_from_user_folder(self,filename,folder = None):
+    def grab_from_user_folder(self,filename,username,folder = None):
         
         if folder is None:
             # Checking user public folder by default
-            public_folder_path = f'/user/{self.username}/Public'
+            public_folder_path = f'/user/{username}/Public'
         else:
-            public_folder_path = f'/user/{self.username}/Public/{folder}'
+            public_folder_path = f'/user/{username}/Public/{folder}'
         
         public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
         public_folder_items = self.gc.get(f'/resource/{public_folder_id}/items?token={self.user_token}',parameters= {'type':'folder','limit':10000})

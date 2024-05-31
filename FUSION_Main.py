@@ -144,9 +144,7 @@ class FUSION:
         self.morphometrics_names = self.dataset_handler.morpho_names
 
         # Load clustering data
-        self.clustering_data = pd.DataFrame()
         self.filter_labels = []
-        self.umap_df = None
         self.reports_generated = {}
         
         # Initializing fusey_data as empty
@@ -160,9 +158,6 @@ class FUSION:
 
         # FTU settings
         self.wsi = None
-        self.current_slides = self.dataset_handler.default_slides
-        for i in self.current_slides:
-            i['included'] = True
         if not self.wsi is None:
             self.ftus = self.wsi.ftu_names
             self.ftu_colors = self.wsi.ftu_colors
@@ -376,6 +371,9 @@ class FUSION:
         serve(self.app.server,host='0.0.0.0',port=8000,threads = 10)
 
     def view_instructions(self,n,n2,is_open,user_data_store):
+
+        user_data_store = json.loads(user_data_store)
+
         # Opening collapse and populating internal div 
         if ctx.triggered_id['type']=='collapse-descrip':
             collapse_children = self.layout_handler.description_dict[self.current_page]
@@ -401,8 +399,9 @@ class FUSION:
             return not is_open
         return is_open
 
-    def update_page(self,pathname):
+    def update_page(self,pathname, user_data, vis_sess_store):
         
+        vis_sess_store = json.loads(vis_sess_store)
         pathname = pathname[1:]
         print(f'Navigating to {pathname}')
 
@@ -418,13 +417,13 @@ class FUSION:
                 if not pathname=='dataset-builder':
                     if pathname=='dataset-uploader':
                         # Double-checking that a user is logged in before giving access to dataset-uploader
-                        if self.dataset_handler.username=='fusionguest':
+                        if user_data['login']=='fusionguest':
                             self.current_page = 'welcome'
                     container_content = self.layout_handler.layout_dict[self.current_page]
                 else:
                     # Checking if there was any new slides added via uploader (or just added externally)
-                    self.dataset_handler.update_folder_structure()
-                    self.layout_handler.gen_builder_layout(self.dataset_handler)
+                    self.dataset_handler.update_folder_structure(user_data['login'])
+                    self.layout_handler.gen_builder_layout(self.dataset_handler,user_data['login'])
 
                     container_content = self.layout_handler.layout_dict[self.current_page]
 
@@ -435,16 +434,15 @@ class FUSION:
                 self.filter_vals = None
                 self.layout_handler.gen_vis_layout(
                     self.wsi
-                    )
-                self.clustering_data = pd.DataFrame()
+                )
 
-                # Checking self.current_slides for any slides, if there aren't any 'included'==True then revert to default set
-                included_slides = [i['included'] for i in self.current_slides if 'included' in i]
+                # Checking vis_sess_store for any slides, if there aren't any 'included'==True then revert to default set
+                included_slides = [i['included'] for i in vis_sess_store if 'included' in i]
                 if len(included_slides)==0:
-                    self.current_slides = []
+                    vis_sess_store = []
                     for s in self.dataset_handler.default_slides:
                         s['included'] = True
-                        self.current_slides.append(s)
+                        vis_sess_store.append(s)
 
                 container_content = self.layout_handler.layout_dict[self.current_page]
 
@@ -458,7 +456,7 @@ class FUSION:
         else:
             slide_style = {'display':'none'}
 
-        return container_content, slide_style, slide_select_value
+        return container_content, slide_style, slide_select_value, json.dumps(vis_sess_store)
 
     def open_nav_collapse(self,n,is_open):
         if n:
@@ -504,8 +502,11 @@ class FUSION:
         self.app.callback(
             [Output('container-content','children'),
              Output('slide-select-card','style'),
-             Output('slide-select','value')],
+             Output('slide-select','value'),
+             Output('visualization-session-store','data')],
              Input('url','pathname'),
+             [State('user-store','data'),
+              State('visualization-session-store','data')],
              prevent_initial_call = True
         )(self.update_page)
 
@@ -755,10 +756,13 @@ class FUSION:
              Output('label-info','children'),
              Output('filter-info','children'),
              Output('plot-report-tab','active_tab'),
-             Output('download-plot-butt','disabled')],
+             Output('download-plot-butt','disabled'),
+             Output('cluster-store','data')],
             [State('feature-select-tree','checked'),
              State('filter-select-tree','checked'),
-             State('cell-states-clustering','value')],
+             State('cell-states-clustering','value'),
+             State('cluster-store','data'),
+             State('user-store','data')],
             prevent_initial_call=True
         )(self.update_graph)
 
@@ -766,16 +770,19 @@ class FUSION:
         self.app.callback(
             [Input('cluster-graph','clickData'),
             Input('cluster-graph','selectedData')],
+            State('cluster-store','data'),
             [Output('selected-image','figure'),
             Output('selected-cell-types','figure'),
             Output('selected-cell-states','figure'),
-            Output('selected-image-info','children')],
+            Output('selected-image-info','children'),
+            Output('cluster-store','data')],
             prevent_initial_call=True
         )(self.update_selected)
 
         # Updating cell states bar chart from within the selected point(s) in morphometrics cluster plot
         self.app.callback(
             Input('selected-cell-types','clickData'),
+            State('cluster-store','data'),
             Output('selected-cell-states','figure'),
             prevent_initial_call=True
         )(self.update_selected_state_bar)
@@ -800,6 +807,7 @@ class FUSION:
         # Updating options for downloads
         self.app.callback(
             Input('data-select','value'),
+            State('visualization-session-store','data'),
             Output('data-options','children'),
             prevent_initial_call = True
         )(self.update_download_options)
@@ -854,9 +862,13 @@ class FUSION:
              Output('label-select','value'),
              Output('filter-select-tree','data'),
              Output('download-plot-data-div','style'),
-             Output('plugin-ga-track', 'children')],
+             Output('plugin-ga-track', 'children'),
+             Output('cluster-store','data')],
             [Input('tools-tabs','active_tab'),
              Input({'type':'get-clustering-butt','index':ALL},'n_clicks')],
+            [State('cluster-store','data'),
+             State('visualization-session-store','data'),
+             State('user-store','data')],
             prevent_initial_call=True
         )(self.populate_cluster_tab)
 
@@ -864,6 +876,7 @@ class FUSION:
         self.app.callback(
             Output('plot-report-div','children'),
             Input('plot-report-tab','active_tab'),
+            State('cluster-store','data'),
             prevent_initial_call = True
         )(self.update_plot_report)
 
@@ -871,6 +884,7 @@ class FUSION:
         self.app.callback(
             Output('download-plot-data','data'),
             Input('download-plot-butt','n_clicks'),
+            State('cluster-store','data'),
             prevent_initial_call = True
         )(self.download_plot_data)
 
@@ -878,8 +892,11 @@ class FUSION:
         self.app.callback(
             [Output({'type':'cluster-marker-div','index':ALL},'children'),
              Output({'type':'cluster-markers-butt','index':ALL},'disabled'),
-             Output('plugin-ga-track', 'children')],
+             Output('plugin-ga-track', 'children'),
+             Output('user-store','data')],
             Input({'type':'cluster-markers-butt','index':ALL},'n_clicks'),
+            [State('cluster-store','data'),
+             State('user-store','data')],
             prevent_initial_call = True
         )(self.start_cluster_markers)
 
@@ -888,6 +905,7 @@ class FUSION:
             [Output({'type':'markers-interval','index':ALL},'disabled'),
              Output({'type':'marker-logs-div','index':ALL},'children')],
             Input({'type':'markers-interval','index':ALL},'n_intervals'),
+            State('user-store','data'),
             prevent_initial_call = True
         )(self.update_cluster_logs)
 
@@ -1048,9 +1066,11 @@ class FUSION:
         # Initializing plot after selecting dataset(s)
         self.app.callback(
             Input('dataset-table','selected_rows'),
+            State('visualization-session-store','data'),
             [Output('selected-dataset-slides','children'),
              Output('slide-metadata-plots','children'),
-             Output('slide-select','options')],
+             Output('slide-select','options'),
+             Output('visualization-session-store','data')],
              prevent_initial_call=True
         )(self.initialize_metadata_plots)
 
@@ -1060,11 +1080,13 @@ class FUSION:
              Input({'type':'cell-meta-drop','index':ALL},'value'),
              Input({'type':'agg-meta-drop','index':ALL},'value'),
              Input({'type':'slide-dataset-table','index':ALL},'selected_rows')],
+             State('visualization-session-store','data'),
              [Output('slide-select','options'),
              Output({'type':'meta-plot','index':ALL},'figure'),
              Output({'type':'cell-meta-drop','index':ALL},'options'),
              Output({'type':'cell-meta-drop','index':ALL},'disabled'),
-             Output({'type':'current-slide-count','index':ALL},'children')],
+             Output({'type':'current-slide-count','index':ALL},'children'),
+             Output('visualization-session-store','data')],
              prevent_initial_call = True
         )(self.update_metadata_plot)
 
@@ -1088,7 +1110,9 @@ class FUSION:
         # Creating upload components depending on omics type
         self.app.callback(
             Input('upload-type','value'),
-            Output('upload-requirements','children'),
+            [Output('upload-requirements','children'),
+             Output('user-store','data')],
+            State('user-store','data'),
             prevent_initial_call=True
         )(self.update_upload_requirements)
 
@@ -1098,6 +1122,7 @@ class FUSION:
              Input({'type':'omics-upload','index':ALL},'uploadComplete'),
              Input({'type':'wsi-upload','index':ALL},'fileTypeFlag'),
              Input({'type':'omics-upload','index':ALL},'fileTypeFlag')],
+             State('user-store','data'),
             [Output('slide-qc-results','children'),
              Output('slide-thumbnail-holder','children'),
              Output({'type':'wsi-upload-div','index':ALL},'children'),
@@ -1105,30 +1130,34 @@ class FUSION:
              Output('structure-type','disabled'),
              Output('post-upload-row','style'),
              Output('upload-type','disabled'),
-             Output('plugin-ga-track','children')],
+             Output('plugin-ga-track','children'),
+             Output('user-store','data')],
             prevent_initial_call=True
         )(self.upload_data)
 
         # Adding slide metadata
         self.app.callback(
             Input({'type':'add-slide-metadata','index':ALL},'n_clicks'),
-            State({'type':'slide-qc-table','index':ALL},'data'),
+            [State({'type':'slide-qc-table','index':ALL},'data'),
+             State('user-store','data')],
             Output({'type':'slide-qc-table','index':ALL},'data'),
             prevent_initial_call = True
         )(self.add_slide_metadata)
 
         # Starting segmentation for selected structures
         self.app.callback(
-            output = [
+            [
                 Output('seg-woodshed','children'),
                 Output('structure-type','disabled'),
                 Output('segment-butt','disabled'),
-                Output({'type':'seg-continue-butt','index':ALL},'disabled')
+                Output({'type':'seg-continue-butt','index':ALL},'disabled'),
+                Output('user-store','data')
             ],
-            inputs = [
+            [
                 Input('structure-type','value'),
                 Input('segment-butt','n_clicks')
             ],
+            State('user-store','data'),
             prevent_initial_call = True
         )(self.start_segmentation)
 
@@ -1144,20 +1173,22 @@ class FUSION:
             Output({'type':'seg-file-accordion','index':ALL},'children'),
             Input({'type':'seg-file-upload','index':ALL},'contents'),
             [State({'type':'seg-file-accordion','index':ALL},'children'),
-             State({'type':'seg-file-upload','index':ALL},'filename')],
+             State({'type':'seg-file-upload','index':ALL},'filename'),
+             State('user-store','data')],
             prevent_initial_call = True
         )(self.new_seg_upload)
 
         # Updating log output for segmentation
         self.app.callback(
-            output = [
+            [
                 Output({'type':'seg-logs','index':ALL},'children'),
                 Output({'type':'seg-log-interval','index':ALL},'disabled'),
                 Output({'type':'seg-continue-butt','index':ALL},'disabled')
             ],
-            inputs = [
+            [
                 Input({'type':'seg-log-interval','index':ALL},'n_intervals')
             ],
+            State('user-store','data'),
             prevent_initial_call = True
         )(self.update_logs)
 
@@ -1176,7 +1207,8 @@ class FUSION:
                 State({'type':'organ-select','index':ALL},'value'),
                 State({'type':'gene-selection-method','index':ALL},'value'),
                 State({'type':'gene-selection-n','index':ALL},'value'),
-                State({'type':'gene-selection-list','index':ALL},'value')
+                State({'type':'gene-selection-list','index':ALL},'value'),
+                State('user-store','data')
             ],
             prevent_initial_call = True
         )(self.post_segmentation)
@@ -1191,7 +1223,8 @@ class FUSION:
              Input({'type':'ex-ftu-slider','index':ALL},'value'),
              Input({'type':'sub-thresh-slider','index':ALL},'value'),
              Input({'type':'sub-comp-method','index':ALL},'value')],
-             State({'type':'go-to-feat','index':ALL},'disabled'),
+             [State({'type':'go-to-feat','index':ALL},'disabled'),
+              State('user-store','data')],
              [Output({'type':'ex-ftu-img','index':ALL},'figure'),
               Output({'type':'sub-thresh-slider','index':ALL},'marks'),
               Output({'type':'feature-items','index':ALL},'children'),
@@ -1233,25 +1266,31 @@ class FUSION:
         self.app.callback(
             [Input({'type':'start-feat','index':ALL},'n_clicks'),
              Input({'type':'skip-feat','index':ALL},'n_clicks')],
-            Output({'type':'feat-logs','index':ALL},'children'),
+            [Output({'type':'feat-logs','index':ALL},'children'),
+             Output('user-store','data')],
             [State({'type': 'include-ftu-drop','index':ALL},'value'),
-             State({'type': 'include-feature-drop','index':ALL},'value')],
+             State({'type': 'include-feature-drop','index':ALL},'value'),
+             State('user-store','data')],
             prevent_initial_call=True
         )(self.run_feature_extraction)
 
         # Updating logs for feature extraction
         self.app.callback(
-            output = [
+            [
                 Output({'type':'feat-interval','index':ALL},'disabled'),
                 Output({'type':'feat-log-output','index':ALL},'children')
             ],
-            inputs = [
+            [
                 Input({'type':'feat-interval','index':ALL},'n_intervals')
             ],
+            State('user-store','data'),
             prevent_initial_call = True
         )(self.update_feat_logs)
     
     def get_tutorial(self,a_click, sub_click,current_parts):
+        """
+        Getting next slide deck tutorial
+        """
 
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
@@ -1329,7 +1368,11 @@ class FUSION:
 
         return new_slides, tutorial_name, slide_active_index, style_list, sub_parts, sub_parts_style
 
-    def initialize_metadata_plots(self,selected_dataset_list):
+    def initialize_metadata_plots(self,selected_dataset_list,vis_sess_store):
+        """
+        Creating plot and slide select divs in dataset-builder
+        """
+        vis_sess_store = json.loads(vis_sess_store)
 
         # Extracting metadata from selected datasets and plotting
         all_metadata_labels = []
@@ -1361,10 +1404,10 @@ class FUSION:
         #self.metadata = all_metadata
         all_metadata_labels = np.unique(all_metadata_labels)
         slide_dataset_df = pd.DataFrame.from_records(slide_dataset_dict)
-        self.current_slides = []
+        vis_sess_store = []
         for i in full_slides_list:
             i['included'] = True
-            self.current_slides.append(i)
+            vis_sess_store.append(i)
 
         # Defining cell_type_dropdowns
         cell_type_dropdowns = [
@@ -1436,12 +1479,17 @@ class FUSION:
             plot_div = html.Div()
 
         slide_rows = [list(range(len(slide_dataset_dict)))]
-        current_slide_count, slide_select_options = self.update_current_slides(slide_rows)
+        current_slide_count, slide_select_options, vis_sess_store = self.update_current_slides(slide_rows,vis_sess_store)
 
-        return drop_div, plot_div, slide_select_options
+        return drop_div, plot_div, slide_select_options, json.dumps(vis_sess_store)
 
-    def update_metadata_plot(self,new_meta,sub_meta,group_type,slide_rows):
-        
+    def update_metadata_plot(self,new_meta,sub_meta,group_type,slide_rows,vis_sess_store):
+        """
+        Plotting slide/dataset-level metadata in dataset-builder
+        """
+
+        vis_sess_store = json.loads(vis_sess_store)
+
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
 
@@ -1480,23 +1528,29 @@ class FUSION:
         except:
             cell_types_options = (no_update,no_update,no_update)
 
-        current_slide_count, slide_select_options = self.update_current_slides(slide_rows)
+        current_slide_count, slide_select_options, vis_sess_store = self.update_current_slides(slide_rows,vis_sess_store)
         #TODO: get_pattern_matching_value test here
+        """
         if type(new_meta)==list:
             if len(new_meta)>0:
                 new_meta = new_meta[0]
+        """
+        new_meta = get_pattern_matching_value(new_meta)
 
         #TODO: get_pattern_matching_value test here
+        """
         if type(group_type)==list:
             if len(group_type)>0:
                 group_type = group_type[0]
+        """
+        group_type = get_pattern_matching_value(group_type)
 
         #TODO: get_pattern_matching_value test here
         if not new_meta is None:
             if not len(new_meta)==0:
                 # Filtering out de-selected slides
-                present_slides = [s['name'] for s in self.current_slides]
-                included_slides = [t for t in present_slides if self.current_slides[present_slides.index(t)]['included']]                    
+                present_slides = [s['name'] for s in vis_sess_store]
+                included_slides = [t for t in present_slides if vis_sess_store]                    
 
                 dataset_metadata = []
                 for d_id in self.dataset_handler.slide_datasets:
@@ -1656,29 +1710,30 @@ class FUSION:
 
                     fig = go.Figure()
 
-                return [slide_select_options, [fig], cell_types_options, cell_types_turn_off,[current_slide_count]]
+                return [slide_select_options, [fig], cell_types_options, cell_types_turn_off,[current_slide_count], json.dumps(vis_sess_store)]
             else:
-                return [slide_select_options, [], [], [],[]]
+                return [slide_select_options, [], [], [],[], json.dumps(vis_sess_store)]
         else:
-            return [slide_select_options, [no_update], cell_types_options, cell_types_turn_off,[current_slide_count]]
+            return [slide_select_options, [no_update], cell_types_options, cell_types_turn_off,[current_slide_count], json.dumps(vis_sess_store)]
         
-    def update_current_slides(self,slide_rows):
-
+    def update_current_slides(self,slide_rows,current_session):
+        """
+        Adding slides to current slides from dataset-builder
+        """
         # Updating the current slides
         slide_options = []
         if len(slide_rows)>0:
             #TODO: get_pattern_matching_value test here
             if type(slide_rows[0])==list:
                 slide_rows = slide_rows[0]
-            for s in range(0,len(self.current_slides)):
+            for s in range(0,len(current_session)):
                 if s in slide_rows:
-                    self.current_slides[s]['included'] = True
+                    current_session[s]['included'] = True
                 else:
-                    self.current_slides[s]['included'] = False
+                    current_session[s]['included'] = False
                     
-            #slide_options = [{'label':i['name'],'value':i['name']} for i in self.current_slides if i['included']]
             slide_options = []
-            unique_folders = np.unique([s['folderId'] for s in self.current_slides if s['included']])
+            unique_folders = np.unique([s['folderId'] for s in current_session if s['included']])
             for f in unique_folders:
 
                 # Adding all the slides in the same folder under the same disabled folder label option (not selectable)
@@ -1699,7 +1754,7 @@ class FUSION:
                         'value':i['_id'],
                         'disabled':False
                     }
-                    for i in self.current_slides if i['included'] and i['folderId']==f
+                    for i in current_session if i['included'] and i['folderId']==f
                 ])
 
         if slide_options == []:
@@ -1731,12 +1786,14 @@ class FUSION:
                 ])
 
 
-        return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options
+        return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options, current_session
 
     def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,cluster_click,current_tab,update_data,frame_list,frame_label, cluster_eps, cluster_min_samples,current_data):
         """
         Updating data used for current viewport visualizations
         """
+        #TODO: Update this for CODEX and Regular vis
+
         frame_label_disable = [no_update]*len(ctx.outputs_list[-2])
         viewport_store_data = ['']*len(ctx.outputs_list[-1])
         cell_view_type = get_pattern_matching_value(cell_view_type)
@@ -2310,6 +2367,11 @@ class FUSION:
             raise exceptions.PreventUpdate
 
     def update_state_bar(self,cell_click):
+        """
+        View cell state proportions for clicked main cell type
+        
+        """
+
         if not cell_click is None:
             self.pie_cell = cell_click['points'][0]['label']
 
@@ -2358,6 +2420,9 @@ class FUSION:
             self.hex_color_key = {}
 
     def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style):
+        """
+        Updating overlay hideout property in GeoJSON layer used in self.ftu_style_handle        
+        """
 
         print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
 
@@ -2772,6 +2837,10 @@ class FUSION:
         return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children, gene_info_style, gene_info_components
 
     def update_cell_hierarchy(self,cell_clickData):
+        """
+        Updating cell cytoscape visualization        
+        """
+
         # Loading the cell-graphic and hierarchy image
         cell_graphic = './assets/cell_graphics/default_cell_graphic.png'
         cell_hierarchy = [
@@ -2804,7 +2873,9 @@ class FUSION:
         return cell_graphic, cell_hierarchy, cell_state_droptions, cell_name
 
     def get_neph_hover(self,neph_hover):
-
+        """
+        Getting color on nephron diagram and returning associated cell type
+        """
         if neph_hover is None:
             return False, no_update, no_update
         
@@ -2835,7 +2906,9 @@ class FUSION:
         return True, tool_bbox, tool_children
 
     def get_click_popup(self,ftu_click):
-
+        """
+        Controlling popup components when clicking on FTU in GeoJSON layer        
+        """
         if not ftu_click is None:
             self.clicked_ftu = ftu_click
             if 'unique_index' in ftu_click['properties']:
@@ -3222,7 +3295,9 @@ class FUSION:
             raise exceptions.PreventUpdate
         
     def gen_cyto(self,cell_val):
-
+        """
+        Generating cytoscape for selected cell type (referenced in self.update_cell_hierarchy)
+        """
         cyto_elements = []
 
         # Getting cell sub-types under that main cell
@@ -3312,7 +3387,9 @@ class FUSION:
         return cyto_elements
 
     def get_cyto_data(self,clicked):
-
+        """
+        Getting information for clicked node in cell hierarchy cytoscape vis.
+        """
         if not clicked is None:
             if 'ST' in clicked['id']:
                 table_data = self.table_df.dropna(subset=['CT/1/ABBR'])
@@ -3746,6 +3823,9 @@ class FUSION:
             raise exceptions.PreventUpdate
 
     def update_graph_label_children(self,leftover_labels):
+        """
+        Generating distribution/count for each label in current plot in morphological clustering tab
+        """
 
         if len(leftover_labels)>0:
             unique_labels = np.unique(leftover_labels).tolist()
@@ -3841,13 +3921,33 @@ class FUSION:
 
         return label_info_children, filter_info_children
 
-    def update_graph(self,gen_plot_butt,label,checked_feature,filter_labels,states_option):
+    def update_graph(self,gen_plot_butt,label,checked_feature,filter_labels,states_option,cluster_data_store,user_data_store):
+        """
+        Updating plot displayed in morphological clustering tab according to checked features, filters, and labels
+        """
         
         # Grabbing current metadata from user private folder        
         # Finding features checked:
 
         # Placeholder, replacing samples with missing cell types with 0 if cell features are included
         replace_missing = False
+        cluster_data_store = json.loads(cluster_data_store)
+        user_data_store = json.loads(user_data_store)
+
+        if not cluster_data_store['feature_data'] is None:
+            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+        else:
+            feature_data = None
+        
+        if not cluster_data_store['umap_df'] is None:
+            umap_df = pd.DataFrame.from_records(cluster_data_store['umap_df'])
+        else:
+            umap_df = None
+
+        if not cluster_data_store['clustering_data'] is None:   
+            clustering_data = pd.DataFrame.from_records(cluster_data_store['clustering_data'])
+        else:
+            clustering_data = None
 
         if ctx.triggered_id=='gen-plot-butt':
 
@@ -3857,21 +3957,22 @@ class FUSION:
             # Enabling download plot data button
             download_plot_disable = False
 
-            if self.clustering_data.empty:
+            if clustering_data.empty:
                 print(f'Getting new clustering data')
-                self.clustering_data = self.dataset_handler.load_clustering_data()
+                clustering_data = self.dataset_handler.load_clustering_data(user_data_store)
+                cluster_data_store['clustering_data'] = clustering_data.to_dict('records')
 
             feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
             cell_features = [i for i in feature_names if i in self.cell_names_key]
             feature_data = pd.DataFrame()
 
             if len(cell_features)>0:
-                feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+                feature_data = clustering_data.loc[:,[i for i in feature_names if i in clustering_data.columns]]
                 feature_data = feature_data.reset_index(drop=True)
 
-                if 'Main_Cell_Types' in self.clustering_data.columns:
-                    cell_values = self.clustering_data['Main_Cell_Types'].tolist()
-                    state_values = self.clustering_data['Cell_States'].tolist()
+                if 'Main_Cell_Types' in clustering_data.columns:
+                    cell_values = clustering_data['Main_Cell_Types'].tolist()
+                    state_values = clustering_data['Cell_States'].tolist()
                     if states_option=='main':
                         for c in cell_features:
                             cell_abbrev = self.cell_names_key[c]
@@ -3936,7 +4037,7 @@ class FUSION:
                                 feature_data = pd.concat([feature_data,pd.DataFrame.from_records(cell_and_states)],axis=1,ignore_index=False)
                             feature_names[feature_names.index(c):feature_names.index(c)+1] = tuple(np.unique(cell_state_names).tolist())
             else:
-                feature_data = self.clustering_data.loc[:,[i for i in feature_names if i in self.clustering_data.columns]]
+                feature_data = clustering_data.loc[:,[i for i in feature_names if i in clustering_data.columns]]
                 feature_data = feature_data.reset_index(drop=True)
 
             # Removing duplicate columns
@@ -3950,16 +4051,16 @@ class FUSION:
 
             # Getting the label data
             label_data = []
-            if label in self.clustering_data.columns or label in feature_data.columns:
-                if label in self.clustering_data.columns:
-                    label_data = self.clustering_data[label].tolist()
+            if label in clustering_data.columns or label in feature_data.columns:
+                if label in clustering_data.columns:
+                    label_data = clustering_data[label].tolist()
                 else:
                     # This has to have an index portion just so they line up consistently
-                    label_data = [0]*(max(list(self.feature_data.index))+1)
-                    for idx in list(self.feature_data.index):
-                        label_data[idx] = float(self.feature_data.loc[idx,label])
+                    label_data = [0]*(max(list(feature_data.index))+1)
+                    for idx in list(feature_data.index):
+                        label_data[idx] = float(feature_data.loc[idx,label])
             else:
-                sample_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
+                sample_ids = [i['Slide_Id'] for i in clustering_data['Hidden'].tolist()]
                 unique_ids = np.unique(sample_ids).tolist()
 
                 if label=='Slide Name':
@@ -3985,12 +4086,12 @@ class FUSION:
 
                 elif label in self.cell_names_key:
                     # For labeling with cell type
-                    label_data = [float(i[self.cell_names_key[label]]) if self.cell_names_key[label] in i else 0 for i in self.clustering_data['Main_Cell_Types'].tolist()]
+                    label_data = [float(i[self.cell_names_key[label]]) if self.cell_names_key[label] in i else 0 for i in clustering_data['Main_Cell_Types'].tolist()]
 
                 else:
                     # Default labels just to FTU
                     label = 'FTU'
-                    label_data = self.clustering_data[label].tolist()
+                    label_data = clustering_data[label].tolist()
 
 
             # Now filtering labels according to any selected filter labels
@@ -4004,13 +4105,13 @@ class FUSION:
                 unique_parent_filters = np.unique(filter_label_parent_names).tolist()
                 if 'FTUs' in unique_parent_filters:
                     # Removing specific FTUs by name
-                    ftu_labels = self.clustering_data['FTU'].tolist()
+                    ftu_labels = clustering_data['FTU'].tolist()
                     filter_idx.extend([i for i in range(len(ftu_labels)) if ftu_labels[i] in filter_label_names])
                     unique_parent_filters = [i for i in unique_parent_filters if not i=='FTUs']
                     
                 if len(unique_parent_filters)>0:
                     # Grab slide metadata
-                    sample_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
+                    sample_ids = [i['Slide_Id'] for i in clustering_data['Hidden'].tolist()]
                     unique_ids = np.unique(sample_ids).tolist()
 
                     for u_id in unique_ids:
@@ -4039,37 +4140,37 @@ class FUSION:
                 print(f'Generating violin plot for {feature_names}')
 
                 # Adding "Hidden" column with image grabbing info
-                feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()       
+                feature_data['Hidden'] = clustering_data['Hidden'].tolist()       
                 feature_data['label'] = [label_data[i] for i in list(feature_data.index)]
-                if 'Main_Cell_Types' in self.clustering_data.columns:
-                    feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types'].tolist()
-                    feature_data['Cell_States'] = self.clustering_data['Cell_States'].tolist()
-
-                self.feature_data = feature_data
+                if 'Main_Cell_Types' in clustering_data.columns:
+                    feature_data['Main_Cell_Types'] = clustering_data['Main_Cell_Types'].tolist()
+                    feature_data['Cell_States'] = clustering_data['Cell_States'].tolist()
                 
                 # Dropping filtered out rows
                 if len(filter_idx)>0:
-                    self.feature_data = self.feature_data.iloc[[int(i) for i in range(self.feature_data.shape[0]) if int(i) not in filter_idx],:]
+                    feature_data = feature_data.iloc[[int(i) for i in range(feature_data.shape[0]) if int(i) not in filter_idx],:]
 
-                self.feature_data = self.feature_data.dropna(subset=[i for i in feature_names if i in self.feature_data.columns]+['label','Hidden'])
+                feature_data = feature_data.dropna(subset=[i for i in feature_names if i in feature_data.columns]+['label','Hidden'])
 
                 # Generating labels_info_children
-                labels_left = self.feature_data['label'].tolist()
+                labels_left = feature_data['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
-                if self.feature_data.shape[0]>0:
+                if feature_data.shape[0]>0:
 
                     # Adding unique point index to hidden data
-                    hidden_data = self.feature_data['Hidden'].tolist()
+                    hidden_data = feature_data['Hidden'].tolist()
                     for h_i,h in enumerate(hidden_data):
                         h['Index'] = h_i
 
-                    self.feature_data.loc[:,'Hidden'] = hidden_data
+                    feature_data.loc[:,'Hidden'] = hidden_data
 
-                    figure = gen_violin_plot(self.feature_data, 'label', label, feature_names[0], 'Hidden')
+                    figure = gen_violin_plot(feature_data, 'label', label, feature_names[0], 'Hidden')
 
                 else:
                     figure = go.Figure()
+                
+                cluster_data_store['feature_data'] = feature_data.to_dict('records')
 
             elif len(feature_names)==2:
                 print(f'Generating a scatter plot')
@@ -4078,31 +4179,31 @@ class FUSION:
                 label_options += [i for i in feature_data.columns.tolist() if not i == 'Hidden']
 
                 # Adding "Hidden" column with image grabbing info
-                feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()     
+                feature_data['Hidden'] = clustering_data['Hidden'].tolist()     
                 feature_data['label'] = label_data
-                if 'Main_Cell_Types' in self.clustering_data.columns:
-                    feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types'].tolist()
-                    feature_data['Cell_States'] = self.clustering_data['Cell_States'].tolist()
-
-                self.feature_data = feature_data
+                if 'Main_Cell_Types' in clustering_data.columns:
+                    feature_data['Main_Cell_Types'] = clustering_data['Main_Cell_Types'].tolist()
+                    feature_data['Cell_States'] = clustering_data['Cell_States'].tolist()
                 
                 # Dropping filtered out rows
                 if len(filter_idx)>0:
-                    self.feature_data = self.feature_data.iloc[[int(i) for i in range(self.feature_data.shape[0]) if int(i) not in filter_idx],:]
+                    feature_data = feature_data.iloc[[int(i) for i in range(feature_data.shape[0]) if int(i) not in filter_idx],:]
                 
-                self.feature_data = self.feature_data.dropna(subset=[i for i in feature_names if i in self.feature_data.columns]+['label','Hidden'])
+                feature_data = feature_data.dropna(subset=[i for i in feature_names if i in feature_data.columns]+['label','Hidden'])
                 # Adding point index to hidden data
-                hidden_data = self.feature_data['Hidden'].tolist()
+                hidden_data = feature_data['Hidden'].tolist()
                 for h_i,h in enumerate(hidden_data):
                     h['Index'] = h_i
 
-                self.feature_data.loc[:,'Hidden'] = hidden_data
+                feature_data.loc[:,'Hidden'] = hidden_data
                 # Generating labels_info_children and filter_info_children
-                labels_left = self.feature_data['label'].tolist()
+                labels_left = feature_data['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
+                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+
                 figure = go.Figure(data = px.scatter(
-                    data_frame=self.feature_data,
+                    data_frame=feature_data,
                     x = feature_columns[0],
                     y = feature_columns[1],
                     color = 'label',
@@ -4115,7 +4216,7 @@ class FUSION:
                         )
                 ))
 
-                if not self.feature_data['label'].dtype == np.number:
+                if not feature_data['label'].dtype == np.number:
                     figure.update_layout(
                         legend = dict(
                             orientation='h',
@@ -4132,39 +4233,41 @@ class FUSION:
                 label_options += [i for i in feature_data.columns.tolist() if not i == 'Hidden']
 
                 # Scaling and reducing feature data using UMAP
-                feature_data['Hidden'] = self.clustering_data['Hidden'].tolist()
+                feature_data['Hidden'] = clustering_data['Hidden'].tolist()
                 feature_data['label'] = label_data
-                if 'Main_Cell_Types' in self.clustering_data.columns:
-                    feature_data['Main_Cell_Types'] = self.clustering_data['Main_Cell_Types'].tolist()
-                    feature_data['Cell_States'] = self.clustering_data['Cell_States'].tolist()
+                if 'Main_Cell_Types' in clustering_data.columns:
+                    feature_data['Main_Cell_Types'] = clustering_data['Main_Cell_Types'].tolist()
+                    feature_data['Cell_States'] = clustering_data['Cell_States'].tolist()
 
-                self.feature_data = feature_data
                 # Dropping filtered out rows
                 if len(filter_idx)>0:
-                    self.feature_data = self.feature_data.iloc[[int(i) for i in range(self.feature_data.shape[0]) if int(i) not in filter_idx],:]
+                    feature_data = feature_data.iloc[[int(i) for i in range(feature_data.shape[0]) if int(i) not in filter_idx],:]
 
-                self.feature_data = self.feature_data.dropna(subset=[i for i in feature_names if i in self.feature_data.columns]+['label','Hidden'])
-                hidden_col = self.feature_data['Hidden'].tolist()
+                feature_data = feature_data.dropna(subset=[i for i in feature_names if i in feature_data.columns]+['label','Hidden'])
+                hidden_col = feature_data['Hidden'].tolist()
 
                 # Adding point index to hidden_col
                 for h_i,h in enumerate(hidden_col):
                     h['Index'] = h_i
 
-                self.feature_data['Hidden'] = hidden_col
+                feature_data['Hidden'] = hidden_col
 
-                umap_df = gen_umap(self.feature_data, feature_names, ['Hidden','label','Main_Cell_Types','Cell_States'])
+                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+
+                umap_df = gen_umap(feature_data, feature_names, ['Hidden','label','Main_Cell_Types','Cell_States'])
                 # Saving this so we can update the label separately without re-running scaling or reduction
-                self.umap_df = umap_df
-                
+
+                cluster_data_store['umap_df'] = umap_df.to_dict('records')
+
                 # Generating labels_info_children and filter_info_children
-                labels_left = self.umap_df['label'].tolist()
+                labels_left = umap_df['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
 
                 if not type(label_data[0]) in [int,float]:
 
                     figure = go.Figure(px.scatter(
-                        data_frame = self.umap_df,
+                        data_frame = umap_df,
                         x = 'UMAP1',
                         y = 'UMAP2',
                         color = 'label',
@@ -4189,18 +4292,18 @@ class FUSION:
 
                     figure = go.Figure(
                         go.Scatter(
-                            x = self.umap_df['UMAP1'].values,
-                            y = self.umap_df['UMAP2'].values,
-                            customdata = self.umap_df['Hidden'].tolist(),
+                            x = umap_df['UMAP1'].values,
+                            y = umap_df['UMAP2'].values,
+                            customdata = umap_df['Hidden'].tolist(),
                             mode = 'markers',
                             marker = {
-                                'color': self.umap_df['label'].values,
+                                'color': umap_df['label'].values,
                                 'colorbar':{
                                     'title': 'label'
                                 },
                                 'colorscale':'jet'
                             },
-                            text = self.umap_df['label'].values,
+                            text = umap_df['label'].values,
                             hovertemplate = "label: %{text}"
 
                         )
@@ -4238,7 +4341,7 @@ class FUSION:
                 label_info_children = []
                 filter_info_children = no_update
 
-            return figure, label_options, label_info_children, filter_info_children, report_active_tab, download_plot_disable
+            return figure, label_options, label_info_children, filter_info_children, report_active_tab, download_plot_disable, json.dumps(cluster_data_store)
         
         elif ctx.triggered_id=='label-select':
             self.reports_generated = {}
@@ -4249,18 +4352,18 @@ class FUSION:
             label_options = no_update
 
             label_data = []
-            if not self.feature_data is None:
+            if not feature_data is None:
                 # Getting the label data
-                if label in self.clustering_data.columns or label in self.feature_data.columns:
-                    if label in self.clustering_data.columns:
-                        label_data = self.clustering_data[label].tolist()
+                if label in clustering_data.columns or label in feature_data.columns:
+                    if label in clustering_data.columns:
+                        label_data = clustering_data[label].tolist()
                     else:
                         # This has to have an index portion just so they line up consistently
-                        label_data = [0]*(max(list(self.feature_data.index))+1)
-                        for idx in list(self.feature_data.index):
-                            label_data[idx] = float(self.feature_data.loc[idx,label])
+                        label_data = [0]*(max(list(feature_data.index))+1)
+                        for idx in list(feature_data.index):
+                            label_data[idx] = float(feature_data.loc[idx,label])
                 else:
-                    sample_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist()]
+                    sample_ids = [i['Slide_Id'] for i in clustering_data['Hidden'].tolist()]
                     unique_ids = np.unique(sample_ids).tolist()
 
                     if label=='Slide Name':
@@ -4286,40 +4389,42 @@ class FUSION:
 
                     elif label in self.cell_names_key:
                         # For labeling with cell type
-                        label_data = [float(i[self.cell_names_key[label]]) if self.cell_names_key[label] in i else 0 for i in self.clustering_data['Main_Cell_Types'].tolist()]
+                        label_data = [float(i[self.cell_names_key[label]]) if self.cell_names_key[label] in i else 0 for i in clustering_data['Main_Cell_Types'].tolist()]
 
                     else:
                         label = 'FTU'
-                        label_data = self.clustering_data[label].tolist()
+                        label_data = clustering_data[label].tolist()
 
 
-                label_data = [label_data[i] for i in list(self.feature_data.index)]
-                # Needs an alignment step going from the full self.clustering_data to the na-dropped and filtered self.feature_data
-                # self.feature_data contains the features included in the current plot, label, Hidden, Main_Cell_Types, and Cell_States
+                label_data = [label_data[i] for i in list(feature_data.index)]
+                # Needs an alignment step going from the full clustering_data to the na-dropped and filtered feature_data
+                # feature_data contains the features included in the current plot, label, Hidden, Main_Cell_Types, and Cell_States
                 # So for a violin plot the shape should be nX5
-                self.feature_data = self.feature_data.drop(columns = ['label'])
-                self.feature_data['label'] = label_data
+                feature_data = feature_data.drop(columns = ['label'])
+                feature_data['label'] = label_data
 
                 if type(label_data[0]) in [int,float]:
-                    self.feature_data['label'] = self.feature_data['label'].astype(float)
+                    feature_data['label'] = feature_data['label'].astype(float)
+
+                cluster_data_store['feature_data'] = feature_data.to_dict('records')
 
                 # Generating labels_info_children
-                labels_left = self.feature_data['label'].tolist()
+                labels_left = feature_data['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
-                feature_number = len([i for i in self.feature_data.columns.tolist() if i not in ['label','Hidden','Main_Cell_Types','Cell_States']])
+                feature_number = len([i for i in feature_data.columns.tolist() if i not in ['label','Hidden','Main_Cell_Types','Cell_States']])
 
                 if feature_number==1:
-                    feature_names = self.feature_data.columns.tolist()
+                    feature_names = feature_data.columns.tolist()
 
-                    figure = gen_violin_plot(self.feature_data, 'label', label, feature_names[0],'Hidden')
+                    figure = gen_violin_plot(feature_data, 'label', label, feature_names[0],'Hidden')
                     
                 elif feature_number==2:
                     
-                    feature_columns = self.feature_data.columns.tolist()
+                    feature_columns = feature_data.columns.tolist()
 
                     figure = go.Figure(px.scatter(
-                        data_frame=self.feature_data,
+                        data_frame=feature_data,
                         x = feature_columns[0],
                         y = feature_columns[1],
                         color = 'label',
@@ -4345,12 +4450,14 @@ class FUSION:
 
                 elif feature_number>2:
 
-                    self.umap_df.loc[:,'label'] = label_data
+                    umap_df.loc[:,'label'] = label_data
+
+                    cluster_data_store['umap_df'] = umap_df.to_dict('records')
                     
                     if not type(label_data[0]) in [int,float]:
 
                         figure = go.Figure(px.scatter(
-                            data_frame = self.umap_df,
+                            data_frame = umap_df,
                             x = 'UMAP1',
                             y = 'UMAP2',
                             color = 'label',
@@ -4375,18 +4482,18 @@ class FUSION:
 
                         figure = go.Figure(
                             go.Scatter(
-                                x = self.umap_df['UMAP1'].values,
-                                y = self.umap_df['UMAP2'].values,
-                                customdata = self.umap_df['Hidden'].tolist(),
+                                x = umap_df['UMAP1'].values,
+                                y = umap_df['UMAP2'].values,
+                                customdata = umap_df['Hidden'].tolist(),
                                 mode = 'markers',
                                 marker = {
-                                    'color': self.umap_df['label'].values,
+                                    'color': umap_df['label'].values,
                                     'colorbar':{
                                         'title': 'label'
                                     },
                                     'colorscale':'jet'
                                 },
-                                text = self.umap_df['label'].tolist(),
+                                text = umap_df['label'].tolist(),
                                 hovertemplate = "label: %{text}"
                             )
                         )
@@ -4417,14 +4524,16 @@ class FUSION:
                         }
                     )
                 
-                return figure, label_options, label_info_children, filter_info_children, report_active_tab, download_plot_disable
+                return figure, label_options, label_info_children, filter_info_children, report_active_tab, download_plot_disable, json.dumps(cluster_data_store)
             else:
                 raise exceptions.PreventUpdate
         else:
             raise exceptions.PreventUpdate
 
     def grab_image(self,sample_info):
-
+        """
+        Getting image for clicked point in morphological clustering tab. (referenced in self.update_selected)
+        """
         if len(sample_info)>100:
             sample_info = sample_info[0:100]
 
@@ -4441,7 +4550,14 @@ class FUSION:
         
         return img_list        
 
-    def update_selected(self,click,selected):
+    def update_selected(self,click,selected,cluster_data_store):
+        """
+        Getting cell/state information and image for selected point in plot.
+        """
+
+        cluster_data_store = json.loads(cluster_data_store)
+        feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+
         if click is not None:
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
                 # Custom data contains Slide_Id and BBox coordinates for pulling images
@@ -4464,13 +4580,13 @@ class FUSION:
 
                 sample_index = [sample_info[0]['Index']]
 
-            self.current_selected_samples = sample_index
+            cluster_data_store['current_selected_samples'] = sample_index
 
             # Creating selected_image_info children
             # This could have more functionality
             # Like adding markers or going to that region in the current slide (if the selected image is from the current slide)
             slide_names = [self.dataset_handler.gc.get(f'/item/{s_i["Slide_Id"]}')["name"] for s_i in sample_info]
-            label_list = self.feature_data['label'].tolist()
+            label_list = feature_data['label'].tolist()
             image_labels = [label_list[l] for l in sample_index]
 
             #TODO: Disable if the slide is changed
@@ -4551,11 +4667,11 @@ class FUSION:
                 print(f'No images found')
                 print(f'hover: {click}')
                 print(f'selected:{selected}')
-                print(f'self.current_selected_samples: {self.current_selected_samples}')
+                print(f'self.current_selected_samples: {sample_index}')
 
-            if 'Main_Cell_Types' in self.feature_data.columns:
+            if 'Main_Cell_Types' in feature_data.columns:
                 # Preparing figure containing cell types + cell states info
-                main_cell_types_list = self.feature_data['Main_Cell_Types'].tolist()
+                main_cell_types_list = feature_data['Main_Cell_Types'].tolist()
                 counts_data = pd.DataFrame([main_cell_types_list[i] for i in sample_index]).sum(axis=0).to_frame()
                 counts_data.columns = ['Selected Data Points']
                 counts_data = counts_data.reset_index()
@@ -4570,7 +4686,7 @@ class FUSION:
 
                     # Getting initial cell state info
                     first_cell = counts_data['index'].tolist()[0]
-                    cell_states_list = self.feature_data['Cell_States'].tolist()
+                    cell_states_list = feature_data['Cell_States'].tolist()
                     state_data = pd.DataFrame([cell_states_list[i][first_cell] for i in sample_index]).sum(axis=0).to_frame()
                     state_data = state_data.reset_index()
                     state_data.columns = ['Cell States',f'Cell States for {first_cell}']
@@ -4597,16 +4713,23 @@ class FUSION:
                 selected_cell_types = go.Figure()
                 selected_cell_states = go.Figure()
 
-            return selected_image, selected_cell_types, selected_cell_states, selected_image_info
+            return selected_image, selected_cell_types, selected_cell_states, selected_image_info, json.dumps(cluster_data_store)
         else:
-            return go.Figure(), go.Figure(), go.Figure(),[]
+            return go.Figure(), go.Figure(), go.Figure(),[], json.dumps(cluster_data_store)
     
-    def update_selected_state_bar(self, selected_cell_click):
+    def update_selected_state_bar(self, selected_cell_click,cluster_data_store):
+        """
+        Getting cell state distribution plot for clicked main cell type
+        """
+        cluster_data_store = json.loads(cluster_data_store)
+        feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+        current_selected_samples = cluster_data_store['current_selected_samples']
+
         if not selected_cell_click is None:
             cell_type = selected_cell_click['points'][0]['label']
 
-            cell_states_data = self.feature_data['Cell_States'].tolist()
-            state_data = pd.DataFrame([cell_states_data[i][cell_type] for i in self.current_selected_samples]).sum(axis=0).to_frame()
+            cell_states_data = feature_data['Cell_States'].tolist()
+            state_data = pd.DataFrame([cell_states_data[i][cell_type] for i in current_selected_samples]).sum(axis=0).to_frame()
             state_data = state_data.reset_index()
             state_data.columns = ['Cell States',f'Cell States for {cell_type}']
             state_data[f'Cell States for {cell_type}'] = state_data[f'Cell States for {cell_type}']/state_data[f'Cell States for {cell_type}'].sum()
@@ -4855,7 +4978,14 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def add_marker_from_cluster(self,mark_click):
+    def add_marker_from_cluster(self,mark_click,cluster_data_store):
+        """
+        Marking structure in GeoJSON layer from selected points in plot (in the current slide)
+        """
+
+        cluster_data_store = json.loads(cluster_data_store)
+        feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+        current_selected_samples = cluster_data_store['current_selected_samples']
 
         # Adding marker(s) from graph returning geojson
         # index = 0 == mark all the samples in the current slide
@@ -4867,8 +4997,8 @@ class FUSION:
                 mark_geojson = {'type':'FeatureCollection','features':[]}
 
                 # Iterating through all current selected samples
-                # current_selected_samples is an index from self.feature_data
-                current_selected_hidden = [self.feature_data['Hidden'].tolist()[i] for i in self.current_selected_samples]
+                # current_selected_samples is an index from feature_data
+                current_selected_hidden = [feature_data['Hidden'].tolist()[i] for i in current_selected_samples]
                 marker_bboxes = [i['Bounding_Box'] for i in current_selected_hidden if i['Slide_Id']==self.wsi.item_id]
                 marker_map_coords = [self.wsi.convert_slide_coords([[i[0],i[1]],[i[2],i[3]]]) for i in marker_bboxes]
                 marker_center_coords = [[(i[0][0]+i[1][0])/2,(i[0][1]+i[1][1])/2] for i in marker_map_coords]
@@ -4891,7 +5021,7 @@ class FUSION:
                 mark_geojson = {'type':'FeatureCollection','features':[]}
 
                 # Pulling out one specific sample
-                selected_bbox = self.feature_data['Hidden'].tolist()[self.current_selected_samples[ctx.triggered_id['index']-1]]['Bounding_Box']
+                selected_bbox = feature_data['Hidden'].tolist()[current_selected_samples[ctx.triggered_id['index']-1]]['Bounding_Box']
                 marker_map_coords = self.wsi.convert_slide_coords([[selected_bbox[0],selected_bbox[1]],[selected_bbox[2],selected_bbox[3]]])
                 marker_center_coords = [(marker_map_coords[0][0]+marker_map_coords[1][0])/2,(marker_map_coords[0][1]+marker_map_coords[1][1])/2]
                 
@@ -4910,10 +5040,13 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def update_download_options(self,selected_data):
+    def update_download_options(self,selected_data,vis_sess_store):
+        
         print(f'selected_data: {selected_data}')
         new_children = []
         tab_labels = []
+
+        vis_sess_store = json.loads(vis_sess_store)
 
         options_idx = 0
         for d in selected_data:
@@ -4957,8 +5090,8 @@ class FUSION:
                     dbc.Label('Select per-slide properties:'),
                     dbc.Row(
                         dcc.Dropdown(
-                            [i['name'] for i in self.current_slides],
-                            [i['name'] for i in self.current_slides],
+                            [i['name'] for i in vis_sess_store],
+                            [i['name'] for i in vis_sess_store],
                             multi=True,
                             id = {'type':'download-opts','index':options_idx} 
                         ),style = {'marginBottom':'20px'}
@@ -5177,21 +5310,22 @@ class FUSION:
         
         return cli_description, cli_butt_disable, current_image_region, cli_results, cli_results_followup
 
-    def update_upload_requirements(self,upload_type):
+    def update_upload_requirements(self,upload_type,user_data_store):
         
         input_disabled = True
         # Creating an upload div specifying which files are needed for a given upload type
         # Getting the collection id
+        user_data_store = json.loads(user_data_store)
 
         # Making a new folder for this upload in the user's Public (could also change to private?) folder
         current_datetime = str(datetime.now())
         current_datetime = current_datetime.replace('-','_').replace(' ','_').replace(':','_').replace('.','_')
-        parentId = self.dataset_handler.get_user_folder_id(f'Public/FUSION_Upload_{current_datetime}')
-        print(f'parentId: {parentId}')
-        self.latest_upload_folder = {
-            'id':parentId,
+        parentId = self.dataset_handler.get_user_folder_id(f'Public/FUSION_Upload_{current_datetime}',user_data_store['login'])
+
+        user_data_store['latest_upload_folder'] = {
+            'id': parentId,
             'path':f'Public/FUSION_Upload_{current_datetime}'
-        }    
+        }
 
         if upload_type == 'Visium':
 
@@ -5207,7 +5341,7 @@ class FUSION:
                                 id = {'type':'wsi-upload','index':0},
                                 uploadComplete=False,
                                 baseurl=self.dataset_handler.apiUrl,
-                                girderToken=self.dataset_handler.user_token,
+                                girderToken= user_data_store['token'],
                                 parentId=parentId,
                                 filetypes=['svs','ndpi','scn','tiff','tif']                      
                             )
@@ -5225,7 +5359,7 @@ class FUSION:
                                 id = {'type':'omics-upload','index':0},
                                 uploadComplete=False,
                                 baseurl=self.dataset_handler.apiUrl,
-                                girderToken=self.dataset_handler.user_token,
+                                girderToken = user_data_store['token'],
                                 parentId=parentId,
                                 filetypes=['rds','csv','h5ad']                 
                             )
@@ -5246,9 +5380,13 @@ class FUSION:
                     )
                 ])
             ])
-        
-            self.upload_check = {'WSI':False,'Omics':False}
-            self.current_upload_type = 'Visium'
+
+            user_data_store['upload_check'] = {
+                "WSI": False,
+                "Omics": False
+            }
+
+            user_data_store['upload_type'] = 'Visium'
         
         elif upload_type =='Regular':
             # Regular slide with no --omics
@@ -5265,7 +5403,7 @@ class FUSION:
                                 id = {'type':'wsi-upload','index':0},
                                 uploadComplete=False,
                                 baseurl=self.dataset_handler.apiUrl,
-                                girderToken=self.dataset_handler.user_token,
+                                girderToken=user_data_store['token'],
                                 parentId=parentId,
                                 filetypes=['svs','ndpi','scn','tiff','tif']                      
                             )
@@ -5286,9 +5424,11 @@ class FUSION:
                     )
                 ])
             ])
-        
-            self.upload_check = {'WSI':False}
-            self.current_upload_type = 'Regular'
+
+            user_data_store['upload_check'] = {
+                'WSI': False
+            }
+            user_data_store['current_upload_type'] = 'Regular'
 
         elif upload_type == 'CODEX':
             # CODEX uploads include histology and multi-frame CODEX image (or just CODEX?)
@@ -5305,6 +5445,7 @@ class FUSION:
                                 id = {'type':'wsi-upload','index':0},
                                 uploadComplete = False,
                                 baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
                                 parentId = parentId,
                                 filetypes = ['svs','ndpi','scn','tiff','tif']
                             )
@@ -5328,11 +5469,17 @@ class FUSION:
 
             self.upload_check = {'WSI':False}
             self.current_upload_type = 'CODEX'
-        
-        self.upload_wsi_id = None
-        self.upload_omics_id = None
 
-        return upload_reqs, input_disabled
+            user_data_store['upload_check'] = {
+                'WSI': False
+            }
+
+            user_data_store['current_upload_type'] = 'CODEX'
+        
+        user_data_store['upload_wsi_id'] = None
+        user_data_store['upload_omics_id'] = None
+
+        return upload_reqs, input_disabled, json.dumps(user_data_store)
 
     def girder_login(self,p_butt,create_butt,username,pword,email,firstname,lastname):
 
@@ -5434,27 +5581,31 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def upload_data(self,wsi_file,omics_file,wsi_file_flag,omics_file_flag):
+    def upload_data(self,wsi_file,omics_file,wsi_file_flag,omics_file_flag, user_data_store):
+        
+        user_data_store = json.loads(user_data_store)
 
         print(f'Triggered id for upload_data: {ctx.triggered_id}')
         if ctx.triggered_id['type']=='wsi-upload':
 
             # Getting the uploaded item id
-            self.upload_wsi_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
+            upload_wsi_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
 
-            if not self.upload_wsi_id is None:
+            user_data_store['upload_wsi_id'] = upload_wsi_id
+
+            if not upload_wsi_id is None:
                 if not wsi_file_flag[0]:
                     wsi_upload_children = [
                         dbc.Alert('WSI Upload Success!',color='success')
                     ]
 
-                    self.upload_check['WSI'] = True
+                    user_data_store['upload_check']['WSI'] = True
 
                     # Adding metadata to the uploaded slide
                     self.dataset_handler.add_slide_metadata(
-                        item_id = self.upload_wsi_id,
+                        item_id = upload_wsi_id,
                         metadata_dict = {
-                            'Spatial Omics Type': self.current_upload_type
+                            'Spatial Omics Type': user_data_store['upload_type']
                         }
                     )
 
@@ -5465,8 +5616,8 @@ class FUSION:
                             id = {'type':'wsi-upload','index':0},
                             uploadComplete=False,
                             baseurl=self.dataset_handler.apiUrl,
-                            girderToken=self.dataset_handler.user_token,
-                            parentId=self.latest_upload_folder['id'],
+                            girderToken=user_data_store['token'],
+                            parentId=user_data_store['latest_upload_folder']['id'],
                             filetypes=['svs','ndpi','scn','tiff','tif']                      
                         )
                     ]
@@ -5474,8 +5625,8 @@ class FUSION:
             else:
                 wsi_upload_children = no_update
             
-            if 'Omics' in self.upload_check:
-                if not self.upload_check['Omics']:
+            if 'Omics' in user_data_store['upload_check']:
+                if not user_data_store['upload_check']['Omics']:
                     omics_upload_children = no_update
                 else:
                     omics_upload_children = [
@@ -5486,7 +5637,10 @@ class FUSION:
 
         elif ctx.triggered_id['type']=='omics-upload':
             
-            self.upload_omics_id = self.dataset_handler.get_new_upload_id(self.latest_upload_folder['id'])
+            upload_omics_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+            
+            user_data_store['upload_omics_id'] = upload_omics_id
+
             if not self.upload_omics_id is None:
                 #TODO: get_pattern_matching_value test here
                 if type(omics_file_flag)==list:
@@ -5495,7 +5649,8 @@ class FUSION:
                             omics_upload_children = [
                                 dbc.Alert('Omics Upload Success!')
                             ]
-                            self.upload_check['Omics'] = True
+
+                            user_data_store['upload_check']['Omics'] = True
                         else:
                             omics_upload_children = [
                                 dbc.Alert('Omics Upload Failure! Accepted file types are: rds',color = 'danger'),
@@ -5503,8 +5658,8 @@ class FUSION:
                                     id = {'type':'omics-upload','index':0},
                                     uploadComplete=False,
                                     baseurl=self.dataset_handler.apiUrl,
-                                    girderToken=self.dataset_handler.user_token,
-                                    parentId=self.latest_upload_folder['id'],
+                                    girderToken=user_data_store['token'],
+                                    parentId=user_data_store['latest_upload_folder']['id'],
                                     filetypes=['rds','csv','h5ad']                 
                                     )
                             ]
@@ -5515,7 +5670,7 @@ class FUSION:
             else:
                 omics_upload_children = no_update
 
-            if not self.upload_check['WSI']:
+            if not user_data_store['upload_check']['WSI']:
                 wsi_upload_children = no_update
             else:
                 wsi_upload_children = [
@@ -5526,12 +5681,12 @@ class FUSION:
             print(f'ctx.triggered_id["type"]: {ctx.triggered_id["type"]}')
 
         # Checking the upload check
-        if all([self.upload_check[i] for i in self.upload_check]):
+        if all([user_data_store['upload_check'][i] for i in user_data_store['upload_check']]):
             print('All set!')
 
-            slide_thumbnail = self.dataset_handler.get_slide_thumbnail(self.upload_wsi_id)
+            slide_thumbnail = self.dataset_handler.get_slide_thumbnail(user_data_store['upload_wsi_id'])
 
-            if 'Omics' in self.upload_check:
+            if 'Omics' in user_data_store['upload_check']:
                 omics_upload_children = [
                     dbc.Alert('Omics Upload Success!')
                 ]
@@ -5550,7 +5705,7 @@ class FUSION:
             )
 
             # This slide_meta is a dictionary which should just have the "Spatial Omics Type"
-            slide_meta = self.dataset_handler.gc.get(f'/item/{self.upload_wsi_id}')['meta']
+            slide_meta = self.dataset_handler.gc.get(f'/item/{user_data_store["upload_wsi_id"]}')['meta']
             # Now create the dataframe with columns like "metadata name" "value"
             slide_meta_df = pd.DataFrame({'Metadata Name':list(slide_meta.keys())+[''],'Value':list(slide_meta.values())+['']})
 
@@ -5580,21 +5735,22 @@ class FUSION:
             post_upload_style = {'display':'flex'}
             disable_upload_type = True
             
-            if 'Omics' in self.upload_check:
-                return slide_metadata_table, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' })
+            if 'Omics' in user_data_store['upload_check']:
+                return slide_metadata_table, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' }), json.dumps(user_data_store)
             else:
-                return slide_metadata_table, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' })
+                return slide_metadata_table, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' }), json.dumps(user_data_store)
         else:
 
             disable_upload_type = True
 
-            if 'Omics' in self.upload_check:
-                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, no_update
+            if 'Omics' in user_data_store['upload_check']:
+                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
             else:
-                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, no_update
+                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
     
-    def add_slide_metadata(self, button_click, table_data):
+    def add_slide_metadata(self, button_click, table_data, user_data_store):
 
+        user_data_store = json.loads(user_data_store)
         # Adding slide metadata according to user inputs
         if not button_click:
             raise exceptions.PreventUpdate
@@ -5603,7 +5759,7 @@ class FUSION:
         table_data = table_data[0]
         # Making it so you can't delete this metadata
         slide_metadata = {
-            'Spatial Omics Type': self.current_upload_type
+            'Spatial Omics Type': user_data_store['upload_type']
         }
         add_row = True
         for m in table_data:
@@ -5613,7 +5769,7 @@ class FUSION:
                 add_row = False
 
         # Checking current slide metadata and seeing if it differs from "slide_metadata"
-        current_slide_metadata = self.dataset_handler.gc.get(f'/item/{self.upload_wsi_id}')['meta']
+        current_slide_metadata = self.dataset_handler.gc.get(f'/item/{user_data_store["upload_wsi_id"]}')['meta']
 
         if not list(slide_metadata.keys())==list(current_slide_metadata.keys()):
             # Finding the ones that are different
@@ -5623,7 +5779,7 @@ class FUSION:
             if len(rm_keys)>0:
                 for m in rm_keys:
                     self.dataset_handler.gc.delete(
-                        f'/item/{self.upload_wsi_id}/metadata',
+                        f'/item/{user_data_store["upload_wsi_id"]}/metadata',
                         parameters = {
                             'fields':f'["{m}"]'
                         }
@@ -5631,16 +5787,18 @@ class FUSION:
 
             # Adding metadata through GirderHandler
             if add_row:
-                self.dataset_handler.add_slide_metadata(self.upload_wsi_id,slide_metadata)
+                self.dataset_handler.add_slide_metadata(user_data_store["upload_wsi_id"],slide_metadata)
                 # Adding new empty row
                 table_data.append({'Metadata Name':'', 'Value': ''})
 
         return [table_data]
 
-    def start_segmentation(self,structure_selection,go_butt):
+    def start_segmentation(self,structure_selection,go_butt,user_data_store):
 
         # Starting segmentation job and initializing dcc.Interval object to check logs
         # output = div children, disable structure_type, disable segment_butt
+        user_data_store = json.loads(user_data_store)
+
         if ctx.triggered_id=='segment-butt':
             if structure_selection is not None:
                 if len(structure_selection)>0:
@@ -5649,10 +5807,10 @@ class FUSION:
                     disable_continue_butt = True
 
                     print(f'Running segmentation!')
-                    self.segmentation_job_info = self.prep_handler.segment_image(self.upload_wsi_id,structure_selection)
+                    user_data_store['segmentation_job'] = self.prep_handler.segment_image(user_data_store['upload_wsi_id'],structure_selection)
                     #TODO: Make it so you don't have to run segmentation to access cell deconvolution/spot stuff
-                    if not self.upload_omics_id is None:
-                        self.cell_deconv_job_info = self.prep_handler.run_cell_deconvolution(self.upload_wsi_id,self.upload_omics_id)
+                    if not user_data_store['upload_omics_id'] is None:
+                        user_data_store['cell_deconv_job'] = self.prep_handler.run_cell_deconvolution(user_data_store['upload_wsi_id'],user_data_store['upload_omics_id'])
 
                     seg_woodshed = [
                         dcc.Interval(
@@ -5667,7 +5825,7 @@ class FUSION:
                         )
                     ]
 
-                    return seg_woodshed, disable_structure, disable_seg_butt, [disable_continue_butt]
+                    return seg_woodshed, disable_structure, disable_seg_butt, [disable_continue_butt], json.dumps(user_data_store)
                 else:
                     raise exceptions.PreventUpdate
             else:
@@ -5717,7 +5875,9 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def new_seg_upload(self,seg_upload,current_up_anns,seg_upload_filename):
+    def new_seg_upload(self,seg_upload,current_up_anns,seg_upload_filename,user_data_store):
+
+        user_data_store = json.loads(user_data_store)
 
         if seg_upload:
             # Processing new uploaded file
@@ -5726,7 +5886,7 @@ class FUSION:
             new_upload = seg_upload[0]
             
             # Processing newly uploaded annotations
-            processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,self.upload_wsi_id)
+            processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'])
 
             if not processed_anns is None:
                 return_items = current_up_anns[0]
@@ -5755,7 +5915,7 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def update_logs(self,new_interval):
+    def update_logs(self,new_interval,user_data_store):
 
         # Callback to update the segmentation logs div with more data
         # Also populates the post-segment-row when the jobs are completed
@@ -5763,23 +5923,25 @@ class FUSION:
         # structure-type disabled, ftu-select options, ftu-select value, sub-comp-method value,
         # ex-ftu-img figure
         # Getting most recent logs:
+
+        user_data_store = json.loads(user_data_store)
         seg_status = 0
         seg_log = []
-        for seg_job in self.segmentation_job_info:
+        for seg_job in user_data_store['segmentation_job']:
             s_stat, s_log = self.dataset_handler.get_job_status(seg_job['_id'])
             seg_log.append(s_log)
             seg_status+=s_stat
         seg_log = [html.P(s) for s in seg_log]
 
-        if not self.upload_omics_id is None:
-            cell_status, cell_log = self.dataset_handler.get_job_status(self.cell_deconv_job_info['_id'])
+        if not user_data_store['upload_omics_id'] is None:
+            cell_status, cell_log = self.dataset_handler.get_job_status(user_data_store['cell_deconv_job']['_id'])
             cell_log = [html.P(cell_log)]
         else:
             cell_status = 3
             cell_log = ''
         
         # This would be at the end of the two jobs
-        if seg_status+cell_status==3*(1+len(self.segmentation_job_info)):
+        if seg_status+cell_status==3*(1+len(user_data_store['segmentation_job'])):
 
             # Div containing the job logs:
             if not self.upload_omics_id is None:
@@ -5820,7 +5982,7 @@ class FUSION:
             seg_log_disable = False
             continue_disable = True
 
-            if not self.upload_omics_id is None:
+            if not user_data_store['upload_omics_id'] is None:
                 if seg_status==3:
                     seg_part = dbc.Alert(
                         'Segmentation Complete!',
@@ -5867,8 +6029,9 @@ class FUSION:
         print(f'disabling interval: {seg_log_disable}')
         return [seg_logs_div], [seg_log_disable], [continue_disable]
 
-    def post_segmentation(self, seg_log_disable, continue_butt, organ, gene_method, gene_n, gene_list):
+    def post_segmentation(self, seg_log_disable, continue_butt, organ, gene_method, gene_n, gene_list, user_data_store):
 
+        user_data_store = json.loads(user_data_store)
 
         if ctx.triggered[0]['value']:
             # post-segment-row stuff
@@ -5894,19 +6057,19 @@ class FUSION:
 
             if self.current_upload_type == 'Regular':
                 # Extracting annotations and initilaiz sub-compartment mask
-                self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
+                self.upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
 
                 # Running post-segmentation worfklow from Prepper
-                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(self.upload_wsi_id,self.upload_annotations)
+                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id'],self.upload_annotations)
 
             if self.current_upload_type == 'Visium':
                 # Extracting annotations and initial sub-compartment mask
-                self.upload_annotations = self.dataset_handler.get_annotations(self.upload_wsi_id)
+                self.upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
                 
                 # Running post-segmentation workflowfrom VisiumPrep
                 self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(
-                    self.upload_wsi_id, 
-                    self.upload_omics_id, 
+                    user_data_store['upload_wsi_id'], 
+                    user_data_store['upload_omics_id'], 
                     self.upload_annotations,
                     organ,
                     gene_method,
@@ -5917,7 +6080,7 @@ class FUSION:
             elif self.current_upload_type == 'CODEX':
 
                 # Running post-segmentation workflow from CODEX Prep
-                frame_names, current_frame = self.prep_handler.post_segmentation(self.upload_wsi_id) 
+                frame_names, current_frame = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id']) 
 
             # Populate with default sub-compartment parameters
             self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
@@ -5929,7 +6092,7 @@ class FUSION:
                 if not self.layer_ann is None:
 
                     ftu_value = self.feature_extract_ftus[self.layer_ann['current_layer']]
-                    image, mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                    image, mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
                     self.layer_ann['current_image'] = image
                     self.layer_ann['current_mask'] = mask
@@ -5951,13 +6114,15 @@ class FUSION:
                 }
 
             # Generating upload preprocessing row
-            prep_row = self.layout_handler.gen_uploader_prep_type(self.current_upload_type,prep_values)
+            prep_row = self.layout_handler.gen_uploader_prep_type(user_data_store['upload_type'],prep_values)
                 
             return sub_comp_style, disable_organ, [prep_row]
         else:
             return no_update, no_update, [no_update]
     
-    def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state):
+    def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state,user_data_store):
+
+        user_data_store = json.loads(user_data_store)
 
         new_ex_ftu = [go.Figure()]
         feature_extract_children = [[]]
@@ -6020,7 +6185,7 @@ class FUSION:
 
             if ctx_triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
                 
-                new_image, new_mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
                 self.layer_ann['current_image'] = new_image
                 self.layer_ann['current_mask'] = new_mask
 
@@ -6090,7 +6255,9 @@ class FUSION:
 
         pass
 
-    def run_feature_extraction(self,feat_butt,skip_feat,include_ftus,include_features):
+    def run_feature_extraction(self,feat_butt,skip_feat,include_ftus,include_features,user_data_store):
+
+        user_data_store = json.loads(user_data_store)
 
         if ctx.triggered_id['type']=='start-feat':
             # Prepping input arguments to feature extraction
@@ -6100,7 +6267,7 @@ class FUSION:
             include_features = ','.join(include_features)
             ignore_ftus = ','.join([i['label'].split(' (')[0] for i in self.feature_extract_ftus if not i['label'].split(' (')[0] in include_ftus])
 
-            self.feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params,include_features,ignore_ftus)
+            user_data_store['feat_ext_job'] = self.prep_handler.run_feature_extraction(user_data_store['upload_wsi_id'],self.sub_compartment_params,include_features,ignore_ftus)
 
             # Returning a dcc.Interval object to check logs for feature extraction
             feat_log_interval = [
@@ -6117,7 +6284,7 @@ class FUSION:
             ]
         elif ctx.triggered_id['type']=='skip-feat':
             
-            self.feat_ext_job = None
+            user_data_store['feat_ext_job'] = None
             # Returning a shorty dcc.Interval that should automatically trigger the next step
             feat_log_interval = [
                 dcc.Interval(
@@ -6132,12 +6299,14 @@ class FUSION:
                 )
             ]
 
-        return [feat_log_interval]
+        return [feat_log_interval], json.dumps(user_data_store)
     
-    def update_feat_logs(self,new_interval):
+    def update_feat_logs(self,new_interval,user_data_store):
+
+        user_data_store = json.loads(user_data_store)
 
         # Updating logs for feature extraction job, disabling when the job is done
-        feat_ext_status, feat_ext_log = self.dataset_handler.get_job_status(self.feat_ext_job['_id'])
+        feat_ext_status, feat_ext_log = self.dataset_handler.get_job_status(user_data_store['feat_ext_job']['_id'])
 
         if feat_ext_status==3:
             feat_logs_disable = True
@@ -6309,24 +6478,29 @@ class FUSION:
 
         return output_list
 
-    def populate_cluster_tab(self,active_tab, cluster_butt):
+    def populate_cluster_tab(self,active_tab, cluster_butt,cluster_data_store,vis_sess_store,user_data_store):
+
+        cluster_data_store = json.loads(cluster_data_store)
+        vis_sess_store = json.loads(vis_sess_store)
+        user_data_store = json.loads(user_data_store)
 
         used_get_cluster_data_plugin = None
+        clustering_data = pd.DataFrame.from_records(cluster_data_store['clustering_data'])
 
         if active_tab == 'clustering-tab':
-             # Checking the current slides to see if they match self.current_slides:
-            if not self.clustering_data.empty:
-                current_slide_ids = [i['Slide_Id'] for i in self.clustering_data['Hidden'].tolist() if 'Hidden' in self.clustering_data.columns]
+             # Checking the current slides to see if they match vis_sess_store:
+            if not clustering_data.empty:
+                current_slide_ids = [i['Slide_Id'] for i in clustering_data['Hidden'].tolist() if 'Hidden' in clustering_data.columns]
                 unique_ids = np.unique(current_slide_ids).tolist()
-                current_ids = [i['_id'] for i in self.current_slides]
+                current_ids = [i['_id'] for i in vis_sess_store]
             else:
-                current_ids = [i['_id'] for i in self.current_slides]
+                current_ids = [i['_id'] for i in vis_sess_store]
         
             if ctx.triggered_id=='tools-tabs':
 
                 # Checking current clustering data (either a full or empty pandas dataframe)
-                if not self.clustering_data.empty:
-                    print(f'in self.clustering_data: {unique_ids}')
+                if not clustering_data.empty:
+                    print(f'in clustering_data: {unique_ids}')
                     print(f'slide ids in current_slides: {current_ids}')
                     # Checking if these are the same (regardless of order)
                     if set(unique_ids)==set(current_ids):
@@ -6344,7 +6518,7 @@ class FUSION:
                         download_style = {'display':'inline-block'}
                         
                         # Generating options
-                        self.dataset_handler.generate_feature_dict(self.current_slides)
+                        self.dataset_handler.generate_feature_dict(vis_sess_store)
 
                         feature_select_data = self.dataset_handler.plotting_feature_dict
                         label_select_options = self.dataset_handler.label_dict
@@ -6365,8 +6539,6 @@ class FUSION:
 
                         # Setting style of download plot data button
                         download_style = {'display':None}
-                        self.feature_data = None
-                        self.umap_df = None
 
                         feature_select_data = []
                         label_select_options = []
@@ -6383,8 +6555,8 @@ class FUSION:
 
                     # Setting style of download plot data button
                     download_style = {'display':None}
-                    self.feature_data = None
-                    self.umap_df = None
+                    cluster_data_store['feature_data'] = None
+                    cluster_data_store['umap_df'] = None
 
                     feature_select_data = []
                     label_select_options = []
@@ -6394,11 +6566,11 @@ class FUSION:
             else:
 
                 # Retrieving clustering data
-                data_getting_response = self.dataset_handler.get_collection_annotation_meta([i['_id'] for i in self.current_slides if i['included']])
+                data_getting_response = self.dataset_handler.get_collection_annotation_meta([i['_id'] for i in vis_sess_store if i['included']])
 
                 used_get_cluster_data_plugin = True
             
-                self.dataset_handler.generate_feature_dict([i for i in self.current_slides if i['included']])
+                self.dataset_handler.generate_feature_dict([i for i in vis_sess_store if i['included']])
                 # Monitoring getting the data:
                 data_get_status = 0
                 while data_get_status<3:
@@ -6407,7 +6579,7 @@ class FUSION:
                     print(f'data_get_status: {data_get_status}')
                     time.sleep(1)
 
-                self.clustering_data = self.dataset_handler.load_clustering_data()
+                cluster_data_store['clustering_data'] = self.dataset_handler.load_clustering_data(user_data_store).to_dict('records')
 
                 get_data_div_children = dbc.Alert(
                     'Clustering data aligned!',
@@ -6419,8 +6591,8 @@ class FUSION:
 
                 # Setting style of download plot data button
                 download_style = {'display':'inline-block'}
-                self.feature_data = None
-                self.umap_df = None
+                cluster_data_store['feature_data'] = None
+                cluster_data_store['umap_df'] = None
 
                 feature_select_data = self.dataset_handler.plotting_feature_dict
                 label_select_options = self.dataset_handler.label_dict
@@ -6433,44 +6605,50 @@ class FUSION:
             raise exceptions.PreventUpdate
         
         if used_get_cluster_data_plugin:
-            return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style, json.dumps({'plugin_used': 'get_cluster_data', 'slide_ids': current_ids })
+            return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style, json.dumps({'plugin_used': 'get_cluster_data', 'slide_ids': current_ids }), json.dumps(cluster_data_store)
 
-        return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style, no_update
+        return get_data_div_children, feature_select_data, label_select_disabled, label_select_options, label_select_value, filter_select_data, download_style, no_update, json.dumps(cluster_data_store)
 
-    def update_plot_report(self,report_tab):
+    def update_plot_report(self,report_tab,cluster_data_store):
+
+        cluster_data_store = json.loads(cluster_data_store)
 
         # Return the contents of the plot report tab according to selection
         report_tab_children = dbc.Alert('Generate a plot first!',color = 'warning')
-        if not self.feature_data is None:
+        if not cluster_data_store['feature_data'] is None:
             if report_tab in self.reports_generated:
                 # Report already generated, return the report
                 report_tab_children = self.reports_generated[report_tab]
             else:
                 # Report hasn't been generated yet, generate it
-                report_tab_children = self.layout_handler.gen_report_child(self.feature_data,report_tab)
+                report_tab_children = self.layout_handler.gen_report_child(cluster_data_store['feature_data'],report_tab)
                 self.reports_generated[report_tab] = report_tab_children
             
         return report_tab_children
 
-    def download_plot_data(self,download_button_clicked):
+    def download_plot_data(self,download_button_clicked,cluster_data_store):
+
+        cluster_data_store = json.loads(cluster_data_store)
 
         if not download_button_clicked:
             raise exceptions.PreventUpdate
         
-        if not self.feature_data is None:
-
-            feature_columns = [i for i in self.feature_data if i not in ['label','Hidden','Main_Cell_Types','Cell_States']]
+        if not cluster_data_store['feature_data'] is None:
+            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+            feature_columns = [i for i in feature_data if i not in ['label','Hidden','Main_Cell_Types','Cell_States']]
 
             # If this is umap data then save one sheet with the raw data and another with the umap embeddings
             if len(feature_columns)<=2:
 
                 download_data_df = {
-                    'FUSION_Plot_Features': self.feature_data.copy()
+                    'FUSION_Plot_Features': feature_data.copy()
                 }
             elif len(feature_columns)>2:
+
+                umap_df = pd.DataFrame.from_records(cluster_data_store['umap_df'])
                 download_data_df = {
-                    'FUSION_Plot_Features': self.feature_data.copy(),
-                    'UMAP_Embeddings': self.umap_df[self.umap_df.columns.intersection(['UMAP1','UMAP2'])].copy()
+                    'FUSION_Plot_Features': feature_data.copy(),
+                    'UMAP_Embeddings': umap_df[umap_df.columns.intersection(['UMAP1','UMAP2'])].copy()
                 }
 
             with pd.ExcelWriter('Plot_Data.xlsx') as writer:
@@ -6481,29 +6659,36 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def start_cluster_markers(self,butt_click):
+    def start_cluster_markers(self,butt_click,cluster_data_store,user_data_store):
+
+        cluster_data_store = json.loads(cluster_data_store)
+        user_data_store = json.loads(user_data_store)
 
         # Clicked Get Cluster Markers
         if ctx.triggered[0]['value']:
 
             disable_button = True
+            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
             
             # Saving current feature data to user public folder
-            features_for_markering = self.dataset_handler.save_to_user_folder({
-                'filename':f'marker_features.csv',
-                'content': self.feature_data
-            })
+            features_for_markering = self.dataset_handler.save_to_user_folder(
+                save_object = {
+                    'filename':f'marker_features.csv',
+                    'content': feature_data
+                },
+                username = user_data_store['login']
+            )
 
             # Starting cluster marker job
             cluster_marker_job = self.dataset_handler.gc.post(
                     '/slicer_cli_web/samborder2256_clustermarkers_fusion_latest/ClusterMarkers/run',
                     parameters = {
-                        'feature_address': f'{self.dataset_handler.apiUrl}/item/{features_for_markering["itemId"]}/download?token={self.dataset_handler.user_token}',
+                        'feature_address': f'{self.dataset_handler.apiUrl}/item/{features_for_markering["itemId"]}/download?token={user_data_store["token"]}',
                         'girderApiUrl': self.dataset_handler.apiUrl,
-                        'girderToken': self.dataset_handler.user_token,
+                        'girderToken': user_data_store['token'],
                     }
                 )
-            self.cluster_marker_job_id = cluster_marker_job['_id']
+            user_data_store['cluster_marker_job_id'] = cluster_marker_job['_id']
 
             # Returning a dcc.Interval object and another div to store the logs
             marker_logs_children = [
@@ -6520,18 +6705,20 @@ class FUSION:
                 )
             ]
 
-            labels = np.unique(self.feature_data['label'].tolist()).tolist()
-            slide_ids = np.unique([i['Slide_Id'] for i in self.feature_data['Hidden'].tolist()]).tolist()
+            labels = np.unique(feature_data['label'].tolist()).tolist()
+            slide_ids = np.unique([i['Slide_Id'] for i in feature_data['Hidden'].tolist()]).tolist()
 
-            return [marker_logs_children],[disable_button], json.dumps({'plugin_used': 'clustermarkers_fusion', 'features': self.feature_data.columns.tolist(), 'label': labels, 'slide_ids': slide_ids })
+            return [marker_logs_children],[disable_button], json.dumps({'plugin_used': 'clustermarkers_fusion', 'features': feature_data.columns.tolist(), 'label': labels, 'slide_ids': slide_ids }), json.dumps(user_data_store)
         else:
             raise exceptions.PreventUpdate
 
-    def update_cluster_logs(self,new_interval):
+    def update_cluster_logs(self,new_interval,user_data_store):
+
+        user_data_store = json.loads(user_data_store)
 
         if not new_interval is None:
             # Checking the cluster marker job status and printing the log to the cluster_log_div
-            marker_status, marker_log = self.dataset_handler.get_job_status(self.cluster_marker_job_id)
+            marker_status, marker_log = self.dataset_handler.get_job_status(user_data_store['cluster_marker_job_id'])
 
             if marker_status<3:
                 
@@ -6546,7 +6733,7 @@ class FUSION:
                 marker_interval_disable = True
 
                 # Load cluster markers from user folder
-                cluster_marker_data = pd.DataFrame(self.dataset_handler.grab_from_user_folder('FUSION_Cluster_Markers.json')).round(decimals=4)
+                cluster_marker_data = pd.DataFrame(self.dataset_handler.grab_from_user_folder('FUSION_Cluster_Markers.json',user_data_store['login'])).round(decimals=4)
 
                 cluster_log_children = [
                     dbc.Row(
@@ -7901,6 +8088,7 @@ def app(*args):
 
     # Initializing GirderHandler
     dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
+    initial_user_info = dataset_handler.user_details
 
     # Initial collection
     #TODO: initial collection can be added as an environment variable
@@ -7928,7 +8116,7 @@ def app(*args):
     # Saving & organizing relevant id's in GirderHandler
     print('Getting initial items metadata')
     dataset_handler.set_default_slides(initial_collection_contents)
-    dataset_handler.initialize_folder_structure(initial_collection,path_type)
+    dataset_handler.initialize_folder_structure(username,initial_collection,path_type)
 
     # Getting graphics_reference.json from the FUSION Assets folder
     print(f'Getting asset items')
@@ -7971,12 +8159,12 @@ def app(*args):
 
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
-    layout_handler.gen_initial_layout(slide_names,username)
+    layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides)
     layout_handler.gen_vis_layout(
         wsi,
         cli_list
         )
-    layout_handler.gen_builder_layout(dataset_handler)
+    layout_handler.gen_builder_layout(dataset_handler,initial_user_info)
     layout_handler.gen_uploader_layout()
 
     download_handler = DownloadHandler(dataset_handler)
