@@ -804,6 +804,7 @@ class FUSION:
         # Add histology marker from clustering/plot
         self.app.callback(
             Input({'type':'add-mark-cluster','index':ALL},'n_clicks'),
+            State('cluster-store','data'),
             [Output({'type':'edit_control','index':ALL},'geojson'),
              Output('marker-add-div','children')],
             prevent_initial_call=True
@@ -4996,15 +4997,22 @@ class FUSION:
         """
 
         cluster_data_store = json.loads(cluster_data_store)
-        feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
-        current_selected_samples = cluster_data_store['current_selected_samples']
+        if not cluster_data_store['feature_data'] is None:
+            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+        else:
+            feature_data = pd.DataFrame()
+        if 'current_selected_samples' in cluster_data_store:
+            current_selected_samples = cluster_data_store['current_selected_samples']
 
         # Adding marker(s) from graph returning geojson
         # index = 0 == mark all the samples in the current slide
         # index != 0 == mark a specific sample in the current slide
+        print(ctx.triggered)
+        print(ctx.triggered_id)
+
         if ctx.triggered[0]['value']:
             
-            if ctx.triggered_id['index']==0:
+            if ctx.triggered_id[0]['index']==0:
                 # Add marker for all samples in the current slide
                 mark_geojson = {'type':'FeatureCollection','features':[]}
 
