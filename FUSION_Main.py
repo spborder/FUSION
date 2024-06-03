@@ -371,7 +371,10 @@ class FUSION:
         serve(self.app.server,host='0.0.0.0',port=8000,threads = 10)
 
     def view_instructions(self,n,n2,is_open,user_data_store):
-        print(user_data_store)
+        """
+        Opens collapsible component underneath buttons containing usability questions        
+        """
+
         user_data_store = json.loads(user_data_store)
 
         # Opening collapse and populating internal div 
@@ -381,7 +384,9 @@ class FUSION:
         elif ctx.triggered_id['type']=='usability-butt':
             if n2:
                 self.dataset_handler.update_usability()
-                collapse_children = self.layout_handler.gen_usability_report(user_data_store,self.dataset_handler.usability_users)
+                usability_info = self.dataset_handler.check_usability(user_data_store['login'])
+                usability_info['login'] = user_data_store['login']
+                collapse_children = self.layout_handler.gen_usability_report(usability_info,self.dataset_handler.usability_users)
                 if not is_open[-1]:
                     usability_color = ['success']
                 else:
