@@ -381,8 +381,7 @@ class FUSION:
         elif ctx.triggered_id['type']=='usability-butt':
             if n2:
                 self.dataset_handler.update_usability()
-                user_info = user_data_store['user_info']
-                collapse_children = self.layout_handler.gen_usability_report(user_info,self.dataset_handler.usability_users)
+                collapse_children = self.layout_handler.gen_usability_report(user_data_store,self.dataset_handler.usability_users)
                 if not is_open[-1]:
                     usability_color = ['success']
                 else:
@@ -5512,11 +5511,8 @@ class FUSION:
                 logged_in_user = f'Welcome: {username}'
                 upload_disabled = False
 
-                user_data_output = {
-                    'user_info': user_info,
-                    'user_details': user_details,
-                    'token': self.dataset_handler.user_token
-                }
+                user_data_output = user_details
+                user_data_output['token'] = self.dataset_handler.user_token
 
                 if not user_info is None:
                     usability_signup_style = {'display':'none'}
