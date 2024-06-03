@@ -714,7 +714,6 @@ class FUSION:
              Output('layer-control','children'),
              Output({'type':'edit_control','index':ALL},'editToolbar'),
              Output('slide-map','center'),
-             #Output('slide-map','bounds'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children'),
@@ -738,7 +737,8 @@ class FUSION:
             ],
             [
                 State('slide-load-modal','is_open'),
-                State('slide-info-store','data')
+                State('slide-info-store','data'),
+                State('user-store','data'),
             ],
             prevent_initial_call = True
         )(self.load_new_slide)
@@ -1799,7 +1799,6 @@ class FUSION:
         """
         Updating data used for current viewport visualizations
         """
-        #TODO: Update this for CODEX and Regular vis
 
         frame_label_disable = [no_update]*len(ctx.outputs_list[-2])
         viewport_store_data = ['']
@@ -2053,7 +2052,7 @@ class FUSION:
                                             feature_data = counts_data,
                                             label_col = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
                                             label_name = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
-                                            feature_col = f'Channel {self.wsi.channel_names.index(frame_list[0])}',
+                                            feature_col = f'{frame_list[0]}',
                                             custom_col = 'Hidden'
                                         )
 
@@ -3463,7 +3462,7 @@ class FUSION:
 
         return f'Label: {label}', dcc.Link(f'ID: {id}', href = new_url), f'Notes: {notes}'
     
-    def load_new_slide(self,slide_id,new_interval,modal_is_open,slide_info_store):
+    def load_new_slide(self,slide_id,new_interval,modal_is_open,slide_info_store, user_data_store):
         """
         Progress indicator for loading a new WSI and annotations
         """
@@ -3471,6 +3470,8 @@ class FUSION:
         modal_children = []
         slide_info_store_data = [no_update]
         disable_slide_load = False
+
+        user_data_store = json.loads(user_data_store)
 
         if ctx.triggered_id=='slide-select':
 
@@ -3487,6 +3488,7 @@ class FUSION:
                 if slide_type=='Visium':
                     self.wsi = VisiumSlide(
                         item_id = slide_info['_id'],
+                        user_details = user_data_store,
                         girder_handler=self.dataset_handler,
                         ftu_colors = self.ftu_colors,
                         manual_rois = [],
@@ -3495,6 +3497,7 @@ class FUSION:
                 elif slide_type=='CODEX':
                     self.wsi = CODEXSlide(
                         item_id = slide_info['_id'],
+                        user_details= user_data_store,
                         girder_handler = self.dataset_handler,
                         ftu_colors = self.ftu_colors,
                         manual_rois = [],
@@ -3503,6 +3506,7 @@ class FUSION:
                 elif slide_type=='Regular':
                     self.wsi = DSASlide(
                         item_id = slide_info['_id'],
+                        user_details=user_data_store,
                         girder_handler = self.dataset_handler,
                         ftu_colors = self.ftu_colors,
                         manual_rois = [],
@@ -3511,6 +3515,7 @@ class FUSION:
                 else:
                     self.wsi = DSASlide(
                         item_id = slide_info['_id'],
+                        user_details= user_data_store,
                         girder_handler = self.dataset_handler,
                         ftu_colors = self.ftu_colors,
                         manual_rois = [],
@@ -3519,6 +3524,7 @@ class FUSION:
             else:
                 self.wsi = DSASlide(
                     item_id = slide_info['_id'],
+                    user_details=user_data_store,
                     girder_handler = self.dataset_handler,
                     ftu_colors = self.ftu_colors,
                     manual_rois = [],
@@ -7139,7 +7145,7 @@ class FUSION:
                     disable_butt = False
                 else:
                     active_tab = None
-                    disable_butt = True
+                    disable_butt = False
                     channel_opts = channel_opts[0]
                     self.current_channels = {}
             
@@ -7188,7 +7194,7 @@ class FUSION:
         else:
             self.current_channels = {}
 
-            raise exceptions.PreventUpdate
+            return [],[False]
     
     def add_channel_overlay(self,butt_click,channel_colors,channels):
 

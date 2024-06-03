@@ -22,6 +22,7 @@ class DSASlide:
 
     def __init__(self,
                  item_id,
+                 user_details,
                  girder_handler,
                  ftu_colors,
                  manual_rois = [],
@@ -29,8 +30,9 @@ class DSASlide:
 
         self.item_id = item_id
         self.girder_handler = girder_handler
+        self.user_details = user_details
 
-        self.item_info = self.girder_handler.gc.get(f'/item/{self.item_id}?token={self.girder_handler.user_token}')
+        self.item_info = self.girder_handler.gc.get(f'/item/{self.item_id}?token={self.user_details["token"]}')
         self.slide_name = self.item_info['name']
         self.slide_ext = self.slide_name.split('.')[-1]
         self.ftu_colors = ftu_colors
@@ -121,7 +123,7 @@ class DSASlide:
         print(f'Found: {len(self.annotation_ids)} Annotations')
 
         # Step 6: Getting user token and tile url
-        self.user_token = self.girder_handler.get_token()
+        self.user_token = self.user_details['token']
         if not 'frames' in tile_metadata:
             self.tile_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token
         else:
@@ -460,11 +462,12 @@ class VisiumSlide(DSASlide):
 
     def __init__(self,
                  item_id:str,
+                 user_details,
                  girder_handler,
                  ftu_colors,
                  manual_rois:list,
                  marked_ftus:list):
-        super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
+        super().__init__(item_id,user_details,girder_handler,ftu_colors,manual_rois,marked_ftus)
 
         self.change_level_plugin = {
             'plugin_name': 'samborder2256_change_level_latest/ChangeLevel',
@@ -497,7 +500,7 @@ class VisiumSlide(DSASlide):
                                         'image_id': self.item_id,
                                         'change_type': json.dumps(change_type),
                                         'girderApiUrl': self.girder_handler.apiUrl,
-                                        'girderToken': self.girder_handler.user_token
+                                        'girderToken': self.user_token
                                     }
                                 )['_id']
 
@@ -533,12 +536,13 @@ class CODEXSlide(DSASlide):
 
     def __init__(self,
                  item_id:str,
+                 user_details,
                  girder_handler,
                  ftu_colors:dict,
                  manual_rois:list,
                  marked_ftus:list
                  ):
-        super().__init__(item_id,girder_handler,ftu_colors,manual_rois,marked_ftus)
+        super().__init__(item_id,user_details,girder_handler,ftu_colors,manual_rois,marked_ftus)
 
         # Updating tile_url so that it includes the different frames
         self.channel_names = []
