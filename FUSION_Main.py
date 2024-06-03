@@ -402,6 +402,7 @@ class FUSION:
     def update_page(self,pathname, user_data, vis_sess_store):
         
         vis_sess_store = json.loads(vis_sess_store)
+        user_data = json.loads(user_data)
         pathname = pathname[1:]
         print(f'Navigating to {pathname}')
 
@@ -833,7 +834,7 @@ class FUSION:
              prevent_initial_call = True
         )(self.run_analysis)
         """
-
+        """
         # Callback for Ask Fusey
         self.app.callback(
             [Output('ask-fusey-box','children'),
@@ -843,6 +844,7 @@ class FUSION:
              State('tools-tabs','active_tab')],
             prevent_initial_call = True
         )(self.ask_fusey)
+        """
 
         # Adding labels from popup boxes
         self.app.callback(
@@ -1111,6 +1113,7 @@ class FUSION:
         self.app.callback(
             Input('upload-type','value'),
             [Output('upload-requirements','children'),
+             Output('upload-type','disabled'),
              Output('user-store','data')],
             State('user-store','data'),
             prevent_initial_call=True
@@ -1795,7 +1798,7 @@ class FUSION:
         #TODO: Update this for CODEX and Regular vis
 
         frame_label_disable = [no_update]*len(ctx.outputs_list[-2])
-        viewport_store_data = ['']*len(ctx.outputs_list[-1])
+        viewport_store_data = ['']
         cell_view_type = get_pattern_matching_value(cell_view_type)
         if cell_view_type is None:
             cell_view_type = 'channel_hist'
@@ -1821,14 +1824,15 @@ class FUSION:
         if current_tab=='cell-compositions-tab':
             if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
-                frame_label = get_pattern_matching_value(frame_label)
-                if len(frame_list)<2:
-                    frame_label = None
-                
-                frame_list = get_pattern_matching_value(frame_list)
-                print(f'frame_list: {frame_list}')
-                if frame_list is None:
-                    frame_list = [self.wsi.channel_names[0]]
+                if self.wsi.spatial_omics_type=='CODEX':
+                    frame_label = get_pattern_matching_value(frame_label)
+                    if len(frame_list)<2:
+                        frame_label = None
+                    
+                    frame_list = get_pattern_matching_value(frame_list)
+                    print(f'frame_list: {frame_list}')
+                    if frame_list is None:
+                        frame_list = [self.wsi.channel_names[0]]
 
                 if update_data:
                     if self.wsi.spatial_omics_type=='Visium':
@@ -2326,7 +2330,7 @@ class FUSION:
     
         elif current_tab=='annotation-tab':
             if self.dataset_handler.username=='fusionguest':
-                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable, json.dumps(viewport_store_data)
+                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable, [json.dumps(viewport_store_data)]
             else:
                 
                 # Getting intersecting FTU information
@@ -2361,7 +2365,7 @@ class FUSION:
                         )
                 ])
 
-                return html.Div(), annotation_tab_group, frame_label_disable, json.dumps(viewport_store_data)
+                return html.Div(), annotation_tab_group, frame_label_disable, [json.dumps(viewport_store_data)]
         
         else:
             raise exceptions.PreventUpdate
@@ -3744,8 +3748,6 @@ class FUSION:
                 'zoom': 3,
                 'transition':'flyTo'
             }
-            print(map_center)
-
 
             self.current_ftus = self.wsi.ftu_props
             self.current_ftu_layers = self.wsi.ftu_names
@@ -5311,7 +5313,15 @@ class FUSION:
         return cli_description, cli_butt_disable, current_image_region, cli_results, cli_results_followup
 
     def update_upload_requirements(self,upload_type,user_data_store):
-        
+        """
+        Creating upload components for different file types        
+        """
+
+        print(f'update_upload_requirements: {ctx.triggered_id}')
+        print(ctx.triggered)
+        if not ctx.triggered[0]['value']:
+            raise exceptions.PreventUpdate
+
         input_disabled = True
         # Creating an upload div specifying which files are needed for a given upload type
         # Getting the collection id
@@ -5428,7 +5438,7 @@ class FUSION:
             user_data_store['upload_check'] = {
                 'WSI': False
             }
-            user_data_store['current_upload_type'] = 'Regular'
+            user_data_store['upload_type'] = 'Regular'
 
         elif upload_type == 'CODEX':
             # CODEX uploads include histology and multi-frame CODEX image (or just CODEX?)
@@ -5474,7 +5484,7 @@ class FUSION:
                 'WSI': False
             }
 
-            user_data_store['current_upload_type'] = 'CODEX'
+            user_data_store['upload_type'] = 'CODEX'
         
         user_data_store['upload_wsi_id'] = None
         user_data_store['upload_omics_id'] = None
@@ -5944,7 +5954,7 @@ class FUSION:
         if seg_status+cell_status==3*(1+len(user_data_store['segmentation_job'])):
 
             # Div containing the job logs:
-            if not self.upload_omics_id is None:
+            if not user_data_store['upload_omics_id'] is None:
                 seg_logs_div = html.Div(
                     dbc.Row([
                         dbc.Col(html.Div(
@@ -6055,14 +6065,14 @@ class FUSION:
             if gene_list is None:
                 gene_list = ""
 
-            if self.current_upload_type == 'Regular':
+            if user_data_store['upload_type'] == 'Regular':
                 # Extracting annotations and initilaiz sub-compartment mask
                 self.upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
 
                 # Running post-segmentation worfklow from Prepper
                 self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id'],self.upload_annotations)
 
-            if self.current_upload_type == 'Visium':
+            if user_data_store['upload_type'] == 'Visium':
                 # Extracting annotations and initial sub-compartment mask
                 self.upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
                 
@@ -6077,7 +6087,7 @@ class FUSION:
                     gene_list
                 )
 
-            elif self.current_upload_type == 'CODEX':
+            elif user_data_store['upload_type'] == 'CODEX':
 
                 # Running post-segmentation workflow from CODEX Prep
                 frame_names, current_frame = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id']) 
@@ -6087,7 +6097,7 @@ class FUSION:
 
             sub_comp_method = 'Manual'
 
-            if self.current_upload_type in ['Visium','Regular']:
+            if user_data_store['upload_type'] in ['Visium','Regular']:
 
                 if not self.layer_ann is None:
 
@@ -6106,7 +6116,7 @@ class FUSION:
                     'image': image
                 }
 
-            elif self.current_upload_type == 'CODEX':
+            elif user_data_store['upload_type'] == 'CODEX':
                 self.feature_extract_ftus = None
 
                 prep_values = {
@@ -6328,6 +6338,7 @@ class FUSION:
         
         return [feat_logs_disable],[feat_logs_div]
 
+    """
     def ask_fusey(self,butt_click,current_style,current_tab):
         
         # Don't do anything if there isn't a WSI in view
@@ -6441,6 +6452,7 @@ class FUSION:
                     }
             
         return fusey_child, parent_style
+    """
 
     def add_label(self,notes_click,delete_click,pop_input):
 
@@ -8031,10 +8043,6 @@ class FUSION:
         """
 
         main_cell_types = get_pattern_matching_value(main_cell_types)
-
-        print(ctx.triggered_id)
-        print(ctx.triggered)
-        print(main_cell_types)
 
         if len(main_cell_types)==0:
             raise exceptions.PreventUpdate

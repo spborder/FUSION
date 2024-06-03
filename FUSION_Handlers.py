@@ -182,8 +182,8 @@ class LayoutHandler:
             dl.LayersControl(id='layer-control',
                              children = self.initial_overlays
                              ),
-            dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
-            html.Div(id='ask-fusey-box',style={'visibility':'hidden','position':'absolute','top':'50px','right':'10px','zIndex':'1000'}),
+            #dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
+            #html.Div(id='ask-fusey-box',style={'visibility':'hidden','position':'absolute','top':'50px','right':'10px','zIndex':'1000'}),
             html.Div(id='marker-add-div',children = []),
             html.Div(
                 id = 'dummy-div-user-annotations',
