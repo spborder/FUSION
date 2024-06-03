@@ -371,7 +371,7 @@ class FUSION:
         serve(self.app.server,host='0.0.0.0',port=8000,threads = 10)
 
     def view_instructions(self,n,n2,is_open,user_data_store):
-
+        print(user_data_store)
         user_data_store = json.loads(user_data_store)
 
         # Opening collapse and populating internal div 
@@ -5530,7 +5530,7 @@ class FUSION:
                 logged_in_user = 'Welcome: fusionguest'
                 upload_disabled = True
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], json.dumps(user_data_output)
         
         elif ctx.triggered_id=='create-user-submit':
             if len(email)==0 or len(firstname)==0 or len(lastname)==0:
@@ -5555,7 +5555,7 @@ class FUSION:
                 logged_in_user = 'Welcome: fusionguest'
                 upload_disabled = True
 
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], user_data_output
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], json.dumps(user_data_output)
 
 
             else:
@@ -5586,7 +5586,7 @@ class FUSION:
                     logged_in_user = f'Welcome: fusionguest'
                     upload_disabled = True
             
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], json.dumps(user_data_output)
 
         else:
             raise exceptions.PreventUpdate
