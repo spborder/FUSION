@@ -2579,7 +2579,7 @@ class FUSION:
 
                 if cell_sub_val == 'All':
                     self.overlay_prop = {
-                        'name': m_prop,
+                        'name': 'Main_Cell_Types',
                         'value':cell_name,
                         'sub_value':None
                     }
