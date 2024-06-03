@@ -5321,8 +5321,6 @@ class FUSION:
         Creating upload components for different file types        
         """
 
-        print(f'update_upload_requirements: {ctx.triggered_id}')
-        print(ctx.triggered)
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
 
@@ -6270,6 +6268,12 @@ class FUSION:
 
         user_data_store = json.loads(user_data_store)
 
+        if ctx.triggered_id is None:
+            raise exceptions.PreventUpdate
+        
+        if not ctx.triggered_id['value']:
+            raise exceptions.PreventUpdate
+
         if ctx.triggered_id['type']=='start-feat':
             # Prepping input arguments to feature extraction
             include_ftus = get_pattern_matching_value(include_ftus)
@@ -6316,6 +6320,9 @@ class FUSION:
 
         user_data_store = json.loads(user_data_store)
 
+        if not ctx.triggered_id['value']:
+            raise exceptions.PreventUpdate
+        
         # Updating logs for feature extraction job, disabling when the job is done
         feat_ext_status, feat_ext_log = self.dataset_handler.get_job_status(user_data_store['feat_ext_job']['_id'])
 
