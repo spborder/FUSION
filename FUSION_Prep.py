@@ -93,7 +93,7 @@ class Prepper:
             }
         ]
 
-    def get_annotation_image_mask(self,item_id,annotations,layer_idx,ann_idx):
+    def get_annotation_image_mask(self,item_id,user_info,annotations,layer_idx,ann_idx):
 
         # Codes taken from Annotaterator
         print(f'item_id: {item_id}')
@@ -112,7 +112,7 @@ class Prepper:
             max_y = np.max(coordinates[:,1])+self.padding_pixels
 
             # Getting image and mask
-            image = np.uint8(np.array(self.girder_handler.get_image_region(item_id,[min_x,min_y,max_x,max_y])))
+            image = np.uint8(np.array(self.girder_handler.get_image_region(item_id,user_info,[min_x,min_y,max_x,max_y])))
             
             # Scaling coordinates to fit within bounding box
             scaled_coordinates = coordinates.tolist()

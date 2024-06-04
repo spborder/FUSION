@@ -1848,7 +1848,7 @@ class LayoutHandler:
 
             return map_children
 
-    def gen_annotation_card(self,dataset_handler, current_ftus):
+    def gen_annotation_card(self,dataset_handler, current_ftus, user_info):
         """
         Generate layout for annotation on structures
         """
@@ -1858,7 +1858,7 @@ class LayoutHandler:
             - Either personally created or shared
         """
         # Checking for current annotation sessions:
-        current_ann_sessions = dataset_handler.check_user_folder(folder_name='FUSION Annotation Sessions')
+        current_ann_sessions = dataset_handler.check_user_folder(folder_name='FUSION Annotation Sessions', user_info=user_info)
         if not current_ann_sessions is None:
             # Checking annotation session folder for current sessions
             ann_sessions = dataset_handler.gc.get(f'/folder',parameters={'parentType':'folder','parentId':current_ann_sessions["_id"]})
@@ -1878,7 +1878,7 @@ class LayoutHandler:
                 for idx,i in enumerate(ann_session_names)
             ]
 
-            session_progress, session_info = dataset_handler.get_annotation_session_progress(first_session['name'])
+            session_progress, session_info = dataset_handler.get_annotation_session_progress(first_session['name'],user_info)
             first_session = session_info
             first_tab = self.gen_annotation_content(False,current_ftus, first_session['Annotations'], first_session['Labels'], session_progress)
 
@@ -1973,7 +1973,18 @@ class LayoutHandler:
                                 html.Hr(),
                                 html.H6(f'Annotations: {ann_progress["annotations"]}'),
                                 html.Hr(),
-                                html.H6(f'Labels: {ann_progress["labels"]}')
+                                html.H6(f'Labels: {ann_progress["labels"]}'),
+                                html.Hr(),
+                                dbc.Button(
+                                    'Download Images and Masks',
+                                    id = {'type':'download-ann-session','index': 0},
+                                    className = 'd-grid col-12 mx-auto',
+                                    n_clicks = 0,
+                                    disabled = True
+                                ),
+                                dcc.Download(
+                                    id = {'type':'download-ann-session-data','index':0}
+                                )
                             ],
                             color = 'info',
                             style = {'marginTop':'20px','marginLeft':'20px', 'width':'80%'}
@@ -2036,6 +2047,19 @@ class LayoutHandler:
                                         id = {'type':'annotation-class-select','index':0}
                                     ),
                                     style = {'width':'100%'}
+                                ),
+                                dbc.Row(
+                                    children = [
+                                        dmc.Button(
+                                            'Auto-Annotate!',
+                                            loaderProps={'type':'dots'},
+                                            loading=False,
+                                            fullWidth=True,
+                                            disabled = True,
+                                            style = {'height':'50px'}
+                                        )
+                                    ],
+                                    style = {'marginTop':'15px'}
                                 )
                             ])
                         ],style = {'marginBottom':'20px'}),
@@ -3721,7 +3745,7 @@ class GirderHandler:
         
         return job_response
 
-    def get_image_region(self,item_id,coords_list,frame_index=None):
+    def get_image_region(self,item_id,user_info,coords_list,frame_index=None):
 
         # Checking to make sure coords are within the slide boundaries
         slide_metadata = self.gc.get(f'/item/{item_id}/tiles')
@@ -3730,6 +3754,8 @@ class GirderHandler:
         coords_list[0] = np.maximum(0,coords_list[0])
         coords_list[1] = np.maximum(0,coords_list[1])
 
+        user_token = user_info['token']
+
         if frame_index is None:
             # Pulling specific region from an image using provided coordinates            
             try:
@@ -3737,7 +3763,7 @@ class GirderHandler:
                     image_region = Image.open(
                         BytesIO(
                             requests.get(
-                                self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
+                                self.gc.urlBase+f'/item/{item_id}/tiles/region?token={user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
                             ).content
                         )
                     )
@@ -3747,7 +3773,7 @@ class GirderHandler:
                     image_region = Image.open(
                         BytesIO(
                             requests.get(
-                                self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'+style_string
+                                self.gc.urlBase+f'/item/{item_id}/tiles/region?token={user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'+style_string
                             ).content
                         )
                     )
@@ -3766,7 +3792,7 @@ class GirderHandler:
             # coords_list is organized: [min_x, min_y, max_x, max_y]
             if frame_index<len(slide_metadata['frames']):
                 try:
-                    image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}&frame={frame_index}').content))
+                    image_region = Image.open(BytesIO(requests.get(self.gc.urlBase+f'/item/{item_id}/tiles/region?token={user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}&frame={frame_index}').content))
                 except:
                     print('-------------------------------------------------')
                     print(f'Error reading image region from item: {item_id}')
@@ -3781,14 +3807,14 @@ class GirderHandler:
 
         return image_region
 
-    def get_annotation_image(self,slide_id,bounding_box):
+    def get_annotation_image(self,slide_id,user_info,bounding_box):
 
         min_x = bounding_box[0]
         min_y = bounding_box[1]
         max_x = bounding_box[2]
         max_y = bounding_box[3]
 
-        image_region = np.array(self.get_image_region(slide_id,[min_x,min_y,max_x,max_y]))
+        image_region = np.array(self.get_image_region(slide_id,user_info,[min_x,min_y,max_x,max_y]))
 
         return image_region
 
@@ -4152,17 +4178,17 @@ class GirderHandler:
             # Maybe just load the default clustering data if there's an error?
             return pd.DataFrame()
 
-    def save_to_user_folder(self,save_object, username, output_path = None):
+    def save_to_user_folder(self,save_object, user_info, output_path = None):
 
         if not os.path.exists('/tmp'):
             os.makedirs('/tmp')
 
         if output_path is None:
-            output_path = f'/user/{username}/Public'
+            output_path = f'/user/{user_info["login"]}/Public'
         output_path_id = self.gc.get('/resource/lookup',parameters={'path':output_path})['_id']
 
         # Removing file if there's a duplicate
-        current_items = self.gc.get(f'/resource/{output_path_id}/items?token={self.user_token}',parameters={'type':'folder','limit':10000})
+        current_items = self.gc.get(f'/resource/{output_path_id}/items?token={user_info["token"]}',parameters={'type':'folder','limit':10000})
         current_items_names = [i['name'] for i in current_items]
         if save_object['filename'] in current_items_names:
            self.gc.delete(f'/item/{current_items[current_items_names.index(save_object["filename"])]["_id"]}')
@@ -4230,17 +4256,17 @@ class GirderHandler:
 
         return user_folder_file
 
-    def check_user_folder(self,folder_name, subfolder = None, sub_sub_folder = None):
+    def check_user_folder(self,folder_name, user_info, subfolder = None, sub_sub_folder = None):
         """
         Checking if a folder with a specific name is in the user's public folder
         """
         if subfolder is None:
-            public_folder_path = f'/user/{self.username}/Public'
+            public_folder_path = f'/user/{user_info["login"]}/Public'
         else:
-            public_folder_path = f'/user/{self.username}/Public/{folder_name}'
+            public_folder_path = f'/user/{user_info["login"]}/Public/{folder_name}'
 
             if not sub_sub_folder is None:
-                public_folder_path = f'/user/{self.username}/Public/{folder_name}/{subfolder}'
+                public_folder_path = f'/user/{user_info["login"]}/Public/{folder_name}/{subfolder}'
                 folder_name = sub_sub_folder
             else:
                 folder_name = subfolder
@@ -4256,7 +4282,7 @@ class GirderHandler:
         else:
             return None
 
-    def get_annotation_session_progress(self, session_name):
+    def get_annotation_session_progress(self, session_name, user_info):
         """
         Getting slide and image count (both with annotations and with labels)
         """
@@ -4273,10 +4299,11 @@ class GirderHandler:
             'user_type': 'annotator'
         }
 
-        path_to_ann_sessions = f'/user/{self.username}/Public/FUSION Annotation Sessions/{session_name}'
+        path_to_ann_sessions = f'/user/{user_info["login"]}/Public/FUSION Annotation Sessions/{session_name}'
         folder_id = self.gc.get('/resource/lookup',parameters={'path':path_to_ann_sessions})
 
         session_info['name'] = folder_id['name']
+        session_info['folder_id'] = folder_id['_id']
         session_info['Annotations'] = folder_id['meta']['Annotations']
         session_info['Labels'] = folder_id['meta']['Labels']
 

@@ -200,9 +200,6 @@ class FUSION:
         self.hex_color_key = {}
         self.current_channels = {}
 
-        # Initializing current annotation session
-        self.current_ann_session = None
-
         # JavaScript functions for controlling annotation properties
         self.ftu_style_handle = assign("""function(feature,context){
             const {color_key,overlay_prop,fillOpacity,ftu_colors,filter_vals} = context.hideout;
@@ -660,6 +657,7 @@ class FUSION:
              Output('annotation-session-div','children'),
              Output({'type':'frame-label-drop','index':ALL},'disabled'),
              Output({'type':'viewport-store-data','index':ALL},'data'),
+             Output('user-store','data')
              ],
             [Input('slide-map','bounds'),
              Input({'type':'roi-view-data','index':ALL},'value'),
@@ -672,7 +670,8 @@ class FUSION:
              State({'type':'frame-label-drop','index':ALL},'value'),
              State({'type':'cell-label-eps','index':ALL},'value'),
              State({'type':'cell-label-min-samples','index':ALL},'value'),
-             State({'type':'viewport-store-data','index':ALL},'data')
+             State({'type':'viewport-store-data','index':ALL},'data'),
+             State('user-store','data')
              ],
             prevent_initial_call = True
         )(self.update_viewport_data)      
@@ -775,7 +774,8 @@ class FUSION:
         self.app.callback(
             [Input('cluster-graph','clickData'),
             Input('cluster-graph','selectedData')],
-            State('cluster-store','data'),
+            [State('cluster-store','data'),
+             State('user-store','data')],
             [Output('selected-image','figure'),
             Output('selected-cell-types','figure'),
             Output('selected-cell-states','figure'),
@@ -965,7 +965,8 @@ class FUSION:
         self.app.callback(
             [
                 Output({'type':'annotation-session-content','index':ALL},'children'),
-                Output({'type':'annotation-tab-group','index':ALL},'children')
+                Output({'type':'annotation-tab-group','index':ALL},'children'),
+                Output('user-store','data')
             ],
             [
                 Input({'type':'annotation-tab-group','index':ALL},'active_tab'),
@@ -980,7 +981,8 @@ class FUSION:
                 State({'type':'new-annotation-color','index':ALL},'value'),
                 State({'type':'new-annotation-label','index':ALL},'value'),
                 State({'type':'new-annotation-user','index':ALL},'value'),
-                State({'type':'new-user-type','index':ALL},'value')
+                State({'type':'new-user-type','index':ALL},'value'),
+                State('user-store','data')
             ],
             prevent_initial_call = True
         )(self.update_annotation_session)
@@ -1048,7 +1050,8 @@ class FUSION:
                 State({'type':'annotation-class-label','index':ALL},'value'),
                 State({'type':'annotation-image-label','index':ALL},'value'),
                 State({'type':'annotation-station-ftu','index':ALL},'children'),
-                State({'type':'annotation-station-ftu-idx','index':ALL},'children')
+                State({'type':'annotation-station-ftu-idx','index':ALL},'children'),
+                State('user-store','data')
             ],
             prevent_initial_call = True
         )(self.update_current_annotation)
@@ -1067,6 +1070,14 @@ class FUSION:
             ],
             prevent_initial_call = True
         )(self.add_cell_subtypes)
+
+        # Downloading annotation session images, masks, and labels
+        self.app.callback(
+            Output({'type':'download-ann-session-data','index':ALL},'data'),
+            Input({'type':'download-ann-session','index':ALL},'n_clicks'),
+            State('user-store','data'),
+            prevent_initial_call = True
+        )(self.download_annotation_session)
 
     def builder_callbacks(self):
 
@@ -1796,12 +1807,14 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options, current_session
 
-    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,cluster_click,current_tab,update_data,frame_list,frame_label, cluster_eps, cluster_min_samples,current_data):
+    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,cluster_click,current_tab,update_data,frame_list,frame_label, cluster_eps, cluster_min_samples,current_data, user_data_store):
         """
         Updating data used for current viewport visualizations
         """
 
-        frame_label_disable = [no_update]*len(ctx.outputs_list[-2])
+        user_data_store = json.loads(user_data_store)
+        
+        frame_label_disable = [no_update]*len(ctx.outputs_list[2])
         viewport_store_data = ['']
         cell_view_type = get_pattern_matching_value(cell_view_type)
         if cell_view_type is None:
@@ -2281,7 +2294,7 @@ class FUSION:
                             tab_list.append(f_tab)
 
                     if self.wsi.spatial_omics_type=='Visium' or self.wsi.spatial_omics_type=='Regular':
-                        return dbc.Tabs(tab_list,active_tab = 'tab_0'), no_update, frame_label_disable, [json.dumps(viewport_store_data)]
+                        return dbc.Tabs(tab_list,active_tab = 'tab_0'), no_update, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
                     elif self.wsi.spatial_omics_type=='CODEX':
 
                         return_div = html.Div([
@@ -2325,16 +2338,16 @@ class FUSION:
                             ])
                         ])
 
-                        return return_div, no_update, frame_label_disable, [json.dumps(viewport_store_data)]
+                        return return_div, no_update, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
 
                 else:
-                    return html.P('No FTUs in current view'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)]
+                    return html.P('No FTUs in current view'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
             else:
-                return html.P('Select a slide to get started!'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)]
+                return html.P('Select a slide to get started!'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
     
         elif current_tab=='annotation-tab':
             if self.dataset_handler.username=='fusionguest':
-                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable, [json.dumps(viewport_store_data)]
+                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
             else:
                 
                 # Getting intersecting FTU information
@@ -2352,8 +2365,8 @@ class FUSION:
                 self.current_ftus = intersecting_ftus
 
                 #TODO: Check for current annotation session in user's public folder
-                annotation_tabs, first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler,self.current_ftus)
-                self.current_ann_session = first_session
+                annotation_tabs, first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler,self.current_ftus, user_data_store)
+                user_data_store["current_ann_session"] = first_session
 
                 annotation_tab_group = html.Div([
                         dbc.Tabs(
@@ -2369,7 +2382,7 @@ class FUSION:
                         )
                 ])
 
-                return html.Div(), annotation_tab_group, frame_label_disable, [json.dumps(viewport_store_data)]
+                return html.Div(), annotation_tab_group, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
         
         else:
             raise exceptions.PreventUpdate
@@ -4543,7 +4556,7 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def grab_image(self,sample_info):
+    def grab_image(self,sample_info, user_info):
         """
         Getting image for clicked point in morphological clustering tab. (referenced in self.update_selected)
         """
@@ -4553,7 +4566,7 @@ class FUSION:
         img_list = []
         img_dims = np.zeros((len(sample_info),2))
         for idx,s in enumerate(sample_info):
-            image_region = np.array(self.dataset_handler.get_annotation_image(s['Slide_Id'],s['Bounding_Box']))
+            image_region = np.array(self.dataset_handler.get_annotation_image(s['Slide_Id'],user_info,s['Bounding_Box']))
             
             # Resizing images so that each one is the same size
             img_list.append(resize(np.array(image_region),output_shape=(512,512,3),anti_aliasing=True))
@@ -4563,12 +4576,13 @@ class FUSION:
         
         return img_list        
 
-    def update_selected(self,click,selected,cluster_data_store):
+    def update_selected(self,click,selected,cluster_data_store,user_store_data):
         """
         Getting cell/state information and image for selected point in plot.
         """
 
         cluster_data_store = json.loads(cluster_data_store)
+        user_store_data = json.loads(user_store_data)
         feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
 
         if click is not None:
@@ -4664,7 +4678,7 @@ class FUSION:
                 style = {'maxHeight':'500px','overflow':'scroll'}
             )
 
-            current_image = self.grab_image(sample_info)
+            current_image = self.grab_image(sample_info,user_store_data)
             if len(current_image)==1:
                 selected_image = go.Figure(
                     data = px.imshow(current_image[0])['data'],
@@ -6115,7 +6129,7 @@ class FUSION:
                 if not self.layer_ann is None:
 
                     ftu_value = self.feature_extract_ftus[self.layer_ann['current_layer']]
-                    image, mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                    image, mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_info,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
                     self.layer_ann['current_image'] = image
                     self.layer_ann['current_mask'] = mask
@@ -6208,7 +6222,7 @@ class FUSION:
 
             if ctx_triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
                 
-                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_info,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
                 self.layer_ann['current_image'] = new_image
                 self.layer_ann['current_mask'] = new_mask
 
@@ -6710,7 +6724,7 @@ class FUSION:
                     'filename':f'marker_features.csv',
                     'content': feature_data
                 },
-                username = user_data_store['login']
+                user_info = user_data_store
             )
 
             # Starting cluster marker job
@@ -7527,12 +7541,14 @@ class FUSION:
 
         return [return_div], [f'{len(selectedData["points"])} Cells selected'], cell_markers
 
-    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types):
+    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types, user_data_store):
         """
         Populating annotation station tab with necessary information
         """
         return_div = [no_update]
         new_annotation_tab_group = [no_update]
+
+        user_data_store = json.loads(user_data_store)
 
         session_tab = get_pattern_matching_value(session_tab)
 
@@ -7546,13 +7562,13 @@ class FUSION:
             if ann_sessions_folder is None:
                 # Creating parent folder if it doesn't exist
                 parent_folder = self.dataset_handler.create_user_folder(
-                    parent_path = f'/user/{self.dataset_handler.username}/Public',
+                    parent_path = f'/user/{user_data_store["login"]}/Public',
                     folder_name = 'FUSION Annotation Sessions',
                     metadata = {"Folder Description":"Data related to annotation sessions completed in FUSION"}
                 )
 
             new_session_folder = self.dataset_handler.create_user_folder(
-                parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions',
+                parent_path = f'/user/{user_data_store["login"]}/Public/FUSION Annotation Sessions',
                 folder_name = new_session_name,
                 metadata = {
                     "Session Description":new_session_description,
@@ -7569,9 +7585,10 @@ class FUSION:
             )
 
             #TODO: Find some way to share this with indicated users
+            updated_tabs,first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus, user_data_store)
+            session_progress, current_ann_session = self.dataset_handler.get_annotation_session_progress(first_session['name'], user_data_store)
 
-            updated_tabs,first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus)
-            session_progress, self.current_ann_session = self.dataset_handler.get_annotation_session_progress(first_session['name'])
+            user_data_store['current_ann_session'] = current_ann_session
 
             new_annotation_tab_group = [html.Div([
                 dbc.Tabs(
@@ -7587,23 +7604,25 @@ class FUSION:
             session_name = current_session_names[int(session_tab.split('-')[-1])]
 
             if session_name=='Create New Session':
-                self.current_ann_session = {
+                user_data_store['current_ann_session'] = {
                     'name':'Create New Session',
                     'Annotations':[],
                     'Labels': []
                 }
 
-                first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = self.current_ftus)
+                first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = self.current_ftus, )
             else:
-                session_progress, self.current_ann_session = self.dataset_handler.get_annotation_session_progress(session_name)
-                first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = self.current_ftus, classes = self.current_ann_session['Annotations'], labels = self.current_ann_session['Labels'], ann_progress = session_progress, user_type = self.current_ann_session['user_type'])
+                session_progress, current_ann_session = self.dataset_handler.get_annotation_session_progress(session_name,user_data_store)
+                first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = self.current_ftus, classes = current_ann_session['Annotations'], labels = current_ann_session['Labels'], ann_progress = session_progress, user_type = current_ann_session['user_type'])
+
+                user_data_store['current_ann_session'] = current_ann_session
 
             return_div = [first_tab]
 
         
-        return return_div, new_annotation_tab_group
+        return return_div, new_annotation_tab_group, json.dumps(user_data_store)
     
-    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx):
+    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data):
         """
         Getting current annotation data (text or image) and saving to annotation session folder on the server
         """
@@ -7614,6 +7633,8 @@ class FUSION:
         save_button_style = ['primary']
         session_ftu_progress = [no_update]*len(ctx.outputs_list[6])
         session_ftu_progress_label = [no_update]*len(ctx.outputs_list[7])
+
+        user_store_data = json.loads(user_store_data)
 
         line_slide = get_pattern_matching_value(line_slide)
         if line_slide is None:
@@ -7699,7 +7720,7 @@ class FUSION:
             ftu_bbox = np.array(self.wsi.convert_map_coords(ftu_bbox_coords))
             ftu_bbox = [np.min(ftu_bbox[:,0])-50,np.min(ftu_bbox[:,1])-50,np.max(ftu_bbox[:,0])+50,np.max(ftu_bbox[:,1])+50]
             #TODO: This method only grabs histology images that are single frame or multi-frame with RGB at 0,1,2
-            ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox])
+            ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,user_store_data,[int(i) for i in ftu_bbox])
 
             if not ann_class_color is None:
                 color_parts = ann_class_color.replace('rgb(','').replace(')','').split(',')
@@ -7764,22 +7785,22 @@ class FUSION:
                 # Checking if slide folder is created
                 slide_folder = self.dataset_handler.check_user_folder(
                     folder_name = 'FUSION Annotation Sessions',
-                    subfolder = self.current_ann_session['name'],
+                    subfolder = user_store_data['current_ann_session']['name'],
                     sub_sub_folder = self.wsi.slide_name
                 )
                 if slide_folder is None:
                     # Creating slide folder in current_ann_session
                     new_folder = self.dataset_handler.create_user_folder(
-                        parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}',
+                        parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}',
                         folder_name = self.wsi.slide_name
                     )
                     new_folder = self.dataset_handler.create_user_folder(
-                        parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}',
+                        parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}',
                         folder_name = 'Images'
                     )
 
                 # Saving data
-                self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Images')
+                self.dataset_handler.save_to_user_folder(ftu_content,user_store_data,output_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}/Images')
                 
                 # Updating image labels
                 image_labels = ['']*len(ctx.outputs_list[3])
@@ -7808,8 +7829,8 @@ class FUSION:
             
             # Convert annotations relayoutData to a mask and save both image and mask to current annotation session
             #TODO: combined mask here should have a channel dimension equal to the number of classes (e.g. if two classes overlap)
-            combined_mask = np.zeros((height,width,len(self.current_ann_session["Annotations"])))
-            annotation_colors_list = [i['value'] for i in self.current_ann_session['Annotations']]
+            combined_mask = np.zeros((height,width,len(user_store_data["current_ann_session"]["Annotations"])))
+            annotation_colors_list = [i['value'] for i in user_store_data["current_ann_session"]['Annotations']]
             for key in annotations:
                 for i in range(len(annotations)):
                     #TODO: Add color property to this function for multiple classes
@@ -7821,7 +7842,7 @@ class FUSION:
                         combined_mask[:,:,annotation_colors_list.index(mask_class)] += 255*mask
             
             # Now saving both image and mask to the annotation session folder
-            ftu_image = np.array(self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox]))
+            ftu_image = np.array(self.dataset_handler.get_image_region(self.wsi.item_id,user_store_data,[int(i) for i in ftu_bbox]))
             
             mask_image = np.uint8(combined_mask)
 
@@ -7853,27 +7874,28 @@ class FUSION:
             # Checking if slide folder is created
             slide_folder = self.dataset_handler.check_user_folder(
                 folder_name = 'FUSION Annotation Sessions',
-                subfolder = self.current_ann_session['name'],
+                user_info = user_store_data,
+                subfolder = user_store_data["current_ann_session"]['name'],
                 sub_sub_folder = self.wsi.slide_name
             )
             if slide_folder is None:
                 # Creating slide folder in current_ann_session
                 new_folder = self.dataset_handler.create_user_folder(
-                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}',
+                    parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}',
                     folder_name = self.wsi.slide_name
                 )
                 new_folder = self.dataset_handler.create_user_folder(
-                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}',
+                    parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}',
                     folder_name = 'Images'
                 )
                 new_folder = self.dataset_handler.create_user_folder(
-                    parent_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}',
+                    parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}',
                     folder_name = 'Masks'
                 )
 
             # Saving data
-            self.dataset_handler.save_to_user_folder(ftu_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Images')
-            self.dataset_handler.save_to_user_folder(mask_content,output_path = f'/user/{self.dataset_handler.username}/Public/FUSION Annotation Sessions/{self.current_ann_session["name"]}/{self.wsi.slide_name}/Masks')
+            self.dataset_handler.save_to_user_folder(ftu_content,user_store_data,output_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}/Images')
+            self.dataset_handler.save_to_user_folder(mask_content,user_store_data,output_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}/Masks')
 
             save_button_style = ['success']
 
@@ -8100,6 +8122,27 @@ class FUSION:
 
 
         return new_cell_droptions, new_cell_subtype_dropue
+
+    def download_annotation_session(self,butt_click,user_data_store):
+        """
+        Downloading images and masks for an annotation session
+        """
+
+        if not ctx.triggered_id[0]['value']:
+            raise exceptions.PreventUpdate
+        
+        user_data_store = json.loads(user_data_store)
+
+
+
+
+
+        
+
+
+
+
+
 
 
 
