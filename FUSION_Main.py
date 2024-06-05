@@ -1071,13 +1071,24 @@ class FUSION:
             prevent_initial_call = True
         )(self.add_cell_subtypes)
 
-        # Downloading annotation session images, masks, and labels
+        # Downloading annotation session data with modal and progress indicator
         self.app.callback(
-            Output({'type':'download-ann-session-data','index':ALL},'data'),
-            Input({'type':'download-ann-session','index':ALL},'n_clicks'),
-            State('user-store','data'),
+            [
+                Output({'type':'download-ann-session-data','index':ALL},'data'),
+                Output({'type':'ann-session-interval','index':ALL},'disabled'),
+                Output({'type':'download-ann-session-modal','index':ALL},'is_open'),
+                Output({'type':'download-ann-session-modal','index':ALL},'children')
+            ],
+            [
+                Input({'type':'download-ann-session','index':ALL},'n_clicks'),
+                Input({'type':'ann-session-interval','index':ALL},'n_intervals')
+            ],
+            [
+                State('user-store','data'),
+                State({'type':'download-ann-session-modal','index':ALL},'is_open')
+            ],
             prevent_initial_call = True
-        )(self.download_annotation_session)
+        )(self.download_annotation_session_log)
 
     def builder_callbacks(self):
 
@@ -7604,6 +7615,7 @@ class FUSION:
             session_progress, current_ann_session = self.dataset_handler.get_annotation_session_progress(first_session['name'], user_data_store)
 
             user_data_store['current_ann_session'] = current_ann_session
+            user_data_store['current_ann_session']['session_progress'] = session_progress
 
             new_annotation_tab_group = [html.Div([
                 dbc.Tabs(
@@ -7622,7 +7634,12 @@ class FUSION:
                 user_data_store['current_ann_session'] = {
                     'name':'Create New Session',
                     'Annotations':[],
-                    'Labels': []
+                    'Labels': [],
+                    'session_progress': {
+                        'slides': 0,
+                        'annotations': 0,
+                        'labels': 0
+                    }
                 }
 
                 first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = self.current_ftus, )
@@ -7631,6 +7648,8 @@ class FUSION:
                 first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = self.current_ftus, classes = current_ann_session['Annotations'], labels = current_ann_session['Labels'], ann_progress = session_progress, user_type = current_ann_session['user_type'])
 
                 user_data_store['current_ann_session'] = current_ann_session
+                user_data_store['current_ann_session']['session_progress'] = session_progress
+
 
             return_div = [first_tab]
 
@@ -8138,27 +8157,97 @@ class FUSION:
 
         return new_cell_droptions, new_cell_subtype_dropue
 
-    def download_annotation_session(self,butt_click,user_data_store):
+    def download_annotation_session_log(self,butt_click,new_interval,user_data_store,is_open):
         """
-        Downloading images and masks for an annotation session
+        Checking if annotation session is done loading
         """
-        if not ctx.triggered[0]['value']:
-            raise exceptions.PreventUpdate
-        
+
         user_data_store = json.loads(user_data_store)
 
-        # Getting user annotation session id:
-        annotation_session_folder = user_data_store['current_ann_session']['folder_id']
-
-        # Prepping zip file
-        zip_file_path = self.download_handler.extract_annotation_session(
-            annotation_session_folder
-        )
-
-        return [dcc.send_file(zip_file_path)]
-
-
+        if not ctx.triggered:
+            raise exceptions.PreventUpdate
         
+        if ctx.triggered_id['type']=='download-ann-session':
+            
+            # Starting thread that downloads session files
+            new_thread = threading.Thread(target = self.download_handler.extract_annotation_session, name = 'ann-session-download', args = [user_data_store['current_ann_session']['folder_id']])
+            new_thread.daemon = True
+            new_thread.start()
+
+            # Creating interval modal object
+            modal_div_children = [
+                html.Div([
+                    dbc.ModalHeader(html.H4(f'Preparing annotation session data: {user_data_store["current_ann_session"]["name"]}')),
+                    dbc.ModalBody([
+                        dbc.Progress(
+                            id = {'type':'ann-session-progress','index':0},
+                            value = 0,
+                            label = '0%'
+                        )
+                    ])
+                ])
+            ]
+
+            download_data = [no_update]
+            interval_disable = [False]
+            modal_open = [True]
+
+        elif ctx.triggered_id['type']=='ann-session-interval':
+            
+            if not new_interval:
+                raise exceptions.PreventUpdate
+
+            thread_names = [i.name for i in threading.enumerate()]
+            if 'ann-session-download' in thread_names:
+
+                # Get total number of files downloaded
+                total = 0
+                for root, dirs, files in os.walk('./assets/FUSION_Download/'):
+                    total += len(files)
+                
+                # Compare with total needed
+                session_files = user_data_store['current_ann_session']['session_progress']
+                n_session_files = 2*session_files['annotations'] if session_files['labels']==0 else session_files['labels']
+
+                progress_val = np.minimum(int(100*(total/n_session_files)),100)
+
+                modal_div_children = [
+                    html.Div([
+                        dbc.ModalHeader(html.H4(f'Preparing annotation session data: {user_data_store["current_ann_session"]["name"]}')),
+                        dbc.ModalBody([
+                            dbc.Progress(
+                                id = {'type':'ann-session-progress','index':0},
+                                value = progress_val,
+                                label = f'{progress_val}%'
+                            )
+                        ])
+                    ])
+                ]
+
+                download_data = [no_update]
+                interval_disable = [False]
+                modal_open = [True]
+
+            else:
+                
+                modal_div_children = [
+                    html.Div([
+                        dbc.ModalHeader(html.H4(f'All Done!')),
+                        dbc.ModalBody([
+                            dbc.Progress(
+                                id = {'type':'ann-session-progress','index':0},
+                                value = 100,
+                                label = f'100%'
+                            )
+                        ])
+                    ])
+                ]
+
+                download_data = [dcc.send_file('./assets/FUSION_Download.zip')]
+                interval_disable = [True]
+                modal_open = [False]
+
+        return download_data, interval_disable, modal_open, modal_div_children
 
 
 

@@ -1984,6 +1984,18 @@ class LayoutHandler:
                                 ),
                                 dcc.Download(
                                     id = {'type':'download-ann-session-data','index':0}
+                                ),
+                                dbc.Modal(
+                                    id = {'type':'download-ann-session-modal','index':0},
+                                    centered = True,
+                                    is_open = False,
+                                    size = 'lg'
+                                ),
+                                dcc.Interval(
+                                    id = {'type':'ann-session-interval','index':0},
+                                    max_intervals = -1,
+                                    disabled=True,
+                                    n_intervals = 0
                                 )
                             ],
                             color = 'info',
@@ -4934,9 +4946,8 @@ class DownloadHandler:
         metadata_df.to_csv('./assets/FUSION_Download/Session_Metadata.csv')
 
         self.zip_data(None,folder=True)
-        zip_file_path = './assets/FUSION_Download.zip'
+        #zip_file_path = './assets/FUSION_Download.zip'
 
-        return zip_file_path
 
 
 
