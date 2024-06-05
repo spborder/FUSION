@@ -9,7 +9,7 @@
         "color_code":["243,83,69","241,189,106","223,239,108"]
     },
     "DTL":{
-        "graphic":"./assets/cell_graphics/dtl_graphic.png",
+        "graphic":"./assets/cell_graphics/dtl_graphic.svg",
         "full":"Descending Thin Limb",
         "subtypes":["DTL","DTL1","DTL2","DTL3","dDTL3"],
         "states":["reference","reference","reference","reference","degenerative"],

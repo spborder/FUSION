@@ -7850,7 +7850,7 @@ class FUSION:
                 'content': ftu_image,
                 'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.png',
                 'metadata': {
-                    "Annotator": self.dataset_handler.username
+                    "Annotator": user_store_data['login']
                 }
             }
 
@@ -7859,7 +7859,7 @@ class FUSION:
                     'content': mask_image,
                     'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.png',
                     'metadata': {
-                        "Annotator": self.dataset_handler.username
+                        "Annotator": user_store_data['login']
                     }
                 }
             else:
@@ -7867,7 +7867,7 @@ class FUSION:
                     'content': mask_image,
                     'filename': f'{clicked_ftu_name}_{int(ftu_bbox[0])}_{int(ftu_bbox[1])}.tiff',
                     'metadata': {
-                        "Annotator": self.dataset_handler.username
+                        "Annotator": user_store_data['login']
                     }
                 }
 
