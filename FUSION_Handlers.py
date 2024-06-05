@@ -4921,7 +4921,17 @@ class DownloadHandler:
         )
 
         # Getting image metadata
-        
+        folder_items = dataset_handler.gc.get(
+            f'/resource/{ann_session_id}/items',
+            parameters = {
+                'type': 'folder',
+                'limit':1000000
+            }
+        )
+
+        session_metadata = [{'name': i['name']} | i['meta'] for i in folder_items if 'png' in i['name']]
+        metadata_df = pd.DataFrame.from_records(session_metadata)
+        metadata_df.to_csv('./assets/FUSION_Download/Session_Metadata.csv')
 
         self.zip_data(None,folder=True)
         zip_file_path = './assets/FUSION_Download.zip'
