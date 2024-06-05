@@ -5251,7 +5251,11 @@ class FUSION:
 
         return new_children
 
-    def download_data(self,options,button_click):
+    def download_data(self,options,button_click,user_store_data):
+        """
+        Download data for external secondary analysis
+        """
+        user_store_data = json.loads(user_store_data)
 
         if not self.wsi is None:
             if button_click:
@@ -5265,13 +5269,25 @@ class FUSION:
                     print(f'Download type: {self.download_handler.what_data(options)}')
                     download_type = self.download_handler.what_data(options)
                     if download_type == 'annotations':
-                        download_list = self.download_handler.extract_annotations(self.wsi,self.current_slide_bounds, options)
+                        download_list = self.download_handler.extract_annotations(
+                            self.wsi,
+                            self.current_slide_bounds,
+                            options
+                        )
                     elif download_type == 'cell':
-                        download_list = self.download_handler.extract_cell(self.current_ftus,options)
+                        download_list = self.download_handler.extract_cell(
+                            self.current_ftus,
+                            options
+                        )
                     elif download_type == 'manual_rois':
                         #TODO: Find bounding box of all manually annotated regions for current slide, create new image,
                         # get those files as well as annotations for manual ROIs
-                        download_list = self.download_handler.extract_manual_rois(self.wsi,self.dataset_handler,options)
+                        download_list = self.download_handler.extract_manual_rois(
+                            self.wsi,
+                            self.dataset_handler,
+                            options,
+                            user_store_data
+                        )
 
                     elif download_type == 'select_ftus':
                         #TODO: Find all manually selected FTUs, extract image bounding box of those regions,
@@ -8127,14 +8143,18 @@ class FUSION:
         """
         Downloading images and masks for an annotation session
         """
-
-        if not ctx.triggered_id[0]['value']:
+        if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
         
         user_data_store = json.loads(user_data_store)
 
+        # Getting user annotation session id:
+        annotation_session_folder = user_data_store['current_ann_session']['folder_id']
 
+        # Prepping zip file
+        zip_file_path = self.download_handler.extract_annotation_session(self.dataset_handler,annotation_session_folder)
 
+        return [dcc.send_file(zip_file_path)]
 
 
         

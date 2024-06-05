@@ -1980,7 +1980,7 @@ class LayoutHandler:
                                     id = {'type':'download-ann-session','index': 0},
                                     className = 'd-grid col-12 mx-auto',
                                     n_clicks = 0,
-                                    disabled = True
+                                    disabled = False if ann_progress['annotations']>0 or ann_progress['labels']>0 else True
                                 ),
                                 dcc.Download(
                                     id = {'type':'download-ann-session-data','index':0}
@@ -4395,60 +4395,67 @@ class DownloadHandler:
 
             return 'select_ftus'
 
-    def zip_data(self,download_data_list):
-
-        # Writing temporary directory 
-        if not os.path.exists('./assets/FUSION_Download/'):
-            os.makedirs('./assets/FUSION_Download/')
+    def zip_data(self,download_data_list,folder = False):
+        """
+        Adding downloads to a zip file in order to only have one download for multiple files
+        """
 
         output_file = './assets/FUSION_Download.zip'
-        # Writing files to the temp directory
 
-        # Checking if there are any xlsx files first
-        excel_files = [i for i in download_data_list if i['filename'].split('.')[-1]=='xlsx']
-        if len(excel_files)>0:
-            # Getting unique filenames
-            unique_filenames = np.unique([i['filename'] for i in excel_files]).tolist()
-            for u_f in unique_filenames:
-                save_path = './assets/FUSION_Download/'+u_f
-                with pd.ExcelWriter(save_path) as writer:
-                    for e in excel_files:
-                        if e['filename']==u_f:
-                            e['content'].to_excel(writer,sheet_name=e['sheet'],engine='openpyxl')
+        if not folder:
+            # Writing temporary directory 
+            if not os.path.exists('./assets/FUSION_Download/'):
+                os.makedirs('./assets/FUSION_Download/')
 
-        for d in download_data_list:
-            filename = d['filename']
-            file_ext = filename.split('.')[-1]
+            # Writing files to the temp directory
 
-            save_path = './assets/FUSION_Download/'+filename
+            # Checking if there are any xlsx files first
+            excel_files = [i for i in download_data_list if i['filename'].split('.')[-1]=='xlsx']
+            if len(excel_files)>0:
+                # Getting unique filenames
+                unique_filenames = np.unique([i['filename'] for i in excel_files]).tolist()
+                for u_f in unique_filenames:
+                    save_path = './assets/FUSION_Download/'+u_f
+                    with pd.ExcelWriter(save_path) as writer:
+                        for e in excel_files:
+                            if e['filename']==u_f:
+                                e['content'].to_excel(writer,sheet_name=e['sheet'],engine='openpyxl')
 
-            if file_ext in ['xml','json','geojson']:
+            for d in download_data_list:
+                filename = d['filename']
+                file_ext = filename.split('.')[-1]
 
-                if file_ext == 'xml':
-                    
-                    # Writing xml data
-                    with open(save_path,'w') as f:
-                        f.write(d['content'])
-                        f.close()
-                else:
-                    # Writing JSON data
-                    with open(save_path,'w') as f:
-                        dump(d['content'],f)
+                save_path = './assets/FUSION_Download/'+filename
 
-            elif file_ext == 'csv':
+                if file_ext in ['xml','json','geojson']:
 
-                d['content'].to_csv(save_path)
-            
-            elif file_ext in ['tiff','png']:
+                    if file_ext == 'xml':
+                        
+                        # Writing xml data
+                        with open(save_path,'w') as f:
+                            f.write(d['content'])
+                            f.close()
+                    else:
+                        # Writing JSON data
+                        with open(save_path,'w') as f:
+                            dump(d['content'],f)
+
+                elif file_ext == 'csv':
+
+                    d['content'].to_csv(save_path)
                 
-                # Maybe this will work?
-                #TODO: test this for larger ROIs (& multi-frame)
-                Image.fromarray(d['content']).save(save_path)
+                elif file_ext in ['tiff','png']:
+                    
+                    # Maybe this will work?
+                    #TODO: test this for larger ROIs (& multi-frame)
+                    Image.fromarray(d['content']).save(save_path)
 
         # Writing temporary data to a zip file
         with zipfile.ZipFile(output_file,'w', zipfile.ZIP_DEFLATED) as zip:
-            for file in os.listdir('./assets/FUSION_Download/'):
-                zip.write('./assets/FUSION_Download/'+file)
+            for path,subdirs,files in os.walk('./assets/FUSION_Download/'):
+                for name in files:
+                    zip.write(os.path.join(path,name))
+
 
         try:
             shutil.rmtree('./assets/FUSION_Download/')
@@ -4557,7 +4564,7 @@ class DownloadHandler:
 
         return download_data
 
-    def extract_manual_rois(self, current_slide, dataset_handler, options):
+    def extract_manual_rois(self, current_slide, dataset_handler, options, user_info):
 
         download_data = []
 
@@ -4588,6 +4595,7 @@ class DownloadHandler:
                 # Now extracting that image region from the bounding box
                 full_image_region = dataset_handler.get_image_region(
                     current_slide.item_id,
+                    user_info,
                     [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']]
                 )
 
@@ -4661,6 +4669,7 @@ class DownloadHandler:
                 # Now extracting that image region from the bounding box
                 full_image_region = dataset_handler.get_image_region(
                     current_slide.item_id,
+                    user_info,
                     [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']]
                 )
 
@@ -4699,6 +4708,7 @@ class DownloadHandler:
                     # Getting each frame
                     full_image_region = dataset_handler.get_image_region(
                         current_slide.item_id,
+                        user_info,
                         [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']],
                         frame_index = frame
                     )
@@ -4733,7 +4743,7 @@ class DownloadHandler:
 
         return download_data
 
-    def extract_select_ftus(self,current_slide,dataset_handler,options):
+    def extract_select_ftus(self,current_slide,dataset_handler,options,user_info):
 
         #TODO: Update this for CODEX images
         # Extracting select ftus image/cell info
@@ -4761,7 +4771,11 @@ class DownloadHandler:
                         for i in s_coords
                     ]
 
-                    image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+                    image = dataset_handler.get_image_region(
+                        current_slide.item_id,
+                        user_info,
+                        [min_x,min_y,max_x,max_y]
+                    )
 
                     download_data.append({
                         'filename': f'Marked_FTU_{s_idx+1}.png',
@@ -4827,7 +4841,11 @@ class DownloadHandler:
                         for i in s_coords
                     ]
 
-                    image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+                    image = dataset_handler.get_image_region(
+                        current_slide.item_id,
+                        user_info,
+                        [min_x,min_y,max_x,max_y]
+                    )
 
                     download_data.append({
                         'filename': f'Marked_FTU_{s_idx+1}.png',
@@ -4858,7 +4876,11 @@ class DownloadHandler:
                     # Getting each frame for this image region
                     image_frame_list = []
                     for frame in range(current_slide.n_frames):
-                        image = dataset_handler.get_image_region(current_slide.item_id,[min_x,min_y,max_x,max_y])
+                        image = dataset_handler.get_image_region(
+                            current_slide.item_id,
+                            user_info,
+                            [min_x,min_y,max_x,max_y]
+                        )
                         image_frame_list.append(image)
 
                     download_data.append({
@@ -4886,6 +4908,26 @@ class DownloadHandler:
 
 
         return download_data
+
+    def extract_annotation_session(self, dataset_handler, ann_session_id):
+        """
+        Grabbing contents of annotation session folder (save both image and metadata)
+        """
+        # Getting images and masks:
+        download_output = dataset_handler.gc.downloadResource(
+            ann_session_id,
+            "./assets/FUSION_Download/",
+            'folder'    
+        )
+
+        # Getting image metadata
+        
+
+        self.zip_data(None,folder=True)
+        zip_file_path = './assets/FUSION_Download.zip'
+
+        return zip_file_path
+
 
 
 
