@@ -4364,10 +4364,10 @@ class GirderHandler:
 
 class DownloadHandler:
     def __init__(self,
-                dataset_object,
+                dataset_handler,
                 verbose = False):
         
-        self.dataset_object = dataset_object
+        self.dataset_handler = dataset_handler
         self.verbose = verbose
 
         # Placeholder for lots of re-formatting and stuff
@@ -4564,7 +4564,7 @@ class DownloadHandler:
 
         return download_data
 
-    def extract_manual_rois(self, current_slide, dataset_handler, options, user_info):
+    def extract_manual_rois(self, current_slide, options, user_info):
 
         download_data = []
 
@@ -4593,7 +4593,7 @@ class DownloadHandler:
                     #total_geojson['features'].append(m_geojson)
 
                 # Now extracting that image region from the bounding box
-                full_image_region = dataset_handler.get_image_region(
+                full_image_region = self.dataset_handler.get_image_region(
                     current_slide.item_id,
                     user_info,
                     [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']]
@@ -4667,7 +4667,7 @@ class DownloadHandler:
                     #total_geojson['features'].append(m_geojson)
 
                 # Now extracting that image region from the bounding box
-                full_image_region = dataset_handler.get_image_region(
+                full_image_region = self.dataset_handler.get_image_region(
                     current_slide.item_id,
                     user_info,
                     [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']]
@@ -4706,7 +4706,7 @@ class DownloadHandler:
                 for frame in range(current_slide.n_frames):
 
                     # Getting each frame
-                    full_image_region = dataset_handler.get_image_region(
+                    full_image_region = self.dataset_handler.get_image_region(
                         current_slide.item_id,
                         user_info,
                         [bounding_box['minx'],bounding_box['miny'],bounding_box['maxx'],bounding_box['maxy']],
@@ -4743,7 +4743,7 @@ class DownloadHandler:
 
         return download_data
 
-    def extract_select_ftus(self,current_slide,dataset_handler,options,user_info):
+    def extract_select_ftus(self,current_slide,options,user_info):
 
         #TODO: Update this for CODEX images
         # Extracting select ftus image/cell info
@@ -4771,7 +4771,7 @@ class DownloadHandler:
                         for i in s_coords
                     ]
 
-                    image = dataset_handler.get_image_region(
+                    image = self.dataset_handler.get_image_region(
                         current_slide.item_id,
                         user_info,
                         [min_x,min_y,max_x,max_y]
@@ -4841,7 +4841,7 @@ class DownloadHandler:
                         for i in s_coords
                     ]
 
-                    image = dataset_handler.get_image_region(
+                    image = self.dataset_handler.get_image_region(
                         current_slide.item_id,
                         user_info,
                         [min_x,min_y,max_x,max_y]
@@ -4876,7 +4876,7 @@ class DownloadHandler:
                     # Getting each frame for this image region
                     image_frame_list = []
                     for frame in range(current_slide.n_frames):
-                        image = dataset_handler.get_image_region(
+                        image = self.dataset_handler.get_image_region(
                             current_slide.item_id,
                             user_info,
                             [min_x,min_y,max_x,max_y]
@@ -4909,19 +4909,19 @@ class DownloadHandler:
 
         return download_data
 
-    def extract_annotation_session(self, dataset_handler, ann_session_id):
+    def extract_annotation_session(self, ann_session_id):
         """
         Grabbing contents of annotation session folder (save both image and metadata)
         """
         # Getting images and masks:
-        download_output = dataset_handler.gc.downloadResource(
+        download_output = self.dataset_handler.gc.downloadResource(
             ann_session_id,
             "./assets/FUSION_Download/",
             'folder'    
         )
 
         # Getting image metadata
-        folder_items = dataset_handler.gc.get(
+        folder_items = self.dataset_handler.gc.get(
             f'/resource/{ann_session_id}/items',
             parameters = {
                 'type': 'folder',

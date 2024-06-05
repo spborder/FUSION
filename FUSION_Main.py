@@ -5284,7 +5284,6 @@ class FUSION:
                         # get those files as well as annotations for manual ROIs
                         download_list = self.download_handler.extract_manual_rois(
                             self.wsi,
-                            self.dataset_handler,
                             options,
                             user_store_data
                         )
@@ -8152,7 +8151,9 @@ class FUSION:
         annotation_session_folder = user_data_store['current_ann_session']['folder_id']
 
         # Prepping zip file
-        zip_file_path = self.download_handler.extract_annotation_session(self.dataset_handler,annotation_session_folder)
+        zip_file_path = self.download_handler.extract_annotation_session(
+            annotation_session_folder
+        )
 
         return [dcc.send_file(zip_file_path)]
 
