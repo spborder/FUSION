@@ -890,42 +890,63 @@ class LayoutHandler:
         ]
 
         # Separately outputting the functional components of the application for later reference when switching pages
-        vis_content = [
-            dbc.Row(
-                id="app-content",
-                children=[
-                    html.Div(
-                        children = [
-                            drag.ResponsiveGridLayout(
-                                children = [
-                                    dbc.Col(
-                                        wsi_view,
-                                        style = {
-                                            'min-height':"0",
-                                            "flex-grow":"1",
-                                            'height':'100%'
-                                        }),
-                                    dbc.Col(
-                                        tools,
-                                        style = {
-                                            "min-height":"0",
-                                            "flex-grow":"1",
-                                            'height':'100%'
-                                        })
-                                ],
-                                style = {
-                                    'height':'100%',
-                                    'width':'100%',
-                                    'display':'flex',
-                                    'flex-direction':'row',
-                                    'flex-grow':'0'
-                                }
-                            )
-                        ]
-                    )
-                ],style={"height":"90vh",'marginBottom':'10px'}
-            )
-        ]
+        use_drag_layout = False
+        
+        if use_drag_layout:
+            vis_content = [
+                dbc.Row(
+                    id="app-content",
+                    children=[
+                        html.Div(
+                            children = [
+                                drag.ResponsiveGridLayout(
+                                    children = [
+                                        dbc.Col(
+                                            wsi_view,
+                                            style = {
+                                                'min-height':"0",
+                                                "flex-grow":"1",
+                                                'height':'100%'
+                                            }),
+                                        dbc.Col(
+                                            tools,
+                                            style = {
+                                                "min-height":"0",
+                                                "flex-grow":"1",
+                                                'height':'100%'
+                                            })
+                                    ],
+                                    style = {
+                                        'height':'100%',
+                                        'width':'100%',
+                                        'display':'flex',
+                                        'flex-direction':'row',
+                                        'flex-grow':'0'
+                                    }
+                                )
+                            ]
+                        )
+                    ],style={"height":"90vh",'marginBottom':'10px'}
+                )
+            ]
+
+        else:
+                        vis_content = [
+                dbc.Row(
+                    id="app-content",
+                    children=[
+                        dbc.Col(
+                            wsi_view,
+                            md = 6
+                        ),
+                        dbc.Col(
+                            tools,
+                            md = 6
+                        )
+                    ],
+                    style={"height":"90vh",'marginBottom':'10px'}
+                )
+            ]
 
         self.current_vis_layout = vis_content
         self.validation_layout.append(vis_content)
