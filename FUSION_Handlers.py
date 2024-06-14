@@ -1739,7 +1739,7 @@ class LayoutHandler:
                 ])
             ])
 
-        elif wsi.spatial_omics_type=='CODEX':
+        elif wsi.spatial_omics_type in ['CODEX','Xenium']:
 
             special_overlays_opts.extend([
                 html.H6('Select Additional Channel Overlay(s)'),
@@ -2580,7 +2580,7 @@ class LayoutHandler:
                 dbc.Col(feat_extract_card,md=6)
             ])
 
-        elif upload_type == 'CODEX':
+        elif upload_type in ['CODEX','Xenium']:
 
             sub_comp_methods_list = [
                 {'label':'Manual','value':'Manual','disabled':False},
@@ -2735,6 +2735,7 @@ class LayoutHandler:
             {'label':'Regular Histology','value':'Regular','disabled':False},
             {'label':'10x Visium','value':'Visium','disabled':False},
             {'label':'Co-Detection by Indexing (CODEX)','value':'CODEX','disabled':False},
+            {'label':'10x Xenium','value':'Xenium','disabled':False},
             {'label':'CosMx','value':'CosMx','disabled':True},
             {'label':'GeoMx','value':'GeoMx','disabled':True}
         ]
