@@ -697,6 +697,17 @@ class CODEXPrep(Prepper):
         return frame_labels, current_frame
 
 
+class XeniumPrep(Prepper):
+    def __init__(self,
+                 girder_handler):
+        super().__init__(girder_handler)
 
+        self.girder_handler = girder_handler
+
+    def post_segmentation(self, upload_wsi_id, dapi_image_id, alignment, cell_info):
+        """
+        
+        """
+        pass
 
 

@@ -52,7 +52,7 @@ import time
 
 from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler, GeneHandler
-from FUSION_Prep import CODEXPrep, VisiumPrep, Prepper
+from FUSION_Prep import XeniumPrep, CODEXPrep, VisiumPrep, Prepper
 from FUSION_Utils import (
     get_pattern_matching_value, extract_overlay_value, 
     gen_umap,
@@ -1149,14 +1149,14 @@ class FUSION:
         # Uploading data to DSA collection
         self.app.callback(
             [Input({'type':'wsi-upload','index':ALL},'uploadComplete'),
-             Input({'type':'omics-upload','index':ALL},'uploadComplete'),
+             Input({'type':'wsi-files-upload','index':ALL},'uploadComplete'),
              Input({'type':'wsi-upload','index':ALL},'fileTypeFlag'),
-             Input({'type':'omics-upload','index':ALL},'fileTypeFlag')],
+             Input({'type':'wsi-files-upload','index':ALL},'fileTypeFlag')],
              State('user-store','data'),
             [Output('slide-qc-results','children'),
              Output('slide-thumbnail-holder','children'),
              Output({'type':'wsi-upload-div','index':ALL},'children'),
-             Output({'type':'omics-upload-div','index':ALL},'children'),
+             Output({'type':'wsi-files-upload-div','index':ALL},'children'),
              Output('structure-type','disabled'),
              Output('post-upload-row','style'),
              Output('upload-type','disabled'),
@@ -5396,6 +5396,12 @@ class FUSION:
         if upload_type == 'Visium':
 
             self.prep_handler = VisiumPrep(self.dataset_handler)
+            user_data_store['upload_check'] = {
+                "WSI": False,
+                "Omics": False
+            }
+
+            user_data_store['upload_type'] = 'Visium'
 
             upload_reqs = html.Div([
                 dbc.Row([
@@ -5417,17 +5423,17 @@ class FUSION:
                 ],align='center'),
                 dbc.Row([
                     html.Div(
-                        id = {'type':'omics-upload-div','index':0},
+                        id = {'type':'wsi-files-upload-div','index':0},
                         children = [
                             dbc.Label('Upload your counts file here!'),
                             self.layout_handler.gen_info_button('Upload either an RDS file or h5ad file containing gene counts per-spot.'),
                             UploadComponent(
-                                id = {'type':'omics-upload','index':0},
+                                id = {'type':'wsi-files-upload','index':0},
                                 uploadComplete=False,
                                 baseurl=self.dataset_handler.apiUrl,
                                 girderToken = user_data_store['token'],
                                 parentId=parentId,
-                                filetypes=['rds','csv','h5ad']                 
+                                filetypes=['rds','h5ad']                 
                             )
                         ],
                         style = {'marginTop':'10px','display':'inline-block'}
@@ -5446,18 +5452,15 @@ class FUSION:
                     )
                 ])
             ])
-
-            user_data_store['upload_check'] = {
-                "WSI": False,
-                "Omics": False
-            }
-
-            user_data_store['upload_type'] = 'Visium'
         
         elif upload_type =='Regular':
             # Regular slide with no --omics
 
             self.prep_handler = Prepper(self.dataset_handler)
+            user_data_store['upload_check'] = {
+                'WSI': False
+            }
+            user_data_store['upload_type'] = 'Regular'
 
             upload_reqs = html.Div([
                 dbc.Row([
@@ -5491,26 +5494,41 @@ class FUSION:
                 ])
             ])
 
-            user_data_store['upload_check'] = {
-                'WSI': False
-            }
-            user_data_store['upload_type'] = 'Regular'
-
         elif upload_type == 'CODEX':
             # CODEX uploads include histology and multi-frame CODEX image (or just CODEX?)
 
             self.prep_handler = CODEXPrep(self.dataset_handler)
+            user_data_store['upload_check'] = {
+                'WSI': False,
+                'Histology': False
+            }
+            user_data_store['upload_type'] = 'CODEX'
 
             upload_reqs = html.Div([
                 dbc.Row([
                     html.Div(
                         id = {'type': 'wsi-upload-div','index':0},
                         children = [
-                            dbc.Label('Upload Whole Slide Image (CODEX) Here!'),
+                            dbc.Label('Upload CODEX Image Here!'),
                             UploadComponent(
                                 id = {'type':'wsi-upload','index':0},
                                 uploadComplete = False,
                                 baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = parentId,
+                                filetypes = ['svs','ndpi','scn','tiff','tif']
+                            )
+                        ],
+                        style = {'marginBottom':'10px','display':'inline-block'}
+                    ),
+                    html.Div(
+                        id = {'type':'wsi-files-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload Histology (H&E) Image Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index':0},
+                                uploadComplete=False,
+                                baseurl=self.dataset_handler.apiUrl,
                                 girderToken = user_data_store['token'],
                                 parentId = parentId,
                                 filetypes = ['svs','ndpi','scn','tiff','tif']
@@ -5524,7 +5542,7 @@ class FUSION:
                     dbc.Col(
                         dcc.Dropdown(
                             options = [
-                                'Kidney', 'Other Organs'
+                                'Kidney', 'Skin','Intestine','Lung','Other Organs'
                             ],
                             placeholder = 'Organ',
                             id = {'type':'organ-select','index':0}
@@ -5533,14 +5551,76 @@ class FUSION:
                 ])
             ])
 
-            self.upload_check = {'WSI':False}
-            self.current_upload_type = 'CODEX'
+        elif upload_type == 'Xenium':
+            # Xenium uploads include an H&E image, a DAPI image, an alignment file (csv), and cell id/coordinates/group(anchors)(csv)
 
+            self.prep_handler = XeniumPrep(self.dataset_handler)
             user_data_store['upload_check'] = {
-                'WSI': False
+                'WSI': False,
+                'Morphology': False,
+                'Alignment': False
             }
+            user_data_store['upload_type'] = 'Xenium'
 
-            user_data_store['upload_type'] = 'CODEX'
+            upload_reqs = html.Div([
+                dbc.Row([
+                    html.Div(
+                        id = {'type': 'wsi-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload H&E Histology Image Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-upload','index':0},
+                                uploadComplete = False,
+                                baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = parentId,
+                                filetypes = ['svs','ndpi','scn','tiff','tif']
+                            )
+                        ],
+                        style = {'marginBottom':'10px','display':'inline-block'}
+                    ),
+                    html.Div(
+                        id = {'type':'wsi-files-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload DAPI (morphology) Image Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index':0},
+                                uploadComplete = False,
+                                baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = parentId,
+                                filetypes = ['svs','ndpi','scn','tiff','tif']
+                            )
+                        ]
+                    ),
+                    html.Div(
+                        id = {'type':'wsi-files-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload Alignment File Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index':1},
+                                uploadComplete = False,
+                                baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = parentId,
+                                filetypes = ['csv']
+                            )
+                        ]
+                    )
+                ],align='center'),
+                dbc.Row([
+                    dbc.Col(dbc.Label('Select Organ: ',html_for = {'type':'organ-select','index':0}),md=4),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [
+                                'Kidney', 'Skin', 'Intestine', 'Lung', 'Other Organs'
+                            ],
+                            placeholder = 'Organ',
+                            id = {'type':'organ-select','index':0}
+                        )
+                    )
+                ])
+            ])
         
         user_data_store['upload_wsi_id'] = None
         user_data_store['upload_omics_id'] = None
@@ -5651,13 +5731,13 @@ class FUSION:
         print(f'Triggered id for upload_data: {ctx.triggered_id}')
         if ctx.triggered_id['type']=='wsi-upload':
 
-            # Getting the uploaded item id
-            upload_wsi_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+            wsi_file_flag = get_pattern_matching_value(wsi_file_flag)
+            if not user_data_store['upload_wsi_id'] is None and not wsi_file_flag is None:
+                if not wsi_file_flag:
+                    # Getting the uploaded item id
+                    upload_wsi_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                    user_data_store['upload_wsi_id'] = upload_wsi_id
 
-            user_data_store['upload_wsi_id'] = upload_wsi_id
-
-            if not upload_wsi_id is None:
-                if not wsi_file_flag[0]:
                     wsi_upload_children = [
                         dbc.Alert('WSI Upload Success!',color='success')
                     ]
@@ -5688,50 +5768,83 @@ class FUSION:
             else:
                 wsi_upload_children = no_update
             
-            if 'Omics' in user_data_store['upload_check']:
-                if not user_data_store['upload_check']['Omics']:
-                    omics_upload_children = no_update
-                else:
-                    omics_upload_children = [
-                        dbc.Alert('Omics Upload Success!')
-                    ]
-            else:
-                omics_upload_children = no_update
+            if not user_data_store['upload_type']=='Regular':
+                omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
-        elif ctx.triggered_id['type']=='omics-upload':
+        elif ctx.triggered_id['type']=='wsi-files-upload':
             
-            upload_omics_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
-            
-            user_data_store['upload_omics_id'] = upload_omics_id
+            if user_data_store['upload_type']=='Visium':
+                # Uploading omics file (h5ad, rds)
 
-            if not self.upload_omics_id is None:
-                #TODO: get_pattern_matching_value test here
-                if type(omics_file_flag)==list:
-                    if len(omics_file_flag)>0:
-                        if not omics_file_flag[0]:
-                            omics_upload_children = [
-                                dbc.Alert('Omics Upload Success!')
-                            ]
+                omics_file_flag = get_pattern_matching_value(omics_file_flag)
+                if not user_data_store['upload_omics_id'] is None:
+                    if not omics_file_flag:
 
-                            user_data_store['upload_check']['Omics'] = True
-                        else:
-                            omics_upload_children = [
-                                dbc.Alert('Omics Upload Failure! Accepted file types are: rds',color = 'danger'),
-                                UploadComponent(
-                                    id = {'type':'omics-upload','index':0},
-                                    uploadComplete=False,
-                                    baseurl=self.dataset_handler.apiUrl,
-                                    girderToken=user_data_store['token'],
-                                    parentId=user_data_store['latest_upload_folder']['id'],
-                                    filetypes=['rds','csv','h5ad']                 
-                                    )
-                            ]
+                        upload_omics_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                        user_data_store['upload_omics_id'] = upload_omics_id
+                        
+                        omics_upload_children = [
+                            dbc.Alert('Omics Upload Success!')
+                        ]
+
+                        user_data_store['upload_check']['Omics'] = True
                     else:
-                        omics_upload_children = no_update
+                        omics_upload_children = [
+                            dbc.Alert('Omics Upload Failure! Accepted file types are: h5ad, rds',color = 'danger'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index':0},
+                                uploadComplete=False,
+                                baseurl=self.dataset_handler.apiUrl,
+                                girderToken=user_data_store['token'],
+                                parentId=user_data_store['latest_upload_folder']['id'],
+                                filetypes=['rds','h5ad']                 
+                                )
+                        ]
                 else:
-                    omics_upload_children = no_update
-            else:
-                omics_upload_children = no_update
+                    omics_upload_children = [no_update]*len(ctx.outputs_list[3])
+
+            elif user_data_store['upload_type']=='CODEX':
+                # Check index of triggered id and add to main item files
+                # Additional file is the histology image
+                omics_file_flag = get_pattern_matching_value(omics_file_flag)
+
+                if not user_data_store['upload_histology_id'] is None:
+                    if not omics_file_flag:
+
+                        upload_histology_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                        user_data_store['upload_histology_id'] = upload_histology_id
+
+                        omics_upload_children = [
+                            dbc.Alert('Histology Image Upload Success!')
+                        ]
+
+                        user_data_store['upload_check']['Histology'] = True
+                    
+                    else:
+                        omics_upload_children = [
+                            dbc.Alert('Histology Upload Failure! Accepted file types are: svs, ndpi, scn, tiff, tif',color = 'danger'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index':0},
+                                uploadComplete = False,
+                                baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = user_data_store['latest_upload_folder']['id'],
+                                filetypes = ['svs','ndpi','scn','tiff','tif']
+                            )
+                        ]
+                else:
+                    omics_upload_children = [no_update]*len(ctx.outputs_list[3])
+
+            elif user_data_store['upload_type'] == 'Xenium':
+                # Check index of triggered id and add to main item files
+                # inputs go []
+                omics_file_flag = get_pattern_matching_value(omics_file_flag)
+
+                print(ctx.triggered)
+                print(ctx.triggered_id)
+
+
+
 
             if not user_data_store['upload_check']['WSI']:
                 wsi_upload_children = no_update
@@ -5754,7 +5867,7 @@ class FUSION:
                     dbc.Alert('Omics Upload Success!')
                 ]
             else:
-                omics_upload_children = no_update
+                omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
             wsi_upload_children = [
                 dbc.Alert('WSI Upload Success!',color='success')
@@ -5798,16 +5911,16 @@ class FUSION:
             post_upload_style = {'display':'flex'}
             disable_upload_type = True
             
-            if 'Omics' in user_data_store['upload_check']:
-                return slide_metadata_table, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' }), json.dumps(user_data_store)
+            if not user_data_store['upload_type']=='Regular':
+                return slide_metadata_table, thumb_fig, [wsi_upload_children], omics_upload_children, structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' }), json.dumps(user_data_store)
             else:
                 return slide_metadata_table, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' }), json.dumps(user_data_store)
         else:
 
             disable_upload_type = True
 
-            if 'Omics' in user_data_store['upload_check']:
-                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
+            if not user_data_store['upload_type'] == 'Regular':
+                return no_update, no_update,[wsi_upload_children], omics_upload_children, True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
             else:
                 return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
     
