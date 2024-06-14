@@ -6082,7 +6082,7 @@ class FUSION:
                         title = new_filename,
                         children = [
                             dbc.Alert('Invalid file type! Vali',color='danger'),
-                            'Valid file types: Aperio XML (.xml), JSON (.json), GeoJSON (.geojson)'
+                            'Valid file types: Aperio XML (.xml), JSON (.json), GeoJSON (.geojson), or CSV (.csv)'
                         ]
                     )
                 )

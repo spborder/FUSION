@@ -36,6 +36,8 @@ import shutil
 
 import matplotlib.pyplot as plt
 
+from io import StringIO
+
 #TODO: Remove some default settings
 # sub-compartment segmentation and feature extraction should vary
 
@@ -402,6 +404,12 @@ class Prepper:
             with open(f'./assets/conversion/{filename}','w') as f:
                 json.dump(ann,f)
                 f.close()
+
+        elif 'csv' in filename:
+            # Creating cell polygons from coordinates/group
+            csv_anns = pd.read_csv(StringIO(annotation_str),sep=',')
+            print(csv_anns[0:5,:])
+            print(csv_anns.columns.tolist())
 
         if filename in os.listdir('./assets/conversion/'):
             converter_object = wak.Converter(
