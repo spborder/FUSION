@@ -1739,7 +1739,7 @@ class LayoutHandler:
                 ])
             ])
 
-        elif wsi.spatial_omics_type in ['CODEX','Xenium']:
+        elif wsi.spatial_omics_type in ['CODEX']:
 
             special_overlays_opts.extend([
                 html.H6('Select Additional Channel Overlay(s)'),
@@ -1769,6 +1769,31 @@ class LayoutHandler:
                     disabled = True
                 )
             ])
+        
+        elif wsi.spatial_omics_type in ['Xenium']:
+            # Upload cell anchors/labels
+            special_overlay_opts.extend([
+                html.H6('Upload cell group labels here'),
+                self.gen_info_button('Upload a csv file where one column is "cell_id" and the others are labels you want to apply to the matching cell'),
+                html.Div([
+                    dcc.Upload(
+                        id={'type':'upload-anchors','index':0},
+                        children=html.Div([
+                            'Drag and Drop or ',
+                            html.A('Select Files')
+                        ]),
+                        style={
+                            'width': '100%',
+                            'borderWidth': '1px',
+                            'borderStyle': 'dashed',
+                            'borderRadius': '5px',
+                            'textAlign': 'center',
+                        }
+                    ),
+                    html.Div(id={'type':'uploaded-anchors-output','index':0}),
+                ])
+            ])
+        
         else:
             special_overlay_opts = []
 

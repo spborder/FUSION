@@ -1063,7 +1063,8 @@ class FUSION:
                 Output({'type':'cell-subtype-drop','index':ALL},'value')
             ],
             [
-                Input({'type':'cell-subtype-butt','index':ALL},'n_clicks')
+                Input({'type':'cell-subtype-butt','index':ALL},'n_clicks'),
+                Input({'type':'upload-anchors','index':ALL},'contents')
             ],
             [
                 State({'type':'cell-subtype-drop','index':ALL},'value')
@@ -5725,14 +5726,10 @@ class FUSION:
             raise exceptions.PreventUpdate
 
     def upload_data(self,wsi_file,omics_file,wsi_file_flag,omics_file_flag, user_data_store):
-        
+        """
+        User uploads either a WSI or an associated file
+        """
         user_data_store = json.loads(user_data_store)
-
-        print(f'Triggered id for upload_data: {ctx.triggered_id}')
-        print(f'Triggered for upload data: {ctx.triggered}')
-        print(f'Triggered prop ids: {ctx.triggered_prop_ids}')
-
-        print(ctx.triggered[0]['prop_id'].split('.')[-1])
 
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
@@ -5871,18 +5868,12 @@ class FUSION:
             elif user_data_store['upload_type'] == 'Xenium':
                 # Check index of triggered id and add to main item files
                 # inputs go [morphology, alignment.csv.zip]
-                print(f'omics_file_flag: {omics_file_flag}')
-                print(f'ctx.triggered {ctx.triggered}')
-                print(f'ctx.triggered_id {ctx.triggered_id}')
-                print(f'ctx.triggered_prop_ids {ctx.triggered_prop_ids}')
                 omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
                 triggered_prop = ctx.triggered[0]['prop_id']
                 prop_id = triggered_prop.split('.')[-1]
                 triggered_index = ctx.triggered_id['index']
-                print(f'prop_id: {prop_id}, triggered_index: {triggered_index}')
 
-                print(f'omics_upload_children: {omics_upload_children}')
                 if not omics_file_flag[triggered_index]:
                     if prop_id=='uploadComplete':
                         omics_upload_children[ctx.triggered_id['index']] = dbc.Alert(
@@ -5905,7 +5896,6 @@ class FUSION:
                         )
                     ]
                 
-                print(f'omics_upload_children: {omics_upload_children}')
                 
             wsi_upload_children = [no_update]*len(ctx.outputs_list[2])
 
@@ -8281,45 +8271,53 @@ class FUSION:
 
         return [patched_list]
 
-    def add_cell_subtypes(self,butt_click,main_cell_types):
+    def add_cell_subtypes(self,butt_click,main_cell_types,anchor_uploads):
         """
         Extracting subtypes for a given "Main Cell Type" and adding those as a visualizable property for overlaid heatmaps
         """
 
         main_cell_types = get_pattern_matching_value(main_cell_types)
-
-        if len(main_cell_types)==0:
+        anchor_uploads = get_pattern_matching_value(anchor_uploads)
+        if len(main_cell_types)==0 or anchor_uploads is None:
             raise exceptions.PreventUpdate
         
         if not ctx.triggered:
             raise exceptions.PreventUpdate
 
-        new_cell_droptions = no_update
-        new_cell_subtype_dropue = [no_update]
+        if ctx.triggered_id['type']=='cell-subtype-butt':
+            new_cell_droptions = no_update
+            new_cell_subtype_dropue = [no_update]
 
-        if not main_cell_types is None:
-            # Running change-level plugin with these options
-            job_id = self.wsi.run_change_level(main_cell_types)        
-            job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
-            # Checking progress of the job
-            while not job_status==3 and not job_status==4:
-                time.sleep(1)
+            if not main_cell_types is None:
+                # Running change-level plugin with these options
+                job_id = self.wsi.run_change_level(main_cell_types)        
                 job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
-                print(f'change_level job status: {job_status}')
+                # Checking progress of the job
+                while not job_status==3 and not job_status==4:
+                    time.sleep(1)
+                    job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
+                    print(f'change_level job status: {job_status}')
 
-            if job_status==4:
-                raise exceptions.PreventUpdate
+                if job_status==4:
+                    raise exceptions.PreventUpdate
+                
+                # Grabbing from user "Supplemental_Annotations" folder
+                updated_annotations_file = f'{self.wsi.item_id}.json'
+                updated_annotations = self.dataset_handler.grab_from_user_folder(updated_annotations_file,'Supplemental_Annotations')
+
+                self.wsi.update_ftu_props(updated_annotations)
+                self.wsi.update_annotation_geojson(updated_annotations)
+
+                new_cell_droptions = self.wsi.properties_list
+                new_cell_subtype_dropue= ['']
+
+        elif ctx.triggered_id['type']=='upload-anchors':
             
-            # Grabbing from user "Supplemental_Annotations" folder
-            updated_annotations_file = f'{self.wsi.item_id}.json'
-            updated_annotations = self.dataset_handler.grab_from_user_folder(updated_annotations_file,'Supplemental_Annotations')
-
-            self.wsi.update_ftu_props(updated_annotations)
-            self.wsi.update_annotation_geojson(updated_annotations)
-
-            new_cell_droptions = self.wsi.properties_list
-            new_cell_subtype_dropue= ['']
-
+            new_cell_droptions = no_update
+            new_cell_subtype_dropue = [no_update]
+            
+            cell_groups = pd.read_csv(BytesIO(anchor_uploads))
+            print(cell_groups.columns.tolist())
 
         return new_cell_droptions, new_cell_subtype_dropue
 
