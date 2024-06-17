@@ -33,10 +33,11 @@ import json
 import lxml.etree as ET
 import base64
 import shutil
+import uuid
 
 import matplotlib.pyplot as plt
 
-from io import StringIO
+from io import StringIO, BytesIO
 
 #TODO: Remove some default settings
 # sub-compartment segmentation and feature extraction should vary
@@ -371,7 +372,7 @@ class Prepper:
                                         })
         return job_response
     
-    def process_uploaded_anns(self, filename, annotation_str,item_id):
+    def process_uploaded_anns(self, filename, annotation_str,item_id, alignment = None):
 
         annotation_names = []
         annotation_str = base64.b64decode(annotation_str.split(',')[-1])
@@ -407,9 +408,53 @@ class Prepper:
 
         elif 'csv' in filename:
             # Creating cell polygons from coordinates/group
-            csv_anns = pd.read_csv(StringIO(annotation_str),sep=',')
-            print(csv_anns[0:5,:])
+            csv_anns = pd.read_csv(BytesIO(annotation_str),sep=',')
+            print(csv_anns.iloc[0:5,:])
             print(csv_anns.columns.tolist())
+
+            if any(['vertex' in i for i in csv_anns.columns.tolist()]):
+                # Creating annotations from csv of vertices
+                if 'cell_id' in csv_anns.columns.tolist():
+                    unique_cells = csv_anns['cell_id'].unique.tolist()
+                    
+                    annotation_data = {
+                        "annotation": {
+                            "name": "Cells",
+                            "elements": []
+                        }
+                    }
+
+                    for u_idx,u in enumerate(unique_cells):
+
+                        cell_verts = csv_anns[csv_anns['cell_id'].str.match(u)]
+                        cell_vert_x = cell_verts['vertex_x'].values[:,None]
+                        cell_vert_y = cell_verts['vertex_y'].values[:,None]
+                        cell_vert_z = np.zeros((cell_verts.shape[0],1))
+
+                        vertex_array = np.concatenate((cell_vert_x,cell_vert_y,cell_vert_z),axis=-1)
+
+                        if not alignment is None:
+                            vertex_array = np.dot(vertex_array,alignment)
+
+                        cell_element_dict = {
+                            "type": "polyline",
+                            "id": uuid.uuid4().hex[:24],
+                            "points": vertex_array.tolist(),
+                            "user": {
+                                "cell_id": u
+                            }
+                        }
+                        annotation_data['annotation']['elements'].append(cell_element_dict)
+
+                    self.girder_handler.gc.post(
+                        f'/annotation/item/{item_id}',
+                        data = json.dumps(annotation_data),
+                        headers = {
+                            'X-HTTP-Method': "POST",
+                            'Content-Type': 'application/json'
+                        }
+                    )
+
 
         if filename in os.listdir('./assets/conversion/'):
             converter_object = wak.Converter(

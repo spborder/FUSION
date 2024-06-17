@@ -5594,7 +5594,7 @@ class FUSION:
                         ]
                     ),
                     html.Div(
-                        id = {'type':'wsi-files-upload-div','index':0},
+                        id = {'type':'wsi-files-upload-div','index':1},
                         children = [
                             dbc.Label('Upload Alignment File Here!'),
                             UploadComponent(
@@ -5603,7 +5603,7 @@ class FUSION:
                                 baseurl = self.dataset_handler.apiUrl,
                                 girderToken = user_data_store['token'],
                                 parentId = parentId,
-                                filetypes = ['csv']
+                                filetypes = ['csv','zip']
                             )
                         ]
                     )
@@ -5729,30 +5729,45 @@ class FUSION:
         user_data_store = json.loads(user_data_store)
 
         print(f'Triggered id for upload_data: {ctx.triggered_id}')
+        print(f'Triggered for upload data: {ctx.triggered}')
+        print(f'Triggered prop ids: {ctx.triggered_prop_ids}')
+
+        print(ctx.triggered[0]['prop_id'].split('.')[-1])
+
+        if not ctx.triggered[0]['value']:
+            raise exceptions.PreventUpdate
+
         if ctx.triggered_id['type']=='wsi-upload':
-
+            # This ctx.triggered component has a "fileTypeFlag" and "uploadComplete" trigger
             wsi_file_flag = get_pattern_matching_value(wsi_file_flag)
-            if not user_data_store['upload_wsi_id'] is None and not wsi_file_flag is None:
+            if not user_data_store['upload_wsi_id']:
+                # If a wsi has not yet been uploaded
                 if not wsi_file_flag:
-                    # Getting the uploaded item id
-                    upload_wsi_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
-                    user_data_store['upload_wsi_id'] = upload_wsi_id
+                    # This is a valid file type for wsi uploads (will be None if untriggered or True for unaccepted file type)
+                    prop_id = ctx.triggered[0]['prop_id'].split('.')[-1]
+                    if prop_id=='uploadComplete':
+                        # Getting the uploaded item id
+                        upload_wsi_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                        user_data_store['upload_wsi_id'] = upload_wsi_id
 
-                    wsi_upload_children = [
-                        dbc.Alert('WSI Upload Success!',color='success')
-                    ]
+                        wsi_upload_children = [
+                            dbc.Alert('WSI Upload Success!',color='success')
+                        ]
 
-                    user_data_store['upload_check']['WSI'] = True
+                        user_data_store['upload_check']['WSI'] = True
 
-                    # Adding metadata to the uploaded slide
-                    self.dataset_handler.add_slide_metadata(
-                        item_id = upload_wsi_id,
-                        metadata_dict = {
-                            'Spatial Omics Type': user_data_store['upload_type']
-                        }
-                    )
-
+                        # Adding metadata to the uploaded slide
+                        self.dataset_handler.add_slide_metadata(
+                            item_id = upload_wsi_id,
+                            metadata_dict = {
+                                'Spatial Omics Type': user_data_store['upload_type']
+                            }
+                        )
+                    else:
+                        # upload incomplete
+                        wsi_upload_children = [no_update]*len(ctx.outputs_list[2])
                 else:
+                    # This is for an invalid file type
                     wsi_upload_children = [
                         dbc.Alert('WSI Upload Failure! Accepted file types include svs, ndpi, scn, tiff, and tif',color='danger'),
                         UploadComponent(
@@ -5764,10 +5779,10 @@ class FUSION:
                             filetypes=['svs','ndpi','scn','tiff','tif']                      
                         )
                     ]
-
             else:
-                wsi_upload_children = no_update
-            
+                # This is for if one has already been uploaded
+                wsi_upload_children = [no_update]*len(ctx.outputs_list[2])
+           
             if not user_data_store['upload_type']=='Regular':
                 omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
@@ -5775,20 +5790,29 @@ class FUSION:
             
             if user_data_store['upload_type']=='Visium':
                 # Uploading omics file (h5ad, rds)
-
+                # There will only be one additional file uploaded here
                 omics_file_flag = get_pattern_matching_value(omics_file_flag)
                 if not user_data_store['upload_omics_id'] is None:
+                    # If an omics file hasn't been uploaded yet
                     if not omics_file_flag:
+                        # If this is a valid file type
+                        prop_id = ctx.triggered[0]['prop_id'].split('.')[-1]
 
-                        upload_omics_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
-                        user_data_store['upload_omics_id'] = upload_omics_id
-                        
-                        omics_upload_children = [
-                            dbc.Alert('Omics Upload Success!')
-                        ]
+                        if prop_id=='uploadComplete':
+                            upload_omics_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                            user_data_store['upload_omics_id'] = upload_omics_id
+                            
+                            omics_upload_children = [
+                                dbc.Alert('Omics Upload Success!')
+                            ]
 
-                        user_data_store['upload_check']['Omics'] = True
+                            user_data_store['upload_check']['Omics'] = True
+
+                            #TODO: Add this to the files of the WSI
+                        else:
+                            omics_upload_children = [no_update]*len(ctx.outputs_list[3])
                     else:
+                        # This is an invalid file tye:
                         omics_upload_children = [
                             dbc.Alert('Omics Upload Failure! Accepted file types are: h5ad, rds',color = 'danger'),
                             UploadComponent(
@@ -5801,6 +5825,7 @@ class FUSION:
                                 )
                         ]
                 else:
+                    # This has already been uploaded
                     omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
             elif user_data_store['upload_type']=='CODEX':
@@ -5809,18 +5834,25 @@ class FUSION:
                 omics_file_flag = get_pattern_matching_value(omics_file_flag)
 
                 if not user_data_store['upload_histology_id'] is None:
+                    # If the histology image hasn't been uploaded yet
                     if not omics_file_flag:
+                        # If this is a valid file type
+                        prop_id = ctx.triggered[0]['prop_id'].split('.')[-1]
 
-                        upload_histology_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
-                        user_data_store['upload_histology_id'] = upload_histology_id
+                        if prop_id=='uploadComplete':
+                            upload_histology_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                            user_data_store['upload_histology_id'] = upload_histology_id
 
-                        omics_upload_children = [
-                            dbc.Alert('Histology Image Upload Success!')
-                        ]
+                            omics_upload_children = [
+                                dbc.Alert('Histology Image Upload Success!')
+                            ]
 
-                        user_data_store['upload_check']['Histology'] = True
-                    
+                            user_data_store['upload_check']['Histology'] = True
+                        else:
+                            omics_upload_children = [no_update]*len(ctx.outputs_list[3])
+
                     else:
+                        # This is an invalid file type
                         omics_upload_children = [
                             dbc.Alert('Histology Upload Failure! Accepted file types are: svs, ndpi, scn, tiff, tif',color = 'danger'),
                             UploadComponent(
@@ -5833,30 +5865,55 @@ class FUSION:
                             )
                         ]
                 else:
+                    # This has already been uploaded
                     omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
             elif user_data_store['upload_type'] == 'Xenium':
                 # Check index of triggered id and add to main item files
-                # inputs go []
-                omics_file_flag = get_pattern_matching_value(omics_file_flag)
+                # inputs go [morphology, alignment.csv.zip]
+                print(f'omics_file_flag: {omics_file_flag}')
+                print(f'ctx.triggered {ctx.triggered}')
+                print(f'ctx.triggered_id {ctx.triggered_id}')
+                print(f'ctx.triggered_prop_ids {ctx.triggered_prop_ids}')
+                omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
-                print(ctx.triggered)
-                print(ctx.triggered_id)
+                triggered_prop = ctx.triggered[0]['prop_id']
+                prop_id = triggered_prop.split('.')[-1]
+                triggered_index = ctx.triggered_id['index']
+                print(f'prop_id: {prop_id}, triggered_index: {triggered_index}')
 
+                print(f'omics_upload_children: {omics_upload_children}')
+                if not omics_file_flag[triggered_index]:
+                    if prop_id=='uploadComplete':
+                        omics_upload_children[ctx.triggered_id['index']] = dbc.Alert(
+                            'Upload Success!',
+                            color = 'success'
+                        )
 
+                        user_data_store['upload_check'][list(user_data_store['upload_check'].keys())[ctx.triggered_id['index']]] = True
 
-
-            if not user_data_store['upload_check']['WSI']:
-                wsi_upload_children = no_update
-            else:
-                wsi_upload_children = [
-                    dbc.Alert('WSI Upload Success!',color='success')
-                ]
+                        #TODO: Add this file to the main item's files      
+                else:
+                    omics_upload_children[ctx.triggered_id['index']] = [
+                        dbc.Alert('Upload Failure!',color='danger'),
+                        UploadComponent(
+                            id = {'type':'wsi-files-upload','index': triggered_index},
+                            baseurl=self.dataset_handler.apiUrl,
+                            girderToken = user_data_store['token'],
+                            parentId = user_data_store['latest_upload_folder']['id'],
+                            filetypes = ['svs','ndpi','scn','tiff','tif','csv','zip']
+                        )
+                    ]
+                
+                print(f'omics_upload_children: {omics_upload_children}')
+                
+            wsi_upload_children = [no_update]*len(ctx.outputs_list[2])
 
         else:
             print(f'ctx.triggered_id["type"]: {ctx.triggered_id["type"]}')
 
         # Checking the upload check
+        print(f'upload check: {user_data_store["upload_check"]}')
         if all([user_data_store['upload_check'][i] for i in user_data_store['upload_check']]):
             print('All set!')
 
@@ -5868,10 +5925,6 @@ class FUSION:
                 ]
             else:
                 omics_upload_children = [no_update]*len(ctx.outputs_list[3])
-
-            wsi_upload_children = [
-                dbc.Alert('WSI Upload Success!',color='success')
-            ]
 
             thumb_fig = dcc.Graph(
                 figure=go.Figure(
@@ -5912,17 +5965,17 @@ class FUSION:
             disable_upload_type = True
             
             if not user_data_store['upload_type']=='Regular':
-                return slide_metadata_table, thumb_fig, [wsi_upload_children], omics_upload_children, structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' }), json.dumps(user_data_store)
+                return slide_metadata_table, thumb_fig, wsi_upload_children, omics_upload_children, structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' }), json.dumps(user_data_store)
             else:
-                return slide_metadata_table, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' }), json.dumps(user_data_store)
+                return slide_metadata_table, thumb_fig, wsi_upload_children, [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' }), json.dumps(user_data_store)
         else:
 
             disable_upload_type = True
 
             if not user_data_store['upload_type'] == 'Regular':
-                return no_update, no_update,[wsi_upload_children], omics_upload_children, True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
+                return no_update, no_update,wsi_upload_children, omics_upload_children, True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
             else:
-                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
+                return no_update, no_update, wsi_upload_children, [], True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
     
     def add_slide_metadata(self, button_click, table_data, user_data_store):
 
