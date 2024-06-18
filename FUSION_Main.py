@@ -5635,8 +5635,6 @@ class FUSION:
         usability_signup_style = no_update
         usability_butt_style = no_update
 
-        user_data_output = no_update
-
         if ctx.triggered_id=='login-submit':
 
             try:
@@ -5689,7 +5687,7 @@ class FUSION:
                 logged_in_user = 'Welcome: fusionguest'
                 upload_disabled = True
 
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], json.dumps(user_data_output)
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], no_update
 
 
             else:
@@ -5720,7 +5718,7 @@ class FUSION:
                     logged_in_user = f'Welcome: fusionguest'
                     upload_disabled = True
             
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], json.dumps(user_data_output)
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], no_update
 
         else:
             raise exceptions.PreventUpdate
@@ -8315,7 +8313,7 @@ class FUSION:
             
             new_cell_droptions = no_update
             new_cell_subtype_dropue = [no_update]
-            
+
             cell_groups = pd.read_csv(BytesIO(anchor_uploads))
             print(cell_groups.columns.tolist())
 
