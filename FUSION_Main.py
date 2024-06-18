@@ -5878,14 +5878,19 @@ class FUSION:
                 prop_id = triggered_prop.split('.')[-1]
                 triggered_index = ctx.triggered_id['index']
 
-                if not omics_file_flag[triggered_index]:
+                if len(omics_file_flag)>triggered_index:
+                    bad_file_type = omics_file_flag[triggered_index]
+                else:
+                    bad_file_type = omics_file_flag[0]
+
+                if not bad_file_type:
                     if prop_id=='uploadComplete':
                         omics_upload_children[ctx.triggered_id['index']] = dbc.Alert(
                             'Upload Success!',
                             color = 'success'
                         )
 
-                        user_data_store['upload_check'][list(user_data_store['upload_check'].keys())[ctx.triggered_id['index']]] = True
+                        user_data_store['upload_check'][list(user_data_store['upload_check'].keys())[ctx.triggered_id['index']+1]] = True
 
                         #TODO: Add this file to the main item's files      
                 else:
@@ -6116,8 +6121,8 @@ class FUSION:
                     filename = 'matrix.csv',
                     username = user_data_store['login'],
                     folder = user_data_store['latest_upload_folder']['path'].replace('Public/','')
-                )
-                processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'],alignment_matrix)
+                ).T.reset_index().values
+                processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'],np.float64(alignment_matrix))
             else:
                 processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'])
 
@@ -6295,7 +6300,7 @@ class FUSION:
                 # Running post-segmentation worfklow from Prepper
                 self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id'],self.upload_annotations)
 
-            if user_data_store['upload_type'] == 'Visium':
+            elif user_data_store['upload_type'] == 'Visium':
                 # Extracting annotations and initial sub-compartment mask
                 self.upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
                 
@@ -6315,12 +6320,19 @@ class FUSION:
                 # Running post-segmentation workflow from CODEX Prep
                 frame_names, current_frame = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id']) 
 
+            elif user_data_store['upload_type'] == 'Xenium':
+
+                # Running post-segmentation workflow from XeniumPrep
+                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(
+                    user_data_store['upload_wsi_id']
+                )
+
             # Populate with default sub-compartment parameters
             self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
 
             sub_comp_method = 'Manual'
 
-            if user_data_store['upload_type'] in ['Visium','Regular']:
+            if user_data_store['upload_type'] in ['Visium','Regular','Xenium']:
 
                 if not self.layer_ann is None:
 
@@ -6345,6 +6357,7 @@ class FUSION:
                 prep_values = {
                     'frames': frame_names
                 }
+
 
             # Generating upload preprocessing row
             prep_row = self.layout_handler.gen_uploader_prep_type(user_data_store['upload_type'],prep_values)

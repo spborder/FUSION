@@ -379,6 +379,7 @@ class Prepper:
 
         annotation_names = []
         annotation_str = base64.b64decode(annotation_str.split(',')[-1])
+        annotation_info = None
         
         if not os.path.exists('./assets/conversion/'):
             os.makedirs('./assets/conversion/')
@@ -479,15 +480,14 @@ class Prepper:
                         cell_center_y = cell_center['y_centroid'].values[:,None]
                         cell_center_z = np.zeros((1,1))
 
-                        center_array = np.concatenate((cell_center_x,cell_vert_y,cell_vert_z),axis=-1)
+                        center_array = np.concatenate((cell_center_x,cell_center_y,cell_center_z),axis=-1)
 
                         if not alignment is None:
                             center_array = np.dot(center_array,alignment)
 
                         cell_nucleus_area = cell_center['nucleus_area'].values
                         equivalent_radius = (cell_nucleus_area/pi)**(0.5)
-                        nucleus_circle = Point(np.squeeze(center_array).tolist()).buffer(equivalent_radius)
-                        print(np.shape(np.array(nucleus_circle.exterior.coords)))
+                        nucleus_circle = Point(np.squeeze(center_array).tolist()).buffer(equivalent_radius)[0]
 
                         cell_element_dict = {
                             "type": "polyline",
@@ -495,7 +495,7 @@ class Prepper:
                             "points": [[i[0],i[1],0] for i in list(nucleus_circle.exterior.coords)],
                             "user": {
                                 "cell_id": u,
-                                "transcript_counts":cell_center["transcript_counts"] if "transcript_counts" in cell_center.columns.tolist() else 0
+                                "transcript_counts":cell_center["transcript_counts"].tolist()[0] if "transcript_counts" in cell_center.columns.tolist() else 0
                             }
                         }
 
@@ -509,6 +509,10 @@ class Prepper:
                             'Content-Type': 'application/json'
                         }
                     )
+
+                    annotation_info = {
+                        "Cells": len(unique_cells)
+                    }
 
 
         if filename in os.listdir('./assets/conversion/'):
@@ -539,8 +543,6 @@ class Prepper:
             # Removing temporary directory
             shutil.rmtree('./assets/conversion/')
         
-        else:
-            annotation_info = None
 
         return annotation_info
 
