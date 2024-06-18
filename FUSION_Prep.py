@@ -34,6 +34,9 @@ import lxml.etree as ET
 import base64
 import shutil
 import uuid
+from math import pi
+
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 
@@ -415,7 +418,7 @@ class Prepper:
             if any(['vertex' in i for i in csv_anns.columns.tolist()]):
                 # Creating annotations from csv of vertices
                 if 'cell_id' in csv_anns.columns.tolist():
-                    unique_cells = csv_anns['cell_id'].unique.tolist()
+                    unique_cells = csv_anns['cell_id'].unique().tolist()
                     
                     annotation_data = {
                         "annotation": {
@@ -423,8 +426,8 @@ class Prepper:
                             "elements": []
                         }
                     }
-
-                    for u_idx,u in enumerate(unique_cells):
+                    print(f'Unique cell boundaries: {len(unique_cells)}')
+                    for u_idx,u in tqdm(enumerate(unique_cells),total = len(unique_cells)):
 
                         cell_verts = csv_anns[csv_anns['cell_id'].str.match(u)]
                         cell_vert_x = cell_verts['vertex_x'].values[:,None]
@@ -446,6 +449,58 @@ class Prepper:
                         }
                         annotation_data['annotation']['elements'].append(cell_element_dict)
 
+                    self.girder_handler.gc.post(
+                        f'/annotation/item/{item_id}',
+                        data = json.dumps(annotation_data),
+                        headers = {
+                            'X-HTTP-Method': "POST",
+                            'Content-Type': 'application/json'
+                        }
+                    )
+
+            if any(['centroid' in i for i in csv_anns.columns.tolist()]):
+
+                # Creating annotations from csv containing centroid and area
+                if 'cell_id' in csv_anns.columns.tolist():
+                    unique_cells = csv_anns['cell_id'].unique().tolist()
+
+                    annotation_data = {
+                        "annotation": {
+                            "name": "Cells",
+                            "elements": []
+                        }
+                    }
+
+                    print(f'Unique cell centroids: {len(unique_cells)}')
+                    for u_idx, u in tqdm(enumerate(unique_cells),total = len(unique_cells)):
+
+                        cell_center = csv_anns[csv_anns['cell_id'].str.match(u)]
+                        cell_center_x = cell_center['x_centroid'].values[:,None]
+                        cell_center_y = cell_center['y_centroid'].values[:,None]
+                        cell_center_z = np.zeros((1,1))
+
+                        center_array = np.concatenate((cell_center_x,cell_vert_y,cell_vert_z),axis=-1)
+
+                        if not alignment is None:
+                            center_array = np.dot(center_array,alignment)
+
+                        cell_nucleus_area = cell_center['nucleus_area'].values
+                        equivalent_radius = (cell_nucleus_area/pi)**(0.5)
+                        nucleus_circle = Point(np.squeeze(center_array).tolist()).buffer(equivalent_radius)
+                        print(np.shape(np.array(nucleus_circle.exterior.coords)))
+
+                        cell_element_dict = {
+                            "type": "polyline",
+                            "id": uuid.uuid4().hex[:24],
+                            "points": [[i[0],i[1],0] for i in list(nucleus_circle.exterior.coords)],
+                            "user": {
+                                "cell_id": u,
+                                "transcript_counts":cell_center["transcript_counts"] if "transcript_counts" in cell_center.columns.tolist() else 0
+                            }
+                        }
+
+                        annotation_data['annotation']['elements'].append(cell_element_dict)
+                    
                     self.girder_handler.gc.post(
                         f'/annotation/item/{item_id}',
                         data = json.dumps(annotation_data),

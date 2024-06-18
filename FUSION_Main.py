@@ -5764,15 +5764,17 @@ class FUSION:
                 else:
                     # This is for an invalid file type
                     wsi_upload_children = [
-                        dbc.Alert('WSI Upload Failure! Accepted file types include svs, ndpi, scn, tiff, and tif',color='danger'),
-                        UploadComponent(
-                            id = {'type':'wsi-upload','index':0},
-                            uploadComplete=False,
-                            baseurl=self.dataset_handler.apiUrl,
-                            girderToken=user_data_store['token'],
-                            parentId=user_data_store['latest_upload_folder']['id'],
-                            filetypes=['svs','ndpi','scn','tiff','tif']                      
-                        )
+                        html.Div([
+                            dbc.Alert('WSI Upload Failure! Accepted file types include svs, ndpi, scn, tiff, and tif',color='danger'),
+                            UploadComponent(
+                                id = {'type':'wsi-upload','index':0},
+                                uploadComplete=False,
+                                baseurl=self.dataset_handler.apiUrl,
+                                girderToken=user_data_store['token'],
+                                parentId=user_data_store['latest_upload_folder']['id'],
+                                filetypes=['svs','ndpi','scn','tiff','tif']                      
+                            )
+                        ])
                     ]
             else:
                 # This is for if one has already been uploaded
@@ -5809,15 +5811,17 @@ class FUSION:
                     else:
                         # This is an invalid file tye:
                         omics_upload_children = [
-                            dbc.Alert('Omics Upload Failure! Accepted file types are: h5ad, rds',color = 'danger'),
-                            UploadComponent(
-                                id = {'type':'wsi-files-upload','index':0},
-                                uploadComplete=False,
-                                baseurl=self.dataset_handler.apiUrl,
-                                girderToken=user_data_store['token'],
-                                parentId=user_data_store['latest_upload_folder']['id'],
-                                filetypes=['rds','h5ad']                 
-                                )
+                            html.Div([
+                                dbc.Alert('Omics Upload Failure! Accepted file types are: h5ad, rds',color = 'danger'),
+                                UploadComponent(
+                                    id = {'type':'wsi-files-upload','index':0},
+                                    uploadComplete=False,
+                                    baseurl=self.dataset_handler.apiUrl,
+                                    girderToken=user_data_store['token'],
+                                    parentId=user_data_store['latest_upload_folder']['id'],
+                                    filetypes=['rds','h5ad']                 
+                                    )
+                            ])
                         ]
                 else:
                     # This has already been uploaded
@@ -5849,15 +5853,17 @@ class FUSION:
                     else:
                         # This is an invalid file type
                         omics_upload_children = [
-                            dbc.Alert('Histology Upload Failure! Accepted file types are: svs, ndpi, scn, tiff, tif',color = 'danger'),
-                            UploadComponent(
-                                id = {'type':'wsi-files-upload','index':0},
-                                uploadComplete = False,
-                                baseurl = self.dataset_handler.apiUrl,
-                                girderToken = user_data_store['token'],
-                                parentId = user_data_store['latest_upload_folder']['id'],
-                                filetypes = ['svs','ndpi','scn','tiff','tif']
-                            )
+                            html.Div([
+                                dbc.Alert('Histology Upload Failure! Accepted file types are: svs, ndpi, scn, tiff, tif',color = 'danger'),
+                                UploadComponent(
+                                    id = {'type':'wsi-files-upload','index':0},
+                                    uploadComplete = False,
+                                    baseurl = self.dataset_handler.apiUrl,
+                                    girderToken = user_data_store['token'],
+                                    parentId = user_data_store['latest_upload_folder']['id'],
+                                    filetypes = ['svs','ndpi','scn','tiff','tif']
+                                )
+                            ])
                         ]
                 else:
                     # This has already been uploaded
@@ -5884,14 +5890,16 @@ class FUSION:
                         #TODO: Add this file to the main item's files      
                 else:
                     omics_upload_children[ctx.triggered_id['index']] = [
-                        dbc.Alert('Upload Failure!',color='danger'),
-                        UploadComponent(
-                            id = {'type':'wsi-files-upload','index': triggered_index},
-                            baseurl=self.dataset_handler.apiUrl,
-                            girderToken = user_data_store['token'],
-                            parentId = user_data_store['latest_upload_folder']['id'],
-                            filetypes = ['svs','ndpi','scn','tiff','tif','csv','zip']
-                        )
+                        html.Div([
+                            dbc.Alert('Upload Failure!',color='danger'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index': triggered_index},
+                                baseurl=self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = user_data_store['latest_upload_folder']['id'],
+                                filetypes = ['svs','ndpi','scn','tiff','tif','csv','zip']
+                            )
+                        ])
                     ]
                 
                 
@@ -6103,7 +6111,15 @@ class FUSION:
             new_upload = seg_upload[0]
             
             # Processing newly uploaded annotations
-            processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'])
+            if user_data_store['upload_type']=='Xenium':
+                alignment_matrix = self.dataset_handler.grab_from_user_folder(
+                    filename = 'matrix.csv',
+                    username = user_data_store['login'],
+                    folder = user_data_store['latest_upload_folder']['path'].replace('Public/','')
+                )
+                processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'],alignment_matrix)
+            else:
+                processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'])
 
             if not processed_anns is None:
                 return_items = current_up_anns[0]
