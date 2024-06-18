@@ -5573,6 +5573,7 @@ class FUSION:
                     usability_signup_style = {'display':'none'}
                     usability_butt_style = {'marginLeft':'5px','display':'inline-block'}
 
+                user_data_output = json.dumps(user_data_output)
 
             except girder_client.AuthenticationError:
 
@@ -5581,7 +5582,9 @@ class FUSION:
                 logged_in_user = 'Welcome: fusionguest'
                 upload_disabled = True
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], no_update
+                user_data_output = no_update
+
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output
         
         elif ctx.triggered_id=='create-user-submit':
             if len(email)==0 or len(firstname)==0 or len(lastname)==0:
@@ -5606,8 +5609,9 @@ class FUSION:
                 logged_in_user = 'Welcome: fusionguest'
                 upload_disabled = True
 
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], no_update
+                user_data_output = no_update
 
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], user_data_output
 
             else:
                 create_user_children = no_update
