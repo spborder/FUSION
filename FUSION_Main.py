@@ -2358,7 +2358,7 @@ class FUSION:
                 return html.P('Select a slide to get started!'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
     
         elif current_tab=='annotation-tab':
-            if self.dataset_handler.username=='fusionguest':
+            if user_data_store["login"]=='fusionguest':
                 return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
             else:
                 
@@ -7800,7 +7800,7 @@ class FUSION:
             elif type(class_label)==list:
                 label_dict = {i:j for i,j in zip(class_label,image_label)}
             
-            label_dict['Annotator'] = self.dataset_handler.username
+            label_dict['Annotator'] = user_store_data["login"]
             
             if ctx.triggered_id['type']=='annotation-set-label':
                 # Grab the first member of the clicked ftu
