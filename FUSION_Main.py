@@ -591,7 +591,8 @@ class FUSION:
         self.app.callback(
             Input({'type':'questions-submit','index':ALL},'n_clicks'),
             Output({'type':'questions-submit-alert','index':ALL},'children'),
-            State({'type':'question-input','index':ALL},'value'),
+            [State({'type':'question-input','index':ALL},'value'),
+             State('user-store','data')],
             prevent_initial_call = True
         )(self.post_usability_response)
 
@@ -7091,9 +7092,11 @@ class FUSION:
 
         return [False]*n_outputs,['success']
 
-    def post_usability_response(self,butt_click,questions_inputs):
+    def post_usability_response(self,butt_click,questions_inputs, user_store_data):
 
         # Updating usability info file in DSA after user clicks "Submit" button
+        user_store_data = json.loads(user_store_data)
+
         if butt_click:
             # Checking if all of the responses are not empty
             responses_check = [True if not i==[] and not i is None else False for i in questions_inputs]
@@ -7109,7 +7112,7 @@ class FUSION:
                     level_name = f'Level {level_idx}'
                 else:
                     level_name = 'Comments'
-                usability_info['usability_study_users'][self.dataset_handler.username]['responses'][f'{level_name}'] = questions_inputs
+                usability_info['usability_study_users'][user_store_data["login"]]['responses'][f'{level_name}'] = questions_inputs
 
                 # Posting to DSA
                 self.dataset_handler.update_usability(usability_info)
