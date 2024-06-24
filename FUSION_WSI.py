@@ -670,6 +670,24 @@ class CODEXSlide(DSASlide):
         return intersecting_ftus, intersecting_ftu_polys
 
 
+class XeniumSlide(DSASlide):
+    def __init__(self,
+                 item_id: str,
+                 user_details,
+                 girder_handler,
+                 ftu_colors:dict,
+                 manual_rois:list,
+                 marked_ftus:list):
+        super().__init__(item_id,user_details,girder_handler,ftu_colors,manual_rois,marked_ftus)
+
+    def update_viewport_data(self,bounds_box,view_type):
+        """
+        Updating data passed to charts based on change in viewport position
+        """
+        pass
+
+
+
 
 
 

@@ -956,7 +956,7 @@ class LayoutHandler:
     def gen_report_child(self,feature_data,child_type):
 
         # Generate new report of feature data        
-        feature_data = pd.DataFrame.from_records(feature_data).copy()
+        feature_data = pd.DataFrame.from_dict(feature_data,orient='index').copy()
         unique_labels = np.unique(feature_data['label'].tolist()).tolist()
 
         if type(unique_labels[0]) in [int,float]:

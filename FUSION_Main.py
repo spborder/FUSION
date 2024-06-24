@@ -3973,17 +3973,17 @@ class FUSION:
         user_data_store = json.loads(user_data_store)
 
         if not cluster_data_store['feature_data'] is None:
-            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+            feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
         else:
             feature_data = None
         
         if not cluster_data_store['umap_df'] is None:
-            umap_df = pd.DataFrame.from_records(cluster_data_store['umap_df'])
+            umap_df = pd.DataFrame.from_dict(cluster_data_store['umap_df'],orient='index')
         else:
             umap_df = None
 
         if not cluster_data_store['clustering_data'] is None:   
-            clustering_data = pd.DataFrame.from_records(cluster_data_store['clustering_data'])
+            clustering_data = pd.DataFrame.from_dict(cluster_data_store['clustering_data'],orient='index')
         else:
             clustering_data = None
 
@@ -3998,7 +3998,7 @@ class FUSION:
             if clustering_data.empty:
                 print(f'Getting new clustering data')
                 clustering_data = self.dataset_handler.load_clustering_data(user_data_store)
-                cluster_data_store['clustering_data'] = clustering_data.to_dict('records')
+                cluster_data_store['clustering_data'] = clustering_data.to_dict('index')
 
             feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
             cell_features = [i for i in feature_names if i in self.cell_names_key]
@@ -4208,7 +4208,7 @@ class FUSION:
                 else:
                     figure = go.Figure()
                 
-                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+                cluster_data_store['feature_data'] = feature_data.to_dict('index')
 
             elif len(feature_names)==2:
                 print(f'Generating a scatter plot')
@@ -4238,7 +4238,7 @@ class FUSION:
                 labels_left = feature_data['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
-                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+                cluster_data_store['feature_data'] = feature_data.to_dict('index')
 
                 figure = go.Figure(data = px.scatter(
                     data_frame=feature_data,
@@ -4290,12 +4290,12 @@ class FUSION:
 
                 feature_data['Hidden'] = hidden_col
 
-                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+                cluster_data_store['feature_data'] = feature_data.to_dict('index')
 
                 umap_df = gen_umap(feature_data, feature_names, ['Hidden','label','Main_Cell_Types','Cell_States'])
                 # Saving this so we can update the label separately without re-running scaling or reduction
 
-                cluster_data_store['umap_df'] = umap_df.to_dict('records')
+                cluster_data_store['umap_df'] = umap_df.to_dict('index')
 
                 # Generating labels_info_children and filter_info_children
                 labels_left = umap_df['label'].tolist()
@@ -4433,8 +4433,7 @@ class FUSION:
                         label = 'FTU'
                         label_data = clustering_data[label].tolist()
 
-
-                label_data = [label_data[i] for i in list(feature_data.index)]
+                label_data = [label_data[int(i)] for i in list(feature_data.index)]
                 # Needs an alignment step going from the full clustering_data to the na-dropped and filtered feature_data
                 # feature_data contains the features included in the current plot, label, Hidden, Main_Cell_Types, and Cell_States
                 # So for a violin plot the shape should be nX5
@@ -4444,7 +4443,7 @@ class FUSION:
                 if type(label_data[0]) in [int,float]:
                     feature_data['label'] = feature_data['label'].astype(float)
 
-                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+                cluster_data_store['feature_data'] = feature_data.to_dict('index')
 
                 # Generating labels_info_children
                 labels_left = feature_data['label'].tolist()
@@ -4490,7 +4489,7 @@ class FUSION:
 
                     umap_df.loc[:,'label'] = label_data
 
-                    cluster_data_store['umap_df'] = umap_df.to_dict('records')
+                    cluster_data_store['umap_df'] = umap_df.to_dict('index')
                     
                     if not type(label_data[0]) in [int,float]:
 
@@ -4595,7 +4594,7 @@ class FUSION:
 
         cluster_data_store = json.loads(cluster_data_store)
         user_store_data = json.loads(user_store_data)
-        feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+        feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient = 'index')
 
         if click is not None:
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
@@ -4761,7 +4760,7 @@ class FUSION:
         Getting cell state distribution plot for clicked main cell type
         """
         cluster_data_store = json.loads(cluster_data_store)
-        feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+        feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
         current_selected_samples = cluster_data_store['current_selected_samples']
 
         if not selected_cell_click is None:
@@ -5024,7 +5023,7 @@ class FUSION:
 
         cluster_data_store = json.loads(cluster_data_store)
         if not cluster_data_store['feature_data'] is None:
-            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+            feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
         else:
             feature_data = pd.DataFrame()
         if 'current_selected_samples' in cluster_data_store:
@@ -6748,7 +6747,7 @@ class FUSION:
         user_data_store = json.loads(user_data_store)
 
         used_get_cluster_data_plugin = None
-        clustering_data = pd.DataFrame.from_records(cluster_data_store['clustering_data'])
+        clustering_data = pd.DataFrame.from_dict(cluster_data_store['clustering_data'],orient='index')
 
         if active_tab == 'clustering-tab':
              # Checking the current slides to see if they match vis_sess_store:
@@ -6842,7 +6841,7 @@ class FUSION:
                     print(f'data_get_status: {data_get_status}')
                     time.sleep(1)
 
-                cluster_data_store['clustering_data'] = self.dataset_handler.load_clustering_data(user_data_store).to_dict('records')
+                cluster_data_store['clustering_data'] = self.dataset_handler.load_clustering_data(user_data_store).to_dict('index')
 
                 get_data_div_children = dbc.Alert(
                     'Clustering data aligned!',
@@ -6897,7 +6896,7 @@ class FUSION:
             raise exceptions.PreventUpdate
         
         if not cluster_data_store['feature_data'] is None:
-            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+            feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
             feature_columns = [i for i in feature_data if i not in ['label','Hidden','Main_Cell_Types','Cell_States']]
 
             # If this is umap data then save one sheet with the raw data and another with the umap embeddings
@@ -6931,7 +6930,7 @@ class FUSION:
         if ctx.triggered[0]['value']:
 
             disable_button = True
-            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+            feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
             
             # Saving current feature data to user public folder
             features_for_markering = self.dataset_handler.save_to_user_folder(
@@ -8311,12 +8310,13 @@ class FUSION:
 
         main_cell_types = get_pattern_matching_value(main_cell_types)
         anchor_uploads = get_pattern_matching_value(anchor_uploads)
+        if not ctx.triggered:
+            raise exceptions.PreventUpdate
+        if main_cell_types is None:
+            raise exceptions.PreventUpdate
         if len(main_cell_types)==0 or anchor_uploads is None:
             raise exceptions.PreventUpdate
         
-        if not ctx.triggered:
-            raise exceptions.PreventUpdate
-
         if ctx.triggered_id['type']=='cell-subtype-butt':
             new_cell_droptions = no_update
             new_cell_subtype_dropue = [no_update]
