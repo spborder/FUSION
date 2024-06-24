@@ -4131,7 +4131,6 @@ class FUSION:
                     label = 'FTU'
                     label_data = clustering_data[label].tolist()
 
-
             # Now filtering labels according to any selected filter labels
             filter_label_names = [i['title'] for i in self.dataset_handler.filter_keys if i['key'] in filter_labels]
             filter_idx = []
@@ -4301,7 +4300,6 @@ class FUSION:
                 labels_left = umap_df['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
-
                 if not type(label_data[0]) in [int,float]:
 
                     figure = go.Figure(px.scatter(
@@ -4433,7 +4431,7 @@ class FUSION:
                         label = 'FTU'
                         label_data = clustering_data[label].tolist()
 
-
+                #TODO: original index is not preserved after reading it from "records"
                 label_data = [label_data[i] for i in list(feature_data.index)]
                 # Needs an alignment step going from the full clustering_data to the na-dropped and filtered feature_data
                 # feature_data contains the features included in the current plot, label, Hidden, Main_Cell_Types, and Cell_States
