@@ -4397,9 +4397,9 @@ class FUSION:
                         label_data = clustering_data[label].tolist()
                     else:
                         # This has to have an index portion just so they line up consistently
-                        label_data = [0]*(max(list(feature_data.index))+1)
+                        label_data = [0]*(max([int(i) for i in list(feature_data.index)])+1)
                         for idx in list(feature_data.index):
-                            label_data[idx] = float(feature_data.loc[idx,label])
+                            label_data[int(idx)] = float(feature_data.loc[idx,label])
                 else:
                     sample_ids = [i['Slide_Id'] for i in clustering_data['Hidden'].tolist()]
                     unique_ids = np.unique(sample_ids).tolist()
