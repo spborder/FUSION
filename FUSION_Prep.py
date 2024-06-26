@@ -611,7 +611,7 @@ class VisiumPrep(Prepper):
 
         self.spot_aggregation_plugin = 'samborder2256_spot_aggregation_latest/spot_agg'
 
-    def run_spot_aggregation(self,image_id):
+    def run_spot_aggregation(self,image_id, user_details):
         
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
@@ -623,12 +623,12 @@ class VisiumPrep(Prepper):
                                                        'input_image':fileId,
                                                        'basedir':folderId,
                                                        'girderApiUrl':self.girder_handler.apiUrl,
-                                                       'girderToken':self.girder_handler.user_token
+                                                       'girderToken':user_details['token']
                                                    })
 
         return job_response
 
-    def run_cell_deconvolution(self,image_id,rds_id):
+    def run_cell_deconvolution(self,image_id,rds_id,user_details):
 
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
@@ -649,7 +649,7 @@ class VisiumPrep(Prepper):
                                                    })
         return cell_deconv_job
 
-    def run_spot_annotation(self,image_id,omics_id, organ, gene_method, gene_n, gene_list):
+    def run_spot_annotation(self,image_id,omics_id, organ, gene_method, gene_n, gene_list, user_details):
 
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
@@ -683,7 +683,7 @@ class VisiumPrep(Prepper):
                                                     'n': 0,
                                                     'list': '',
                                                     'girderApiUrl':self.girder_handler.apiUrl,
-                                                    'girderToken':self.girder_handler.user_token
+                                                    'girderToken': user_details['token']
                                                 })
                 
 
@@ -713,19 +713,19 @@ class VisiumPrep(Prepper):
                                                 'n': gene_n,
                                                 'list': gene_list,
                                                 'girderApiUrl':self.girder_handler.apiUrl,
-                                                'girderToken':self.girder_handler.user_token
+                                                'girderToken': user_details['token']
                                             })
             
         else:
             print(f'Invalid omics type: {omics_name}')
 
-    def post_segmentation(self, upload_wsi_id, upload_omics_id, upload_annotations, organ, gene_method, gene_n, gene_list):
+    def post_segmentation(self, upload_wsi_id, upload_omics_id, upload_annotations, organ, gene_method, gene_n, gene_list, user_details):
 
         # What to do after segmentation for a Visium upload
 
         # Generate spot annotations and aggregate --omics info
-        spot_annotation = self.run_spot_annotation(upload_wsi_id,upload_omics_id, organ, gene_method, gene_n, gene_list)
-        spot_aggregation = self.run_spot_aggregation(upload_wsi_id)
+        spot_annotation = self.run_spot_annotation(upload_wsi_id,upload_omics_id, organ, gene_method, gene_n, gene_list, user_details)
+        spot_aggregation = self.run_spot_aggregation(upload_wsi_id, user_details)
 
         # Getting annotations and returning layer_anns
         ftu_names = []
@@ -775,36 +775,101 @@ class CODEXPrep(Prepper):
     def __init__(self, girder_handler):
         super().__init__(girder_handler)
 
-        self.initial_segmentation_parameters = [
-            {
-                'name':'Nuclei',
-                'threshold':100,
-                'min_size':20,
-                'color':[0,0,255],
-                'marks_color':'rgb(0,0,255)'
-            }           
-        ]
+        # Defining plugin information:
 
-    def post_segmentation(self,upload_wsi_id):
-
-        # Getting the frames present for an image
-        image_metadata = self.girder_handler.get_tile_metadata(upload_wsi_id)
-
-        frame_labels = [
-            {
-                'label': f'Frame_{idx}',
-                'value': idx,
-                'disabled': False
-            }
-            for idx in range(len(image_metadata['frames']))
-        ]
-
-        current_frame = {
-            'index': 0,
-            'region': []
+        # Registration plugin
+        self.registration_plugin = {
+            'plugin_name': 'dsarchive_histomicstk_extras_latest/RegisterImage'
         }
 
-        return frame_labels, current_frame
+        # Tissue Mask plugin
+        self.tissue_mask_plugin = {
+            'plugin_name': 'samborder2256_ann_hierarchy_latest/CreateTissueAnnotation'
+        }
+
+        # DeepCell plugin (with post-processing and feature extraction)
+        self.cell_seg_plugin = {
+            'plugin_name': 'samborder2256_deepcell_plugin_latest/DeepCell_Plugin'
+        }
+
+    def post_segmentation(self,upload_wsi_id, upload_codex_id, upload_annotations, user_details):
+        """
+        If a histology image is provided (with annotations), then show those for morphometrics extraction
+        """
+
+        # Registration:
+        if not upload_wsi_id is None:
+            registration_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.registration_plugin["plugin"]}/run',
+                                                    parameters = {
+                                                        'image1': upload_wsi_id,
+                                                        'image2': upload_codex_id,
+                                                        'girderApiUrl': self.girder_handler.apiUrl,
+                                                        'girderToken': user_details['token']
+                                                    })
+        else:
+            registration_job = None
+
+        # Generating tissue mask annotation:
+        tissue_mask_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.tissue_mask_plugin["plugin_name"]}/run',
+                                                   parameters = {
+                                                       'input_image': upload_wsi_id,
+                                                       'girderApiUrl':self.girder_handler.apiUrl,
+                                                       'girderToken':user_details['token']
+                                                   })
+
+        # Running cell segmentation:
+        cell_seg_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.cell_seg_plugin["plugin_name"]}/run',
+                                                   parameters = {
+                                                       'input_image': upload_codex_id,
+                                                       'input_region': [-1,-1,-1,-1],
+                                                       'nuclei_frame': 0,
+                                                       'get_features': True,
+                                                       'girderApiUrl': self.girder_handler.apiUrl,
+                                                       'girderToken': user_details['token']
+                                                   })
+
+        # Getting annotations and returning layer_anns
+        ftu_names = []
+        for idx, i in enumerate(upload_annotations):
+            if 'annotation' in i:
+                if 'elements' in i['annotation']:
+                    if not 'interstitium' in i['annotation']['name']:
+                        if len(i['annotation']['elements'])>0:
+                            ftu_names.append({
+                                'label':i['annotation']['name'],
+                                'value':idx,
+                                'disabled':False
+                            })
+                        else:
+                            ftu_names.append({
+                                'label': i['annotation']['name']+ ' (None detected in slide)',
+                                'value':idx,
+                                'disabled': True
+                            })
+                    else:
+                        ftu_names.append({
+                            'label': i['annotation']['name'] + ' (Not implemented for interstitium)',
+                            'value': idx,
+                            'disabled': True
+                        })
+
+        if not all([i['disabled'] for i in ftu_names]):
+            # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+            layer_ann = {
+                'current_layer': [i['value'] for i in ftu_names if not i['disabled']][0],
+                'current_annotation': 0,
+                'previous_annotation': 0,
+                'max_layers': [len(i['annotation']['elements']) for i in upload_annotations if 'annotation' in i]
+            }
+        else:
+            layer_ann = None
+            ftu_names = [{
+                'label': 'No FTUs for Feature Extraction',
+                'value':1,
+                'disabled':False
+            }]
+
+        return ftu_names, layer_ann
 
 
 class XeniumPrep(Prepper):
