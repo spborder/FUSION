@@ -298,7 +298,9 @@ class LayoutHandler:
                         ]
                     )
                 ],align='center',style={'marginBottom':'10px'})
-
+            ]),
+            dbc.CardFooter([
+                html.P('Some of the icons in the cell diagrams are informed and inspired by KPMP.org, Biorender.com and "Advances and prospects for the Human BioMolecular Atlas Program (HuBMAP)"')
             ])
         ])
 
