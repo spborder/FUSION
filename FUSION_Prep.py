@@ -782,11 +782,6 @@ class CODEXPrep(Prepper):
             'plugin_name': 'dsarchive_histomicstk_extras_latest/RegisterImage'
         }
 
-        # Tissue Mask plugin
-        self.tissue_mask_plugin = {
-            'plugin_name': 'samborder2256_ann_hierarchy_latest/CreateTissueAnnotation'
-        }
-
         # DeepCell plugin (with post-processing and feature extraction)
         self.cell_seg_plugin = {
             'plugin_name': 'samborder2256_deepcell_plugin_latest/DeepCell_Plugin'
@@ -808,14 +803,6 @@ class CODEXPrep(Prepper):
                                                     })
         else:
             registration_job = None
-
-        # Generating tissue mask annotation:
-        tissue_mask_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.tissue_mask_plugin["plugin_name"]}/run',
-                                                   parameters = {
-                                                       'input_image': upload_wsi_id,
-                                                       'girderApiUrl':self.girder_handler.apiUrl,
-                                                       'girderToken':user_details['token']
-                                                   })
 
         # Running cell segmentation:
         cell_seg_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.cell_seg_plugin["plugin_name"]}/run',
@@ -879,10 +866,59 @@ class XeniumPrep(Prepper):
 
         self.girder_handler = girder_handler
 
-    def post_segmentation(self, upload_wsi_id, dapi_image_id, alignment, cell_info):
+        # Adjusting uploaded annotations (cell segmentations)
+        self.alignment_plugin = {
+            'plugin_name': ''
+        }
+
+    def post_segmentation(self, upload_wsi_id, dapi_image_id, upload_annotations, alignment, cell_info):
         """
-        
+        # Aligning cell_info centroids with upload_wsi (applying alignment matrix)
+        # Processing any uploaded annotations for morphometrics extraction
+
         """
-        pass
+
+        # Getting annotations and returning layer_anns
+        ftu_names = []
+        for idx, i in enumerate(upload_annotations):
+            if 'annotation' in i:
+                if 'elements' in i['annotation']:
+                    if not 'interstitium' in i['annotation']['name']:
+                        if len(i['annotation']['elements'])>0:
+                            ftu_names.append({
+                                'label':i['annotation']['name'],
+                                'value':idx,
+                                'disabled':False
+                            })
+                        else:
+                            ftu_names.append({
+                                'label': i['annotation']['name']+ ' (None detected in slide)',
+                                'value':idx,
+                                'disabled': True
+                            })
+                    else:
+                        ftu_names.append({
+                            'label': i['annotation']['name'] + ' (Not implemented for interstitium)',
+                            'value': idx,
+                            'disabled': True
+                        })
+
+        if not all([i['disabled'] for i in ftu_names]):
+            # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+            layer_ann = {
+                'current_layer': [i['value'] for i in ftu_names if not i['disabled']][0],
+                'current_annotation': 0,
+                'previous_annotation': 0,
+                'max_layers': [len(i['annotation']['elements']) for i in upload_annotations if 'annotation' in i]
+            }
+        else:
+            layer_ann = None
+            ftu_names = [{
+                'label': 'No FTUs for Feature Extraction',
+                'value':1,
+                'disabled':False
+            }]
+
+        return ftu_names, layer_ann
 
 

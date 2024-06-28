@@ -1265,34 +1265,6 @@ class FUSION:
             prevent_initial_call = True
         )(self.update_sub_compartment)
 
-        # Grabbing new frame slide thumbnail for nucleus segmentation
-        self.app.callback(
-            [
-                Input({'type':'frame-thumbnail','index':ALL},'clickData'),
-                Input({'type':'frame-select','index':ALL},'value')
-            ],
-            [
-                Output({'type':'frame-thumbnail','index':ALL},'figure'),
-                Output({'type':'ex-nuc-img','index':ALL},'figure')
-            ],
-            prevent_initial_call = True
-        )(self.grab_nuc_region)
-
-        # Updating nucleus segmentation parameters for CODEX prep
-        self.app.callback(
-            [
-                Input({'type':'nuc-seg-method','index':ALL},'value'),
-                Input({'type':'nuc-thresh-slider','index':ALL},'value'),
-                Input({'type':'ex-nuc-view','index':ALL},'value'),
-                Input({'type':'go-to-feat','index':ALL},'n_clicks')
-            ],
-            [
-                Output({'type':'ex-nuc-img','index':ALL},'figure'),
-                Output({'type':'nuc-thresh-slider','index':ALL},'marks')
-            ],
-            prevent_initial_call = True
-        )(self.update_nuc_segmentation)
-
         # Running feature extraction plugin
         self.app.callback(
             [Input({'type':'start-feat','index':ALL},'n_clicks'),
@@ -6478,34 +6450,6 @@ class FUSION:
 
             return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
 
-    def grab_nuc_region(self, thumb_fig_click, frame):
-
-        # Get a new region of the full image, or update the frame thumbnail.
-        print(thumb_fig_click)
-        print(frame)
-        print(ctx.triggered)
-
-        print(ctx.outputs_list)
-
-        raise exceptions.PreventUpdate
-
-        pass
-
-    def update_nuc_segmentation(self,nuc_method,nuc_thresh,view_type,go_to_feat):
-
-        # Generating nucleus segmentation image from user inputs
-        print(ctx.triggered)
-        print(nuc_method)
-        print(nuc_thresh)
-        print(view_type)
-        print(go_to_feat)
-
-        print(ctx.outputs_list)
-
-        raise exceptions.PreventUpdate
-
-        pass
-
     def run_feature_extraction(self,feat_butt,skip_feat,include_ftus,include_features,user_data_store):
 
         user_data_store = json.loads(user_data_store)
@@ -7454,11 +7398,18 @@ class FUSION:
         updated_urls = []
         for c_idx, old_style in enumerate(self.wsi.channel_tile_url):
             if c_idx not in updated_channel_idxes:
-                base_style = {
-                    c_idx: "rgba(255,255,255,255)"
-                }
+                if not self.wsi.channel_names[c_idx]=='Histology (H&E)':
+                    base_style = {
+                        c_idx: "rgba(255,255,255,255)"
+                    }
+                else:
+                    base_style = {
+                        band['framedelta']: band['palette'][-1]
+                        for band in self.wsi.rgb_style_dict['bands']
+                    }
 
                 new_url = self.wsi.update_url_style(base_style | update_style)
+
             else:
 
                 new_url = self.wsi.update_url_style(update_style)

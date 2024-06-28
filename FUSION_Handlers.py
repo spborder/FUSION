@@ -3201,6 +3201,12 @@ class LayoutHandler:
                             )
                         ),id={'type':'collapse-content','index':0},is_open=False
                     )
+                ]),
+                dbc.CardFooter([
+                    html.Div(
+                        id = {'type':'long-plugin-div','index': 0},
+                        children = []
+                    )
                 ])
             ],style={'marginBottom':'20px'}
         )

@@ -553,17 +553,22 @@ class CODEXSlide(DSASlide):
             for f in image_metadata['frames']:
                 if 'Channel' in f:
                     self.channel_names.append(f['Channel'])
+            
+            if all([i in self.channel_names for i in ['red','green','blue']]):
 
-        if 'Histology Id' in self.item_info['meta']:
-            self.channel_names = ['Histology (H&E)'] + self.channel_names
+                self.rgb_style_dict = {
+                    "bands": [
+                        {
+                            "palette": ["rgba(0,0,0,0)",'rgba('+','.join(['255' if i==c_idx else '0' for i in range(3)]+['0'])+')'],
+                            "framedelta": self.channel_names.index(c)
+                        }
+                        for c_idx,c in enumerate(['red','green','blue'])
+                    ]
+                }
 
-            # Checking if histology image is multi-frame
-            histo_id = self.item_info["meta"]["Histology Id"]
-            histo_img_info = self.girder_handler.get_tile_metadata(histo_id)
-            if not 'frames' in histo_img_info:
-                self.histology_url = self.girder_handler.gc.urlBase+f'item/{histo_id}/tiles/zxy/'+'{z}/{x}/{y}?token='+self.user_token
-            else:
-                self.histology_url = self.girder_handler.gc.urlBase+f'item/{histo_id}/tiles/zxy/'+'{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
+                self.histology_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style='+json.dumps(self.rgb_style_dict)
+                self.channel_names.append('Histology (H&E)')
+                self.channel_names = [i for i in self.channel_names if i not in ['red','green','blue']]
 
         if self.channel_names == []:
             # Fill in with dummy channel_names (test case with 16 or 17 channels)
@@ -576,7 +581,7 @@ class CODEXSlide(DSASlide):
             ]
         else:
             self.channel_tile_url = [
-                self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(i-1)+'}]}'
+                self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/'+'/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(i)+'}]}'
                 if not self.channel_names[i] == 'Histology (H&E)' else self.histology_url
                 for i in range(len(self.channel_names))
             ]
