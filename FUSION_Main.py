@@ -1796,6 +1796,7 @@ class FUSION:
         Updating data used for current viewport visualizations
         """
 
+        print(f'ctx.triggered for update_viewport: {ctx.triggered}')
         user_data_store = json.loads(user_data_store)
         
         frame_label_disable = [no_update]*len(ctx.outputs_list[2])
@@ -1842,7 +1843,6 @@ class FUSION:
 
                     elif self.wsi.spatial_omics_type=='CODEX':
                         # Returns dictionary of intersecting tissue frame intensities
-                        print(cell_view_type)
                         intersecting_ftus, intersecting_ftu_polys = self.wsi.update_viewport_data(bounds_box,cell_view_type,frame_list)
                     
                     self.current_ftus = intersecting_ftus
@@ -1926,6 +1926,9 @@ class FUSION:
                                                 if 'Channel Means' in ind_ftu:
                                                     for frame in frame_list:
                                                         cell_features[f'Channel {self.wsi.channel_names.index(frame)}'] = ind_ftu['Channel Means'][self.wsi.channel_names.index(frame)]
+                                                else:
+                                                    for frame in frame_list:
+                                                        cell_features[f'Channel {self.wsi.channel_names.index(frame)}'] = 0.0
                                                 
                                                 if 'Cell Type' in ind_ftu:
                                                     cell_features['Cell Type'] = ind_ftu['Cell Type']
@@ -1946,7 +1949,6 @@ class FUSION:
 
                                         if len(counts_data_list)>0:
                                             counts_data = pd.DataFrame.from_records(counts_data_list)
-
                                             viewport_store_data[f]['data'] = counts_data.to_dict('records')
                                         else:
                                             viewport_store_data[f]['data'] = []
@@ -2001,6 +2003,8 @@ class FUSION:
                     self.fusey_data = {}
                     for f_idx,f in enumerate(included_ftus):
                         counts_data = viewport_store_data[f]['data']
+                        if len(counts_data)==0:
+                            continue
 
                         if self.wsi.spatial_omics_type=='Visium':
                             
@@ -2030,7 +2034,6 @@ class FUSION:
                             elif self.wsi.spatial_omics_type=='CODEX':
                                 # For CODEX images, have the tissue tab be one histogram                                    
                                 # Getting one of the channels. Maybe just the first one
-                                #print(f'counts_data shape: {counts_data.shape}')
                                 cluster_disable = True
                                 eps = 0.3
                                 min_samples = 10
@@ -2044,15 +2047,22 @@ class FUSION:
                                         color = 'Channel'
                                     )
                                 elif cell_view_type=='features':
-
+                                    
                                     if len(frame_list)==1:
                                         f_pie = gen_violin_plot(
                                             feature_data = counts_data,
                                             label_col = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
                                             label_name = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
-                                            feature_col = f'{frame_list[0]}',
+                                            feature_col = f'Channel {self.wsi.channel_names.index(frame_list[0])}',
                                             custom_col = 'Hidden'
                                         )
+                                        f_pie.update_layout({
+                                            'yaxis': {
+                                                'title': {
+                                                    'text': frame_list[0]
+                                                }
+                                            }
+                                        })
 
                                     elif len(frame_list)==2:
                                         f_names = [i for i in counts_data.columns.tolist() if 'Channel' in i]
@@ -2114,9 +2124,9 @@ class FUSION:
                                 elif cell_view_type=='cell':
 
                                     cluster_disable = True
-                                    counts_data = counts_data['Cluster'].value_counts().to_dict()
+                                    counts_value_dict = counts_data['Cluster'].value_counts().to_dict()
                                     pie_chart_data = []
-                                    for key,val in counts_data.items():
+                                    for key,val in counts_value_dict.items():
                                         pie_chart_data.append(
                                             {'Cluster': key, 'Count': val}
                                         )
