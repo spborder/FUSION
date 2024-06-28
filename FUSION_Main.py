@@ -716,7 +716,8 @@ class FUSION:
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children'),
-             Output('ftu-structure-hierarchy','children')],
+             Output('ftu-structure-hierarchy','children'),
+             Output('cell-annotation-tab','disabled')],
             Input('slide-load-interval','disabled'),
             prevent_initial_call=True,
             suppress_callback_exceptions=True
@@ -1796,7 +1797,6 @@ class FUSION:
         Updating data used for current viewport visualizations
         """
 
-        print(f'ctx.triggered for update_viewport: {ctx.triggered}')
         user_data_store = json.loads(user_data_store)
         
         frame_label_disable = [no_update]*len(ctx.outputs_list[2])
@@ -1832,7 +1832,6 @@ class FUSION:
                         frame_label = None
                     
                     frame_list = get_pattern_matching_value(frame_list)
-                    print(f'frame_list: {frame_list}')
                     if frame_list is None:
                         frame_list = [self.wsi.channel_names[0]]
 
@@ -3705,6 +3704,10 @@ class FUSION:
 
             new_children = []
             if self.wsi.spatial_omics_type=='CODEX':
+
+                # Enabling cell annotation tab
+                cell_annotation_tab_disable = False
+
                 # Adding the different frames to the layers control object
                 new_children+=[
                     dl.BaseLayer(
@@ -3724,6 +3727,7 @@ class FUSION:
 
             else:
                 
+                cell_annotation_tab_disable = True
                 slide_tile_layer = [
                     dl.TileLayer(
                         id = 'slide-tile',
@@ -3838,7 +3842,7 @@ class FUSION:
                 for idx,struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-            return slide_tile_layer, new_children, remove_old_edits, map_center, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs
+            return slide_tile_layer, new_children, remove_old_edits, map_center, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs, cell_annotation_tab_disable
         else:
             raise exceptions.PreventUpdate
 

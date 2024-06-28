@@ -871,7 +871,8 @@ class LayoutHandler:
             dbc.Tab(cell_card,label = "Cell Graphics",tab_id='cell-graphics-tab'),
             dbc.Tab(cluster_card,label = 'Morphological Clustering',tab_id='clustering-tab'),
             dbc.Tab(extract_card,label = 'Download Data',tab_id='download-tab'),
-            dbc.Tab(annotation_session_tab, label = 'Annotation Station', tab_id = 'annotation-tab')
+            dbc.Tab(annotation_session_tab, label = 'Annotation Station', tab_id = 'annotation-tab'),
+            dbc.Tab(children = [], label = "Cell Annotation", tab_id = 'cell-annotation-tab',disabled = True,id = 'cell-annotation-tab')
             #dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True,tab_id='analyses-tab'),
         ]
         
