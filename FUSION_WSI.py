@@ -12,6 +12,7 @@ import random
 import json
 import geojson
 import shutil
+import requests
 
 from tqdm import tqdm
 from FUSION_Utils import extract_overlay_value
@@ -177,8 +178,30 @@ class DSASlide:
                 f.close()
 
             # Step 1: Get annotation in geojson form
-            annotation_geojson = self.girder_handler.gc.get(f'/annotation/{self.annotation_ids[idx]["_id"]}/geojson?token={self.user_token}')
-            
+            try:
+                annotation_geojson = self.girder_handler.gc.get(f'/annotation/{self.annotation_ids[idx]["_id"]}/geojson?token={self.user_token}')
+            except requests.exceptions.ChunkedEncodingError:
+                # Some error converting to geojson
+                annotation_json = self.girder_handler.gc.get(f'/annotation/{self.annotation_ids[idx]["_id"]}?token={self.user_token}')
+
+                # Converting to geojson
+                annotation_geojson = {
+                    'type': 'FeatureCollection',
+                    'features': [
+                        {
+                            'type': 'Feature',
+                            'geometry': {
+                                'type': 'Polygon',
+                                'coordinates': [el['points']]
+                            },
+                            'properties': {
+                                'user': el['user']
+                            }
+                        }
+                        for el in annotation_json['annotation']['elements']
+                    ]
+                }
+
             # Step 2: Scale coordinates of geojson object
             scaled_annotation = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale, c[1]*self.y_scale, c[2]), g), annotation_geojson)
             
