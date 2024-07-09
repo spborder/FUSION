@@ -146,9 +146,6 @@ class FUSION:
         # Load clustering data
         self.filter_labels = []
         self.reports_generated = {}
-        
-        # Initializing fusey_data as empty
-        self.fusey_data = None
 
         # Number of main cell types to include in pie-charts (currently set to all cell types)
         self.plot_cell_types_n = len(list(self.cell_names_key.keys()))
@@ -654,7 +651,6 @@ class FUSION:
         # Updating Cell Composition pie charts
         self.app.callback(
             [Output('roi-pie-holder','children'),
-             Output('annotation-session-div','children'),
              Output({'type':'frame-label-drop','index':ALL},'disabled'),
              Output({'type':'viewport-store-data','index':ALL},'data'),
              Output('user-store','data')
@@ -662,14 +658,11 @@ class FUSION:
             [Input('slide-map','bounds'),
              Input({'type':'roi-view-data','index':ALL},'value'),
              Input({'type':'frame-data-butt','index':ALL},'n_clicks'),
-             Input({'type':'cell-label-cluster','index':ALL},'n_clicks')
              ],
             [State('tools-tabs','active_tab'),
              State('viewport-data-update','checked'),
              State({'type':'frame-histogram-drop','index':ALL},'value'),
              State({'type':'frame-label-drop','index':ALL},'value'),
-             State({'type':'cell-label-eps','index':ALL},'value'),
-             State({'type':'cell-label-min-samples','index':ALL},'value'),
              State({'type':'viewport-store-data','index':ALL},'data'),
              State('user-store','data')
              ],
@@ -1792,18 +1785,17 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options, current_session
 
-    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,cluster_click,current_tab,update_data,frame_list,frame_label, cluster_eps, cluster_min_samples,current_data, user_data_store):
+    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,current_tab,update_data,frame_list,frame_label,current_data, user_data_store):
         """
         Updating data used for current viewport visualizations
         """
-
         user_data_store = json.loads(user_data_store)
         
         frame_label_disable = [no_update]*len(ctx.outputs_list[2])
-        viewport_store_data = ['']
+        viewport_store_data = json.loads(get_pattern_matching_value(current_data))
         cell_view_type = get_pattern_matching_value(cell_view_type)
-        if cell_view_type is None:
-            cell_view_type = 'channel_hist'
+
+        print(f'update_viewport_data ctx.triggered: {ctx.triggered}')
         
         if update_data or ctx.triggered_id=='roi-view-data':
             if not self.wsi is None:
@@ -1814,11 +1806,14 @@ class FUSION:
                         bounds_box = shapely.geometry.box(*bounds)
 
                     # Storing current slide boundaries
-                    self.current_slide_bounds = bounds_box
+                    #self.current_slide_bounds = bounds_box
+                    viewport_store_data['current_slide_bounds'] = bounds_box
                 else:
-                    self.current_slide_bounds = self.wsi.map_bounds
+                    #self.current_slide_bounds = self.wsi.map_bounds
+                    viewport_store_data['current_slide_bounds'] = self.wsi.map_bounds
             else:
-                self.current_slide_bounds = None
+                #self.current_slide_bounds = None
+                viewport_store_data['current_slide_bounds'] = None
 
                 raise exceptions.PreventUpdate
         
@@ -1826,6 +1821,43 @@ class FUSION:
         if current_tab=='cell-compositions-tab':
             if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
+
+                view_type_dict = {
+                    'name': cell_view_type,
+                    'frame_list': get_pattern_matching_value(frame_list),
+                    'frame_label': get_pattern_matching_value(frame_label)
+                }
+
+                viewport_store_data['view_type_dict'] = view_type_dict
+
+                #TODO: Generalized get_viewport_data method for self.wsi which should return a list of all the stuff needed for that tab
+                viewport_data_components, viewport_data = self.wsi.update_viewport_data(
+                    bounds_box = viewport_store_data['current_slide_bounds'],
+                    view_type = view_type_dict
+                )
+
+                viewport_store_data['data'] = viewport_data
+
+                viewport_data_return = json.dumps(viewport_store_data)
+                user_data_return = json.dumps(user_data_store)
+
+                if len(frame_list)<2:
+                    frame_label_disable = [True]
+                else:
+                    frame_label_disable = [False]
+
+
+                return viewport_data_components, frame_label_disable, viewport_data_return, user_data_return
+
+
+
+
+
+
+
+
+
+                """
                 if self.wsi.spatial_omics_type=='CODEX':
                     frame_label = get_pattern_matching_value(frame_label)
                     if len(frame_list)<2:
@@ -1991,15 +2023,10 @@ class FUSION:
                                     viewport_store_data[f]['count'] = len(counts_data_list)
                                     viewport_store_data[f]['view_type'] = cell_view_type
 
-                else:
-                    current_data = get_pattern_matching_value(current_data)
-                    viewport_store_data = json.loads(current_data)
-
                 included_ftus = list(viewport_store_data.keys())
                 if len(included_ftus)>0:
 
                     tab_list = []
-                    self.fusey_data = {}
                     for f_idx,f in enumerate(included_ftus):
                         counts_data = viewport_store_data[f]['data']
                         if len(counts_data)==0:
@@ -2146,12 +2173,6 @@ class FUSION:
                                 top_cell = counts_data['index'].tolist()[0]
 
                                 pct_states = pd.DataFrame.from_records(viewport_store_data[f]['states'][top_cell])
-                                # Fusey data
-                                self.fusey_data[f] = {
-                                    'normalized_counts':counts_data,
-                                    'pct_states':pct_states,
-                                    'top_cell':top_cell
-                                }
                                 state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
 
                                 f_tab = dbc.Tab(
@@ -2178,8 +2199,6 @@ class FUSION:
                                 # Returning blank for now
                                 state_bar = []
                                 second_plot_label = 'This is CODEX'
-
-                                self.fusey_data['Tissue'] = {}
 
                                 f_tab = dbc.Tab([
                                     dbc.Row([
@@ -2237,49 +2256,6 @@ class FUSION:
                                             )
                                         ],md=12)
                                     ]),
-                                    dbc.Row([
-                                        dbc.Col(
-                                            dbc.Label('Clustering parameters',html_for={'type':'cell-label-cluster','index':len(tab_list)}),
-                                            md = 3
-                                        ),
-                                        dbc.Col(
-                                            dcc.Input(
-                                                id = {'type':'cell-label-eps','index':len(tab_list)},
-                                                placeholder = 'Epsilon (0.01-1.0)',
-                                                type = 'number',
-                                                value = eps,
-                                                min = 0.0,
-                                                step = 0.001,
-                                                max = 10000000
-                                            ),
-                                            md = 2,
-                                            style = {'marginLeft':'1px'}
-                                        ),
-                                        dbc.Col(
-                                            dcc.Input(
-                                                id = {'type':'cell-label-min-samples','index':len(tab_list)},
-                                                placeholder = 'Minimum number per cluster',
-                                                type = 'number',
-                                                value = min_samples,
-                                                step = 1,
-                                                min = 1,
-                                                max = counts_data.shape[0]
-                                            ),
-                                            md = 2,
-                                            style = {'marginLeft':'1px'}
-                                        ),
-                                        dbc.Col(
-                                            dbc.Button(
-                                                'Cluster it!',
-                                                id = {'type':'cell-label-cluster','index':len(tab_list)},
-                                                className = 'd-grid col-12 mx-auto',
-                                                n_clicks = 0,
-                                                disabled = cluster_disable
-                                            ),
-                                            style = {'marginLeft':'1px'}
-                                        )
-                                    ],
-                                    style = {'marginTop':'10px'})
                                     ],
                                     label = f+f' ({viewport_store_data[f]["count"]})',tab_id = f'tab_{len(tab_list)}'
                                 )
@@ -2315,26 +2291,14 @@ class FUSION:
                             html.Hr(),
                             dbc.Row(
                                 dbc.Tabs(tab_list,active_tab=f'tab_0')
-                            ),
-                            html.Hr(),
-                            dbc.Row([
-                                html.Div(
-                                    id = {'type':'extracted-cell-labeling','index':0},
-                                    children = ['Select points to start labeling!']
-                                )
-                            ]),
-                            dbc.Row([
-                                html.Div(
-                                    id = {'type':'cell-labeling-criteria','index':0},
-                                    children = []
-                                )
-                            ])
+                            )
                         ])
 
                         return return_div, no_update, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
 
                 else:
                     return html.P('No FTUs in current view'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                """
             else:
                 return html.P('Select a slide to get started!'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
     

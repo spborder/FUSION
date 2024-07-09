@@ -14,8 +14,19 @@ import geojson
 import shutil
 import requests
 
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+
+from dash import dcc
+import dash_bootstrap_components as dbc
+from dash_extensions.enrich import html
+
 from tqdm import tqdm
-from FUSION_Utils import extract_overlay_value
+from FUSION_Utils import (
+    extract_overlay_value,
+    gen_violin_plot,
+    gen_umap)
 
 class DSASlide:
 
@@ -51,6 +62,11 @@ class DSASlide:
         self.ftu_hierarchy = {}
 
         self.get_slide_map_data()
+
+        self.default_view_type = {
+            'name': 'features',
+            'features': [self.properties_list[0]]
+        }
     
     def __str__(self):
         
@@ -477,6 +493,25 @@ class DSASlide:
             if any(['Main_Cell_Types' in i for i in self.properties_list]):
                 self.properties_list.append('Max Cell Type')
 
+    def update_viewport_data(self,bounds_box:list,view_type:dict):
+        """
+        Grabbing info for intersecting ftus        
+        """
+        
+        if view_type['name'] is None:
+            view_type = self.default_view_type
+
+        viewport_data_components = []
+        viewport_data = None
+        
+        pass
+        
+        return viewport_data_components, viewport_data
+
+
+
+
+
 
 class VisiumSlide(DSASlide):
     # Additional properties for Visium slides are:
@@ -495,6 +530,11 @@ class VisiumSlide(DSASlide):
         self.change_level_plugin = {
             'plugin_name': 'samborder2256_change_level_latest/ChangeLevel',
             'definitions_file': '64fa0f782d82d04be3e5daa3'
+        }
+
+        self.default_view_type = {
+            'name': 'cell_composition',
+            'type': 'Main_Cell_Types'
         }
 
     def run_change_level(self,main_cell_types):
@@ -527,16 +567,21 @@ class VisiumSlide(DSASlide):
                                     }
                                 )['_id']
 
-
-
         return job_id
 
-    def update_viewport_data(self,bounds_box):
+    def update_viewport_data(self,bounds_box:list, view_type:dict):
         """
         Find intersecting structures, including marked and manual.
 
         Grabbing Main_Cell_Types, Cell_States, and (TODO) Gene_Counts
         """
+
+        if view_type['name'] is None:
+            view_type = self.default_view_type
+
+        viewport_data_components = []
+        viewport_data = None
+
         intersecting_ftus = {}
         intersecting_ftu_polys = {}
 
@@ -549,7 +594,204 @@ class VisiumSlide(DSASlide):
         for marked_idx, marked_ftu in enumerate(self.marked_ftus):
             intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
 
-        return intersecting_ftus, intersecting_ftu_polys
+
+        if len(list(intersecting_ftus.keys()))>0:
+            
+            viewport_data = {}
+            tab_list = []
+
+            for f_idx,f in enumerate(list(intersecting_ftus.keys())):
+                
+                if view_type['name'] == 'cell_composition':
+                    if view_type['type']=='Main_Cell_Types':
+                        counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
+                        
+                        if len(counts_dict_list)>0:
+                            counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
+                            counts_data.columns = [f]
+
+                            counts_data = (counts_data[f]/counts_data[f].sum()).to_frame()
+                            counts_data.columns = [f]
+                            counts_data = counts_data.sort_values(by = f, ascending = False)
+                            counts_data = counts_data.reset_index()
+
+                            viewport_data[f]['data'] = counts_data.to_dict('records')
+                            viewport_data[f]['count'] = len(counts_dict_list)
+
+                            # Getting cell state info:
+                            viewport_data[f]['states'] = {}
+                            for m in counts_data['index'].tolist():
+                                cell_states_data = [i['Cell_States'][m] for i in intersecting_ftus[f] if 'Cell_States' in i]
+                                cell_states_data = pd.DataFrame.from_records(cell_states_data).sum(axis=0).to_frame()
+                                cell_states_data = cell_states_data.reset_index()
+                                cell_states_data.columns = ['Cell State','Proportion']
+                                cell_states_data['Proportion'] = cell_states_data['Proportion']/cell_states_data['Proportion'].sum()
+
+                                viewport_data[f]['states'][m] = cell_states_data.to_dict('records')
+                        else:
+                            continue
+                    elif view_type['type']=='Cell_Subtypes':
+                        counts_dict_list = [i['Cell_Subtypes'] for i in intersecting_ftus[f] if 'Cell_Subtypes' in i]
+
+                        if len(counts_dict_list)>0:
+                            counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
+                            counts_data.columns = [f]
+
+                            counts_data = (counts_data[f]/counts_data[f].sum()).to_frame()
+                            counts_data.columns = [f]
+                            counts_data = counts_data.sort_values(by = f, ascending = False)
+                            counts_data = counts_data.reset_index()
+
+                            viewport_data[f]['data'] = counts_data.to_dict('records')
+                            viewport_data[f]['count'] = len(counts_dict_list)
+                        else:
+                            continue
+
+                    elif view_type['type']=='Gene Counts':
+                        counts_dict_list = [i['Gene Counts'][view_type['gene']] for i in intersecting_ftus[f] if 'Gene Counts' in i]
+
+                        if len(counts_dict_list)>0:
+                            viewport_data[f]['data'] = counts_dict_list
+                            viewport_data[f]['count'] = len(counts_dict_list)
+                        else:
+                            continue
+                    
+                elif view_type['name'] == 'morphometrics':
+
+                    counts_dict_list = [i['Morphometrics'][view_type['type']] for i in intersecting_ftus[f] if 'Morphometrics' in i]
+                    if len(counts_dict_list)>0:
+                        viewport_data[f]['data'] = counts_dict_list
+                        viewport_data[f]['count'] = len(counts_dict_list)
+                    else:
+                        continue
+                
+
+                if view_type['name'] == 'cell_composition':
+                    chart_label = f'{f} Cell Composition'
+
+                    if view_type['type'] in ['Main_Cell_Types','Cell_Subtypes']:
+                        f_tab_plot = px.pie(counts_data,values=f,names='index')
+                        f_tab_plot.update_traces(textposition='inside')
+                        f_tab_plot.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
+
+                        if view_type['type']=='Main_Cell_Types':
+                            top_cell = counts_data['index'].tolist()[0]
+
+                            pct_states = pd.DataFrame.from_records(viewport_data[f]['states'][top_cell])
+                            state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion',title = f'Cell State Proportions for:<br><sup>{top_cell} in:</sup><br><sup>{f}</sup>')
+                            second_chart_label = f'{f} Cell State Proportions'
+
+                            f_tab = dbc.Tab(
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Label(chart_label),
+                                        dcc.Graph(
+                                            id = {'type': 'ftu-cell-pie','index':f_idx},
+                                            figure = go.Figure(f_tab_plot)
+                                        )
+                                    ],md=6),
+                                    dbc.Col([
+                                        dbc.Label(second_chart_label),
+                                        dcc.Graph(
+                                            id = {'type': 'ftu-state-bar','index': f_idx},
+                                            figure = go.Figure(state_bar)
+                                        )
+                                    ],md=6)
+                                ]),label = f+f' ({viewport_data[f]["count"]})',tab_id = f'tab_{f_idx}'
+                            )
+
+                            tab_list.append(f_tab)
+                        elif view_type['type'] == 'Cell_Subtypes':
+
+                            f_tab = dbc.Tab(
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Label(chart_label),
+                                        dcc.Graph(
+                                            id = {'type': 'ftu-cell-pie','index':f_idx},
+                                            figure = go.Figure(f_tab_plot)
+                                        )
+                                    ],md=12)
+                                ]),label = f+f' ({viewport_data[f]["count"]})',tab_id = f'tab_{f_idx}'
+                            )
+
+                            tab_list.append(f_tab)
+
+                    elif view_type['type'] == 'Gene Counts':
+                        f_tab_plot = gen_violin_plot(
+                            feature_data = pd.DataFrame.from_records(counts_dict_list),
+                            label_col = f,
+                            label_name = f'{f} Gene Counts',
+                            feature_col = view_type['gene'],
+                            custom_col = None
+                            )
+
+                        f_tab = dbc.Tab(
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Label(chart_label),
+                                    dcc.Graph(
+                                        id = {'type':'ftu-cell-pie','index':f_idx},
+                                        figure = go.Figure(f_tab_plot)
+                                    )
+                                ])
+                            ]),label = f+f' ({viewport_data[f]["count"]})', tab_id = f'tab_{f_idx}'
+                        )
+
+                elif view_type['name'] == 'morphometrics':
+                    
+                    chart_label = f'{f} Morphometrics'
+
+                    f_tab_plot = gen_violin_plot(
+                        feature_data = pd.DataFrame.from_records(counts_dict_list),
+                        label_col = f,
+                        label_name = f'{f} {view_type["type"]}',
+                        feature_col = view_type['type'],
+                        custom_col = None
+                    )
+
+                    f_tab = dbc.Tab(
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Label(chart_label),
+                                dcc.Graph(
+                                    id = {'type':'ftu-cell-pie','index':f_idx},
+                                    figure = go.Figure(f_tab_plot)
+                                )
+                            ])
+                        ]),label = f+f' ({viewport_data[f]["count"]})', tab_id = f'tab_{f_idx}'
+                    )
+
+        viewport_data_components = html.Div([
+            dbc.Row([
+                dbc.Col(
+                    children = [
+                        dbc.Label('Select View Type: ')
+                    ],
+                    md = 4
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        options = [
+                            {'label': 'Main Cell Types','value': 'Main_Cell_Types'},
+                            {'label': 'Cell Subtypes','value': 'Cell_Subtypes'},
+                            {'label': 'Gene Counts','value': 'Gene Counts'},
+                            {'label': 'Morphometrics','value': 'Morphometrics','disabled': True}
+                        ],
+                        value = view_type['name'],
+                        multi = False,
+                        id = {'type': 'roi-view-data','index':0}
+                    )
+                )
+            ]),
+            html.Hr(),
+            dbc.Row(
+                dbc.Tabs(tab_list,active_tab = f'tab_0')
+            )
+        ])
+
+
+        return viewport_data_components, viewport_data
 
 class CODEXSlide(DSASlide):
     # Additional properties needed for CODEX slides are:
@@ -608,6 +850,11 @@ class CODEXSlide(DSASlide):
                 if not self.channel_names[i] == 'Histology (H&E)' else self.histology_url
                 for i in range(len(self.channel_names))
             ]
+
+        self.default_view_type = {
+            'name': 'channel_hist',
+            'frame_list': self.wsi.channel_names[0]
+        }
 
     def intersecting_frame_intensity(self,box_poly,frame_list):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
@@ -672,14 +919,20 @@ class CODEXSlide(DSASlide):
 
         return styled_url
 
-    def update_viewport_data(self,bounds_box,view_type,frame_list,):
+    def update_viewport_data(self,bounds_box: list,view_type:dict):
         """
         Finding viewport data according to view selection
         """
 
+        if view_type['name'] is None:
+            view_type = self.default_view_type
+
+        viewport_data_components = []
+        viewport_data = None
+
         intersecting_ftus = {}
         intersecting_ftu_polys = {}
-        if view_type in ['cell','features']:
+        if view_type['name'] in ['cell','features']:
             
             for ftu in self.ftu_names:
                 intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
@@ -690,12 +943,265 @@ class CODEXSlide(DSASlide):
             for marked_idx, marked_ftu in enumerate(self.marked_ftus):
                 intersecting_ftus[f'Marked FTUs: {marked_idx+1}'], intersecting_ftu_polys[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']], [shape(i['geometry']) for i in marked_ftu['geojson']['features']]
 
-        elif view_type=='channel_hist':
+        elif view_type['name']=='channel_hist':
 
-            intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,frame_list)
+            intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,view_type['frame_list'])
+
+        
+        if len(list(intersecting_ftus.keys()))>0:
+            viewport_data = {}
+            tab_list = []
+
+            for f_idx,f in enumerate(list(intersecting_ftus.keys())):
+                
+                if view_type['name']=='channel_hist':
+                    viewport_data[f] = {}
+                    counts_data = pd.DataFrame()
+
+                    for frame_name in intersecting_ftus[f]:
+                        frame_data = intersecting_ftus[f][frame_name]
+
+                        frame_data_df = pd.DataFrame({'Frequency':[0]+frame_data['hist'],'Intensity':frame_data['bin_edges'],'Channel':[frame_name]*len(frame_data['bin_edges'])})
+                        
+                        if counts_data.empty:
+                            counts_data = frame_data_df
+                        else:
+                            counts_data = pd.concat([counts_data,frame_data_df],axis=0,ignore_index=True)
+
+                    viewport_data[f]['data'] = counts_data.to_dict('records')
+                    viewport_data[f]['count'] = 1
+
+                    chart_label = 'Channel Intensity Histogram'
+                    f_tab_plot = px.bar(
+                        data_frame = counts_data,
+                        x = 'Intensity',
+                        y = 'Frequency',
+                        color = 'Channel'
+                    )
+                    
+                elif view_type['name']=='features':
+                    viewport_data[f] = {}
+                    
+                    counts_data_list = []
+                    counts_data = pd.DataFrame()
+                    if type(intersecting_ftus[f])==list:
+                        for ftu_idx,ind_ftu in enumerate(intersecting_ftus[f]):
+                            cell_features = {}
+
+                            if 'Channel Means' in ind_ftu:
+                                for frame in view_type['frame_list']:
+                                    cell_features[f'Channel {view_type["all_channels"].index(frame)}'] = ind_ftu['Channel Means'][view_type['all_channels'].index(frame)]
+                            else:
+                                for frame in view_type['frame_list']:
+                                    cell_features[f'Channel {view_type["all_channels"].index(frame)}'] = 0.0
 
 
-        return intersecting_ftus, intersecting_ftu_polys
+                            if not view_type['frame_label'] is None and view_type['frame_label'] in view_type['all_channels']:
+                                cell_features[view_type['frame_label']] = ind_ftu['Channel Means'][view_type["all_channels"].index(frame)]
+                            
+                            elif view_type['frame_label'] is None:
+                                cell_features['label'] = 'Cell Nucleus'
+
+                            cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
+
+                            counts_data_list.append(cell_features)
+
+                    if len(counts_data_list)>0:
+                        counts_data = pd.DataFrame.from_records(counts_data_list)
+                        viewport_data[f]['data'] = counts_data.to_dict('records')
+                    else:
+                        viewport_data[f]['data'] = []
+                    
+                    viewport_data[f]['count'] = len(counts_data_list)
+
+                    if len(view_type['frame_list'])==1:
+                        f_tab_plot = gen_violin_plot(
+                            feature_data = counts_data,
+                            label_col = view_type['frame_label'] if not view_type['frame_label'] is None else 'label',
+                            label_name = view_type['frame_label'] if not view_type['frame_label'] is None else 'Unlabeled',
+                            feature_col = f'Channel {view_type["all_channels"].index(view_type["frame_list"])}',
+                            custom_col = 'Hidden'
+                        )
+                        f_tab_plot.update_layout({
+                            'yaxis': {
+                                'title': {
+                                    'text': view_type['frame_list'][0]
+                                }
+                            }
+                        })
+                    elif len(view_type['frame_list'])==2:
+                        f_names = [i for i in counts_data.columnst.tolist() if 'Channel' in i]
+                        f_tab_plot = px.scatter(
+                            data_frame = counts_data,
+                            x = f_names[0],
+                            y = f_names[1],
+                            color = view_type['frame_label'] if not view_type['frame_label'] is None else 'label',
+                            custom_data = 'Hidden'
+                        )
+                        f_tab_plot.update_layout({
+                            'xaxis': {
+                                'title': {
+                                    'text': f'{view_type["frame_list"][0]}'
+                                }
+                            },
+                            'yaxis': {
+                                'title': {
+                                    'text': f'{view_type["frame_list"][1]}'
+                                }
+                            }
+                        })
+                    elif len(view_type['frame_list'])>2:
+                        # Generating UMAP dimensional reduction 
+                        f_umap_data = gen_umap(
+                            feature_data = counts_data,
+                            feature_cols = [i for i in counts_data.columns.tolist() if 'Channel' in i],
+                            label_and_custom_cols = [i for i in counts_data.columns.tolist() if not 'Channel' in i]
+                        )
+
+                        viewport_data[f]['UMAP'] = f_umap_data.to_dict('records')
+
+                        f_tab_plot = px.scatter(
+                            data_Frame = f_umap_data,
+                            x = 'UMAP1',
+                            y = 'UMAP2',
+                            color = view_type['frame_label'] if not view_type['frame_label'] is None else 'label',
+                            custom_data = 'Hidden'
+                        )
+
+                elif view_type['name'] == 'cell':
+
+                    viewport_data[f] = {}
+                    counts_data_list = []
+                    counts_data = pd.DataFrame()
+                    if type(intersecting_ftus[f])==list:
+                        for ind_ftu in intersecting_ftus[f]:
+
+                            if 'Cell' in ind_ftu:
+                                counts_data_list.append({
+                                    'Cell': ind_ftu["Cell"]
+                                })
+                            else:
+                                counts_data_list.append({
+                                    'Cell': 'Unlabeled'
+                                })
+                    
+                    if len(counts_data_list)>0:
+                        counts_data = pd.DataFrame.from_records(counts_data_list)
+
+                        viewport_data[f]['data'] = counts_data.to_dict('records')
+                    
+                    else:
+                        viewport_data[f]['data'] = []
+                    
+                    viewport_data[f]['count'] = len(counts_data_list)
+
+                    counts_value_dict = counts_data['Cluster'].value_counts().to_dict()
+                    pie_chart_data = []
+                    for key,val in counts_value_dict.items():
+                        pie_chart_data.append(
+                            {'Cell': key, 'Count': val}
+                        )
+                    pie_chart_df = pd.DataFrame.from_records(pie_chart_data)
+                    f_tab_plot = px.pie(
+                        data_frame = pie_chart_df,
+                        values = 'Count',
+                        names = 'Cell'
+                    )
+
+                    f_tab_plot.update_traces(textposition='inside')
+                    f_tab_plot.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
+
+
+                f_tab = dbc.Tab([
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Label('Select a Channel Name:',html_for={'type':'frame-histogram-drop','index':0}),
+                            md = 3, align = 'center'
+                        ),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = [i for i in view_type['all_channels']],
+                                value = view_type['frame_list'],
+                                multi = True,
+                                id = {'type':'frame-histogram-drop','index':f_idx}
+                            ),
+                            md = 6, align = 'center'
+                        ),
+                        dbc.Col(
+                            dbc.Button(
+                                'Plot it!',
+                                className = 'd-grid col-12 mx-auto',
+                                n_clicks = 0,
+                                style = {'width': '100%'},
+                                id = {'type':'frame-data-butt','index': f_idx}
+                            ),
+                            md = 3
+                        )
+                    ],style = {'display': 'none'} if not view_type['name'] in ['channel_hist','features'] else {}),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Label('Select a label: ',html_for = {'type': 'frame-label-drop','index': f_idx}),
+                            md = 3
+                        ),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = view_type['all_channels'],
+                                value = view_type['frame_label'] if len(view_type['frame_list'])>2 else None,
+                                id = {'type': 'frame-label-drop','index': f_idx},
+                                disabled = True if len(view_type['frame_list'])<2 else False
+                            )
+                        )
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label(chart_label),
+                            dcc.Graph(
+                                id = {'type': 'ftu-cell-pie','index':f_idx},
+                                figure = go.Figure(f_tab_plot)
+                            )
+                        ],md = 12)
+                    ])
+                ], label = f+f' ({viewport_data[f]["count"]})',tab_id = f'tab_{f_idx}')
+
+                tab_list.append(f_tab)
+
+
+        viewport_data_components = html.Div([
+            dbc.Row([
+                dbc.Col(
+                    children = [
+                        dbc.Label('Select View Type: '),
+                    ],
+                    md = 4
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        options = [
+                            {'label':'Channel Intensity Histograms','value':'channel_hist'},
+                            {'label':'Nucleus Features','value':'features'},
+                            {'label':'Cell Type Composition','value':'cell'}
+                        ],
+                        value = view_type['name'],
+                        multi = False,
+                        id = {'type':'roi-view-data','index':0}
+                    )
+                )
+            ]),
+            html.Hr(),
+            dbc.Row(
+                dbc.Tabs(tab_list,active_tab=f'tab_0')
+            )
+        ])
+
+
+
+
+
+
+
+
+
+        return viewport_data_components, viewport_data
 
 
 class XeniumSlide(DSASlide):
@@ -708,11 +1214,24 @@ class XeniumSlide(DSASlide):
                  marked_ftus:list):
         super().__init__(item_id,user_details,girder_handler,ftu_colors,manual_rois,marked_ftus)
 
+        self.default_view_type = {
+            'name': 'cell_composition',
+        }
+
     def update_viewport_data(self,bounds_box,view_type):
         """
         Updating data passed to charts based on change in viewport position
         """
+        
+        if view_type['name'] is None:
+            view_type = self.default_view_type
+
+        viewport_data_components = []
+        viewport_data = None
+
         pass
+
+        return viewport_data_components, viewport_data
 
 
 

@@ -70,7 +70,7 @@ def gen_violin_plot(feature_data, label_col, label_name, feature_col, custom_col
     figure = go.Figure(data = go.Violin(
                         x = feature_data[label_col],
                         y = feature_data[feature_col],
-                        customdata = feature_data[custom_col],
+                        customdata = feature_data[custom_col] if not custom_col is None else None,
                         points = 'all',
                         pointpos=0
                     ))
