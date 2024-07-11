@@ -2379,7 +2379,6 @@ class FUSION:
         self.cell_vis_val = vis_val/100
         n_layers = len(callback_context.outputs_list[0])
 
-        print(self.overlay_prop)
         geojson_hideout = [
             {
                 'color_key':self.hex_color_key,

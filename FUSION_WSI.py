@@ -124,7 +124,6 @@ class DSASlide:
         # Number of zoom levels for an image
         self.zoom_levels = tile_metadata['levels']
 
-        print(f'zoom_levels: {self.zoom_levels}')
         # smallest level dimensions used to generate initial tiles
         self.base_dims = [
             tile_metadata['sizeX']/(2**(self.zoom_levels-1)),
@@ -140,10 +139,6 @@ class DSASlide:
             tile_metadata['sizeX'],
             tile_metadata['sizeY']
         ]
-
-        print(f'base_dims: {self.base_dims}')
-        print(f'tile_dims: {self.tile_dims}')
-        print(f'self.image_dims: {self.image_dims}')
 
         # Step 4: Defining bounds of map (size of the first tile)
         self.map_bounds = [[0,self.image_dims[1]],[0,self.image_dims[0]]]
@@ -161,21 +156,9 @@ class DSASlide:
             self.tile_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
 
         # Step 7: Converting Histomics/large-image annotations to GeoJSON
-        #base_x_scale = self.base_dims[0]/self.tile_dims[0]
-        #base_y_scale = self.base_dims[1]/self.tile_dims[1]
-
-        #self.x_scale = (self.tile_dims[0])/(self.image_dims[0]*(self.tile_dims[0]/240))
-        #self.y_scale = (self.tile_dims[1])/(self.image_dims[1]*(self.tile_dims[1]/240))
         self.x_scale = self.base_dims[0]/self.image_dims[0]
         self.y_scale = self.base_dims[1]/self.image_dims[1]
-        #self.x_scale = 1 if self.base_dims[0]<=240 else self.tile_dims[0]/240
-        #self.y_scale = 1 if self.base_dims[1]<=240 else self.tile_dims[1]/240
         self.y_scale*=-1
-
-        #self.x_scale *= base_x_scale
-        #self.y_scale *= base_y_scale
-
-        print(f'x_scale: {self.x_scale}, y_scale: {self.y_scale}')
 
         self.map_bounds[0][1]*=self.x_scale
         self.map_bounds[1][1]*=self.y_scale
