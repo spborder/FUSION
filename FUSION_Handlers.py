@@ -151,7 +151,7 @@ class LayoutHandler:
             tile_size = 240
             slide_properties = []
             combined_colors_dict = {}
-            zoom_levels = 8
+            zoom_levels = 3
             map_bounds = [[0,240],[0,240]]
         
         center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
@@ -161,10 +161,10 @@ class LayoutHandler:
                 id = 'slide-tile-holder',
                 children = [
                     dl.TileLayer(
-                        id = 'slide-tile',
+                        id = f'slide-tile{np.random.randint(0,100)}',
                         url = map_url,
                         tileSize = tile_size,
-                        maxNativeZoom=zoom_levels-1
+                        maxNativeZoom=zoom_levels-2
                     )
                 ]
             ),
@@ -196,7 +196,7 @@ class LayoutHandler:
         ]
 
         map_layer = dl.Map(
-            center = center_point, zoom = 3, minZoom = 0, crs='Simple',bounds = map_bounds,
+            center = center_point, zoom = 0, minZoom = 0, crs='Simple',
             style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             preferCanvas=True,

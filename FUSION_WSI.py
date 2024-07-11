@@ -7,7 +7,7 @@ External file to hold the WholeSlide class used in FUSION
 import os
 import numpy as np
 
-from shapely.geometry import shape, Polygon
+from shapely.geometry import shape, Polygon, box
 import random
 import json
 import geojson
@@ -55,7 +55,14 @@ class DSASlide:
         self.n_frames = 1
 
         self.visualization_properties = [
-            'Main_Cell_Types','Gene Counts','Morphometrics','Cluster','Cell_Subtypes'
+            'Main_Cell_Types',
+            'Gene Counts',
+            'Morphometrics',
+            'Cluster',
+            'Cell_Subtypes',
+            'Cell Label',
+            'Cell Type',
+            'Transcript Counts'
         ]
 
         # Adding ftu hierarchy property. This just stores which structures contain which other structures.
@@ -65,7 +72,7 @@ class DSASlide:
 
         self.default_view_type = {
             'name': 'features',
-            'features': [self.properties_list[0]]
+            #'features': [self.properties_list[0]]
         }
     
     def __str__(self):
@@ -116,6 +123,8 @@ class DSASlide:
         # Step 3: get tile, base, zoom, etc.
         # Number of zoom levels for an image
         self.zoom_levels = tile_metadata['levels']
+
+        print(f'zoom_levels: {self.zoom_levels}')
         # smallest level dimensions used to generate initial tiles
         self.base_dims = [
             tile_metadata['sizeX']/(2**(self.zoom_levels-1)),
@@ -131,6 +140,10 @@ class DSASlide:
             tile_metadata['sizeX'],
             tile_metadata['sizeY']
         ]
+
+        print(f'base_dims: {self.base_dims}')
+        print(f'tile_dims: {self.tile_dims}')
+        print(f'self.image_dims: {self.image_dims}')
 
         # Step 4: Defining bounds of map (size of the first tile)
         self.map_bounds = [[0,self.image_dims[1]],[0,self.image_dims[0]]]
@@ -148,15 +161,21 @@ class DSASlide:
             self.tile_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
 
         # Step 7: Converting Histomics/large-image annotations to GeoJSON
-        base_x_scale = self.base_dims[0]/self.tile_dims[0]
-        base_y_scale = self.base_dims[1]/self.tile_dims[1]
+        #base_x_scale = self.base_dims[0]/self.tile_dims[0]
+        #base_y_scale = self.base_dims[1]/self.tile_dims[1]
 
-        self.x_scale = (self.tile_dims[0])/(self.image_dims[0]*(self.tile_dims[0]/240))
-        self.y_scale = (self.tile_dims[1])/(self.image_dims[1]*(self.tile_dims[1]/240))
+        #self.x_scale = (self.tile_dims[0])/(self.image_dims[0]*(self.tile_dims[0]/240))
+        #self.y_scale = (self.tile_dims[1])/(self.image_dims[1]*(self.tile_dims[1]/240))
+        self.x_scale = self.base_dims[0]/self.image_dims[0]
+        self.y_scale = self.base_dims[1]/self.image_dims[1]
+        #self.x_scale = 1 if self.base_dims[0]<=240 else self.tile_dims[0]/240
+        #self.y_scale = 1 if self.base_dims[1]<=240 else self.tile_dims[1]/240
         self.y_scale*=-1
 
-        self.x_scale *= base_x_scale
-        self.y_scale *= base_y_scale
+        #self.x_scale *= base_x_scale
+        #self.y_scale *= base_y_scale
+
+        print(f'x_scale: {self.x_scale}, y_scale: {self.y_scale}')
 
         self.map_bounds[0][1]*=self.x_scale
         self.map_bounds[1][1]*=self.y_scale
@@ -333,6 +352,8 @@ class DSASlide:
             f.close()
 
     def find_intersecting_ftu(self, box_poly, ftu: str):
+
+        box_poly = box(*box_poly)
 
         if ftu in self.ftu_names:
             # Finding which members of a specfied ftu group intersect with the provided box_poly
@@ -533,8 +554,7 @@ class VisiumSlide(DSASlide):
         }
 
         self.default_view_type = {
-            'name': 'cell_composition',
-            'type': 'Main_Cell_Types'
+            'name': 'Main_Cell_Types',
         }
 
     def run_change_level(self,main_cell_types):
@@ -602,8 +622,9 @@ class VisiumSlide(DSASlide):
 
             for f_idx,f in enumerate(list(intersecting_ftus.keys())):
                 
-                if view_type['name'] == 'cell_composition':
-                    if view_type['type']=='Main_Cell_Types':
+                viewport_data[f] = {}
+                if view_type['name'] in ['Main_Cell_Types','Cell_Subtypes']:
+                    if view_type['name']=='Main_Cell_Types':
                         counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
                         
                         if len(counts_dict_list)>0:
@@ -630,8 +651,23 @@ class VisiumSlide(DSASlide):
                                 viewport_data[f]['states'][m] = cell_states_data.to_dict('records')
                         else:
                             continue
-                    elif view_type['type']=='Cell_Subtypes':
-                        counts_dict_list = [i['Cell_Subtypes'] for i in intersecting_ftus[f] if 'Cell_Subtypes' in i]
+                    elif view_type['name']=='Cell_Subtypes':
+
+                        viewport_data[f] = {}
+                        counts_dict_list = []
+                        for ftu in intersecting_ftus[f]:
+                            if 'Cell_Subtypes' in ftu and 'Main_Cell_Types' in ftu:
+                                main_cell_types = list(ftu['Main_Cell_Types'].keys())
+
+                                ftu_dict = {}
+                                for m in main_cell_types:
+                                    main_pct = ftu['Main_Cell_Types'][m]
+                                    if m in ftu['Cell_Subtypes']:
+                                        subtype_pct = ftu['Cell_Subtypes'][m]
+
+                                        ftu_dict = ftu_dict | {i: main_pct*subtype_pct[i] for i in subtype_pct} 
+                                        
+                                counts_dict_list.append(ftu_dict)
 
                         if len(counts_dict_list)>0:
                             counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
@@ -647,7 +683,7 @@ class VisiumSlide(DSASlide):
                         else:
                             continue
 
-                    elif view_type['type']=='Gene Counts':
+                    elif view_type['name']=='Gene Counts':
                         counts_dict_list = [i['Gene Counts'][view_type['gene']] for i in intersecting_ftus[f] if 'Gene Counts' in i]
 
                         if len(counts_dict_list)>0:
@@ -656,7 +692,7 @@ class VisiumSlide(DSASlide):
                         else:
                             continue
                     
-                elif view_type['name'] == 'morphometrics':
+                elif view_type['name'] == 'Morphometrics':
 
                     counts_dict_list = [i['Morphometrics'][view_type['type']] for i in intersecting_ftus[f] if 'Morphometrics' in i]
                     if len(counts_dict_list)>0:
@@ -665,16 +701,15 @@ class VisiumSlide(DSASlide):
                     else:
                         continue
                 
-
-                if view_type['name'] == 'cell_composition':
+                if view_type['name'] in ['Main_Cell_Types','Cell_Subtypes','Gene Counts']:
                     chart_label = f'{f} Cell Composition'
 
-                    if view_type['type'] in ['Main_Cell_Types','Cell_Subtypes']:
+                    if view_type['name'] in ['Main_Cell_Types','Cell_Subtypes']:
                         f_tab_plot = px.pie(counts_data,values=f,names='index')
                         f_tab_plot.update_traces(textposition='inside')
                         f_tab_plot.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
 
-                        if view_type['type']=='Main_Cell_Types':
+                        if view_type['name']=='Main_Cell_Types':
                             top_cell = counts_data['index'].tolist()[0]
 
                             pct_states = pd.DataFrame.from_records(viewport_data[f]['states'][top_cell])
@@ -701,7 +736,7 @@ class VisiumSlide(DSASlide):
                             )
 
                             tab_list.append(f_tab)
-                        elif view_type['type'] == 'Cell_Subtypes':
+                        elif view_type['name'] == 'Cell_Subtypes':
 
                             f_tab = dbc.Tab(
                                 dbc.Row([
@@ -712,12 +747,12 @@ class VisiumSlide(DSASlide):
                                             figure = go.Figure(f_tab_plot)
                                         )
                                     ],md=12)
-                                ]),label = f+f' ({viewport_data[f]["count"]})',tab_id = f'tab_{f_idx}'
+                                ]),label = f+f' ({viewport_data[f]["count"]})',tab_id = f'tab_{len(tab_list)}'
                             )
 
                             tab_list.append(f_tab)
 
-                    elif view_type['type'] == 'Gene Counts':
+                    elif view_type['name'] == 'Gene Counts':
                         f_tab_plot = gen_violin_plot(
                             feature_data = pd.DataFrame.from_records(counts_dict_list),
                             label_col = f,
@@ -738,7 +773,7 @@ class VisiumSlide(DSASlide):
                             ]),label = f+f' ({viewport_data[f]["count"]})', tab_id = f'tab_{f_idx}'
                         )
 
-                elif view_type['name'] == 'morphometrics':
+                elif view_type['name'] == 'Morphometrics':
                     
                     chart_label = f'{f} Morphometrics'
 
@@ -773,10 +808,10 @@ class VisiumSlide(DSASlide):
                 dbc.Col(
                     dcc.Dropdown(
                         options = [
-                            {'label': 'Main Cell Types','value': 'Main_Cell_Types'},
-                            {'label': 'Cell Subtypes','value': 'Cell_Subtypes'},
-                            {'label': 'Gene Counts','value': 'Gene Counts'},
-                            {'label': 'Morphometrics','value': 'Morphometrics','disabled': True}
+                            {'label': 'Main Cell Types','value': 'Main_Cell_Types', 'disabled': True if not any(['Main_Cell_Types' in i for i in self.properties_list]) else False},
+                            {'label': 'Cell Subtypes','value': 'Cell_Subtypes', 'disabled': True if not any(['Cell_Subtypes' in i for i in self.properties_list]) else False},
+                            {'label': 'Gene Counts','value': 'Gene Counts', 'disabled': True if not any(['Gene Counts' in i for i in self.properties_list]) else False},
+                            {'label': 'Morphometrics','value': 'Morphometrics','disabled': True if not any(['Morphometrics' in i for i in self.properties_list]) else False}
                         ],
                         value = view_type['name'],
                         multi = False,
@@ -792,6 +827,9 @@ class VisiumSlide(DSASlide):
 
 
         return viewport_data_components, viewport_data
+
+
+
 
 class CODEXSlide(DSASlide):
     # Additional properties needed for CODEX slides are:
@@ -853,12 +891,15 @@ class CODEXSlide(DSASlide):
 
         self.default_view_type = {
             'name': 'channel_hist',
-            'frame_list': self.wsi.channel_names[0]
+            'frame_list': [[self.channel_names[0]]],
+            'frame_label': [None]
         }
 
     def intersecting_frame_intensity(self,box_poly,frame_list):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
         
+        box_poly = box(*box_poly)
+
         if frame_list=='all':
             frame_list = [i for i in self.wsi.channel_names if not i=='Histology (H&E)']
 
@@ -878,7 +919,7 @@ class CODEXSlide(DSASlide):
         slide_coords_list = [min_x,min_y,max_x,max_y]
         frame_properties = {}
         for frame in frame_indices:
-            print(f'Working on frame {frame} of {self.n_frames}')
+            #print(f'Working on frame {frame} of {self.n_frames}')
             # Get the image region associated with that frame
             # Or just get the histogram for that channel? not sure if this can be for a specific image region
             image_histogram = self.girder_handler.gc.get(f'/item/{self.item_id}/tiles/histogram',
@@ -944,8 +985,7 @@ class CODEXSlide(DSASlide):
                 intersecting_ftus[f'Marked FTUs: {marked_idx+1}'], intersecting_ftu_polys[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']], [shape(i['geometry']) for i in marked_ftu['geojson']['features']]
 
         elif view_type['name']=='channel_hist':
-
-            intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,view_type['frame_list'])
+            intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,view_type['frame_list'][0])
 
         
         if len(list(intersecting_ftus.keys()))>0:
@@ -954,6 +994,19 @@ class CODEXSlide(DSASlide):
 
             for f_idx,f in enumerate(list(intersecting_ftus.keys())):
                 
+                if len(intersecting_ftus[f])==0:
+                    continue
+
+                if f_idx<len(view_type['frame_list']):
+                    f_frame_list = view_type['frame_list'][f_idx]
+                    f_label = view_type['frame_label'][f_idx]
+                else:
+                    f_frame_list = view_type['frame_list'][0]
+                    f_label = view_type['frame_label'][0]
+
+                if not type(f_frame_list)==list:
+                    f_frame_list = [f_frame_list]
+
                 if view_type['name']=='channel_hist':
                     viewport_data[f] = {}
                     counts_data = pd.DataFrame()
@@ -980,29 +1033,32 @@ class CODEXSlide(DSASlide):
                     )
                     
                 elif view_type['name']=='features':
+
+                    chart_label = 'Cell Marker Cell Expression'
+
                     viewport_data[f] = {}
                     
                     counts_data_list = []
                     counts_data = pd.DataFrame()
+                    print(len(list(intersecting_ftus.keys())))
                     if type(intersecting_ftus[f])==list:
                         for ftu_idx,ind_ftu in enumerate(intersecting_ftus[f]):
                             cell_features = {}
 
                             if 'Channel Means' in ind_ftu:
-                                for frame in view_type['frame_list']:
-                                    cell_features[f'Channel {view_type["all_channels"].index(frame)}'] = ind_ftu['Channel Means'][view_type['all_channels'].index(frame)]
+                                for frame in f_frame_list:
+                                    cell_features[f'Channel {self.channel_names.index(frame)}'] = ind_ftu['Channel Means'][self.channel_names.index(frame)]
                             else:
-                                for frame in view_type['frame_list']:
-                                    cell_features[f'Channel {view_type["all_channels"].index(frame)}'] = 0.0
+                                for frame in f_frame_list:
+                                    cell_features[f'Channel {self.channel_names.index(frame)}'] = 0.0
 
 
-                            if not view_type['frame_label'] is None and view_type['frame_label'] in view_type['all_channels']:
-                                cell_features[view_type['frame_label']] = ind_ftu['Channel Means'][view_type["all_channels"].index(frame)]
+                            if not f_label is None and f_label in self.channel_names:
+                                cell_features[f_label] = ind_ftu['Channel Means'][self.channel_names.index(frame)]
                             
-                            elif view_type['frame_label'] is None:
-                                cell_features['label'] = 'Cell Nucleus'
+                            cell_features['label'] = 'Cell Nucleus'
 
-                            cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
+                            cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][f_idx].bounds)}
 
                             counts_data_list.append(cell_features)
 
@@ -1010,47 +1066,48 @@ class CODEXSlide(DSASlide):
                         counts_data = pd.DataFrame.from_records(counts_data_list)
                         viewport_data[f]['data'] = counts_data.to_dict('records')
                     else:
+
                         viewport_data[f]['data'] = []
                     
                     viewport_data[f]['count'] = len(counts_data_list)
 
-                    if len(view_type['frame_list'])==1:
+                    if len(f_frame_list)==1:
                         f_tab_plot = gen_violin_plot(
                             feature_data = counts_data,
-                            label_col = view_type['frame_label'] if not view_type['frame_label'] is None else 'label',
-                            label_name = view_type['frame_label'] if not view_type['frame_label'] is None else 'Unlabeled',
-                            feature_col = f'Channel {view_type["all_channels"].index(view_type["frame_list"])}',
+                            label_col = f_label if not f_label is None else 'label',
+                            label_name = f_label if not f_label is None else 'Unlabeled',
+                            feature_col = f'Channel {self.channel_names.index(f_frame_list[0])}',
                             custom_col = 'Hidden'
                         )
                         f_tab_plot.update_layout({
                             'yaxis': {
                                 'title': {
-                                    'text': view_type['frame_list'][0]
+                                    'text': f_frame_list[0]
                                 }
                             }
                         })
-                    elif len(view_type['frame_list'])==2:
-                        f_names = [i for i in counts_data.columnst.tolist() if 'Channel' in i]
+                    elif len(f_frame_list)==2:
+                        f_names = [i for i in counts_data.columns.tolist() if 'Channel' in i]
                         f_tab_plot = px.scatter(
                             data_frame = counts_data,
                             x = f_names[0],
                             y = f_names[1],
-                            color = view_type['frame_label'] if not view_type['frame_label'] is None else 'label',
+                            color = f_label if not f_label is None else 'label',
                             custom_data = 'Hidden'
                         )
                         f_tab_plot.update_layout({
                             'xaxis': {
                                 'title': {
-                                    'text': f'{view_type["frame_list"][0]}'
+                                    'text': f'{f_frame_list[0]}'
                                 }
                             },
                             'yaxis': {
                                 'title': {
-                                    'text': f'{view_type["frame_list"][1]}'
+                                    'text': f'{f_frame_list[1]}'
                                 }
                             }
                         })
-                    elif len(view_type['frame_list'])>2:
+                    elif len(f_frame_list)>2:
                         # Generating UMAP dimensional reduction 
                         f_umap_data = gen_umap(
                             feature_data = counts_data,
@@ -1064,12 +1121,13 @@ class CODEXSlide(DSASlide):
                             data_Frame = f_umap_data,
                             x = 'UMAP1',
                             y = 'UMAP2',
-                            color = view_type['frame_label'] if not view_type['frame_label'] is None else 'label',
+                            color = f_label if not f_label is None else 'label',
                             custom_data = 'Hidden'
                         )
 
                 elif view_type['name'] == 'cell':
-
+                    
+                    chart_label = 'Cell Composition'
                     viewport_data[f] = {}
                     counts_data_list = []
                     counts_data = pd.DataFrame()
@@ -1087,7 +1145,6 @@ class CODEXSlide(DSASlide):
                     
                     if len(counts_data_list)>0:
                         counts_data = pd.DataFrame.from_records(counts_data_list)
-
                         viewport_data[f]['data'] = counts_data.to_dict('records')
                     
                     else:
@@ -1120,8 +1177,8 @@ class CODEXSlide(DSASlide):
                         ),
                         dbc.Col(
                             dcc.Dropdown(
-                                options = [i for i in view_type['all_channels']],
-                                value = view_type['frame_list'],
+                                options = [i for i in self.channel_names],
+                                value = f_frame_list,
                                 multi = True,
                                 id = {'type':'frame-histogram-drop','index':f_idx}
                             ),
@@ -1145,10 +1202,10 @@ class CODEXSlide(DSASlide):
                         ),
                         dbc.Col(
                             dcc.Dropdown(
-                                options = view_type['all_channels'],
-                                value = view_type['frame_label'] if len(view_type['frame_list'])>2 else None,
+                                options = self.channel_names,
+                                value = f_label if len(f_frame_list)>2 else None,
                                 id = {'type': 'frame-label-drop','index': f_idx},
-                                disabled = True if len(view_type['frame_list'])<2 else False
+                                disabled = True if len(f_frame_list)<2 or not view_type['name']=='features' else False
                             )
                         )
                     ]),
@@ -1161,7 +1218,7 @@ class CODEXSlide(DSASlide):
                             )
                         ],md = 12)
                     ])
-                ], label = f+f' ({viewport_data[f]["count"]})',tab_id = f'tab_{f_idx}')
+                ], label = f+f' ({viewport_data[f]["count"]})',tab_id = f'tab_{len(tab_list)}')
 
                 tab_list.append(f_tab)
 
@@ -1189,7 +1246,7 @@ class CODEXSlide(DSASlide):
             ]),
             html.Hr(),
             dbc.Row(
-                dbc.Tabs(tab_list,active_tab=f'tab_0')
+                dbc.Tabs(tab_list,active_tab=f'tab_{len(tab_list)-1}')
             )
         ])
 

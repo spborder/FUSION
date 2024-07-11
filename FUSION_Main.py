@@ -50,7 +50,7 @@ import dash_treeview_antd as dta
 from timeit import default_timer as timer
 import time
 
-from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
+from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide, XeniumSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler, GeneHandler
 from FUSION_Prep import XeniumPrep, CODEXPrep, VisiumPrep, Prepper
 from FUSION_Utils import (
@@ -651,7 +651,6 @@ class FUSION:
         # Updating Cell Composition pie charts
         self.app.callback(
             [Output('roi-pie-holder','children'),
-             Output({'type':'frame-label-drop','index':ALL},'disabled'),
              Output({'type':'viewport-store-data','index':ALL},'data'),
              Output('user-store','data')
              ],
@@ -1792,10 +1791,11 @@ class FUSION:
         user_data_store = json.loads(user_data_store)
         
         frame_label_disable = [no_update]*len(ctx.outputs_list[2])
-        viewport_store_data = json.loads(get_pattern_matching_value(current_data))
+        if not len(get_pattern_matching_value(current_data))==0:
+            viewport_store_data = json.loads(get_pattern_matching_value(current_data))
+        else:
+            viewport_store_data = {}
         cell_view_type = get_pattern_matching_value(cell_view_type)
-
-        print(f'update_viewport_data ctx.triggered: {ctx.triggered}')
         
         if update_data or ctx.triggered_id=='roi-view-data':
             if not self.wsi is None:
@@ -1806,13 +1806,10 @@ class FUSION:
                         bounds_box = shapely.geometry.box(*bounds)
 
                     # Storing current slide boundaries
-                    #self.current_slide_bounds = bounds_box
-                    viewport_store_data['current_slide_bounds'] = bounds_box
+                    viewport_store_data['current_slide_bounds'] = list(bounds_box.bounds)
                 else:
-                    #self.current_slide_bounds = self.wsi.map_bounds
                     viewport_store_data['current_slide_bounds'] = self.wsi.map_bounds
             else:
-                #self.current_slide_bounds = None
                 viewport_store_data['current_slide_bounds'] = None
 
                 raise exceptions.PreventUpdate
@@ -1821,16 +1818,31 @@ class FUSION:
         if current_tab=='cell-compositions-tab':
             if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
+                if self.wsi.spatial_omics_type=='CODEX':
 
-                view_type_dict = {
-                    'name': cell_view_type,
-                    'frame_list': get_pattern_matching_value(frame_list),
-                    'frame_label': get_pattern_matching_value(frame_label)
-                }
+                    print(frame_list)
+                    if frame_list is None or len(frame_list)==0:
+                        frame_list = [[self.wsi.channel_names[0]]]
+                    
+                    if frame_label is None or len(frame_list)==0:
+                        frame_label = [None]
+
+                    view_type_dict = {
+                        'name': cell_view_type,
+                        'frame_list': frame_list if type(frame_list[0])==list else [frame_list],
+                        'frame_label': frame_label
+                    }
+                else:
+                    view_type_dict = {
+                        'name': cell_view_type
+                    }
+
+                print(f'cell_view_type: {cell_view_type}')
+                print(view_type_dict)
 
                 viewport_store_data['view_type_dict'] = view_type_dict
 
-                #TODO: Generalized get_viewport_data method for self.wsi which should return a list of all the stuff needed for that tab
+                # Generalized get_viewport_data method for self.wsi which should return a list of all the stuff needed for that tab
                 viewport_data_components, viewport_data = self.wsi.update_viewport_data(
                     bounds_box = viewport_store_data['current_slide_bounds'],
                     view_type = view_type_dict
@@ -1841,470 +1853,14 @@ class FUSION:
                 viewport_data_return = json.dumps(viewport_store_data)
                 user_data_return = json.dumps(user_data_store)
 
-                if len(frame_list)<2:
-                    frame_label_disable = [True]
-                else:
-                    frame_label_disable = [False]
+                return viewport_data_components, [viewport_data_return], user_data_return
 
-
-                return viewport_data_components, frame_label_disable, viewport_data_return, user_data_return
-
-
-
-
-
-
-
-
-
-                """
-                if self.wsi.spatial_omics_type=='CODEX':
-                    frame_label = get_pattern_matching_value(frame_label)
-                    if len(frame_list)<2:
-                        frame_label = None
-                    
-                    frame_list = get_pattern_matching_value(frame_list)
-                    if frame_list is None:
-                        frame_list = [self.wsi.channel_names[0]]
-
-                if update_data:
-                    if self.wsi.spatial_omics_type=='Visium':
-                        # Getting intersecting FTU information
-                        intersecting_ftus, intersecting_ftu_polys = self.wsi.update_viewport_data(self.current_slide_bounds)
-
-                    elif self.wsi.spatial_omics_type=='CODEX':
-                        # Returns dictionary of intersecting tissue frame intensities
-                        intersecting_ftus, intersecting_ftu_polys = self.wsi.update_viewport_data(bounds_box,cell_view_type,frame_list)
-                    
-                    self.current_ftus = intersecting_ftus
-
-                    viewport_store_data = {}
-
-                    if len(list(intersecting_ftus.keys()))>0:
-                        for f_idx,f in enumerate(list(intersecting_ftus.keys())):
-
-                            viewport_store_data[f] = {}
-
-                            if self.wsi.spatial_omics_type=='Visium':
-                                counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
-
-                                if len(counts_dict_list)>0:
-                                    counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
-                                    counts_data.columns = [f]
-
-                                    counts_data = (counts_data[f]/counts_data[f].sum()).to_frame()
-                                    counts_data.columns = [f]
-                                    counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
-                                    counts_data = counts_data.reset_index()
-
-                                    viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                    viewport_store_data[f]['count'] = len(counts_dict_list)
-
-                                    # Getting cell state information
-                                    viewport_store_data[f]['states'] = {}
-                                    for m in counts_data['index'].tolist():
-                                        cell_states_data = [i['Cell_States'][m] for i in intersecting_ftus[f] if 'Cell_States' in i]
-
-                                        cell_states_data = pd.DataFrame.from_records(cell_states_data).sum(axis=0).to_frame()
-                                        cell_states_data = cell_states_data.reset_index()
-                                        cell_states_data.columns = ['Cell State','Proportion']
-                                        cell_states_data['Proportion'] = cell_states_data['Proportion']/cell_states_data['Proportion'].sum()
-
-                                        viewport_store_data[f]['states'][m] = cell_states_data.to_dict('records')
-
-                                else:
-                                    viewport_store_data[f]['data'] = []
-                                    viewport_store_data[f]['count'] = 0
-                                    viewport_store_data[f]['states'] = {}
-
-                            elif self.wsi.spatial_omics_type == 'CODEX':
-
-                                if cell_view_type == 'channel_hist':
-                                    for f in list(intersecting_ftus.keys()):
-
-                                        viewport_store_data[f] = {}
-                                        counts_dict_list = [i for i in intersecting_ftus]
-                                        counts_data = pd.DataFrame()
-                                        if type(intersecting_ftus[f])==dict:
-
-                                            for frame_name in intersecting_ftus[f]:
-                                                frame_data = intersecting_ftus[f][frame_name]
-
-                                                frame_data_df = pd.DataFrame({'Frequency':[0]+frame_data['hist'],'Intensity':frame_data['bin_edges'],'Channel':[frame_name]*len(frame_data['bin_edges'])})
-
-                                                if counts_data.empty:
-                                                    counts_data = frame_data_df
-                                                else:
-                                                    counts_data = pd.concat([counts_data,frame_data_df],axis=0,ignore_index=True)
-
-                                        viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                        viewport_store_data[f]['count'] = len(counts_dict_list)
-                                        viewport_store_data[f]['view_type'] = cell_view_type
-                                
-                                elif cell_view_type == 'features':
-                                    
-                                    for f in list(intersecting_ftus.keys()):
-                                        viewport_store_data[f] = {}
-                                        counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
-
-                                        counts_data_list = []
-                                        counts_data = pd.DataFrame()
-                                        if type(intersecting_ftus[f])==list:
-                                            for ftu_idx,ind_ftu in enumerate(intersecting_ftus[f]):
-
-                                                cell_features = {}
-                                                
-                                                if 'Channel Means' in ind_ftu:
-                                                    for frame in frame_list:
-                                                        cell_features[f'Channel {self.wsi.channel_names.index(frame)}'] = ind_ftu['Channel Means'][self.wsi.channel_names.index(frame)]
-                                                else:
-                                                    for frame in frame_list:
-                                                        cell_features[f'Channel {self.wsi.channel_names.index(frame)}'] = 0.0
-                                                
-                                                if 'Cell Type' in ind_ftu:
-                                                    cell_features['Cell Type'] = ind_ftu['Cell Type']
-                                                else:
-                                                    cell_features['Cell Type'] = 'Unlabeled'
-
-                                                if 'Cluster' in ind_ftu:
-                                                    cell_features['Cluster'] = ind_ftu['Cluster']
-                                                else:
-                                                    cell_features['Cluster'] = 'Unclustered'
-
-                                                if not frame_label is None and frame_label in self.wsi.channel_names:
-                                                    cell_features[frame_label] = ind_ftu['Channel Means'][self.wsi.channel_names.index(frame_label)]
-                                                
-                                                cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
-
-                                                counts_data_list.append(cell_features)
-
-                                        if len(counts_data_list)>0:
-                                            counts_data = pd.DataFrame.from_records(counts_data_list)
-                                            viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                        else:
-                                            viewport_store_data[f]['data'] = []
-
-                                        viewport_store_data[f]['count'] = len(counts_data_list)
-                                        viewport_store_data[f]['view_type'] = cell_view_type
-
-                                elif cell_view_type == 'cell':
-                                    counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
-                                    
-                                    viewport_store_data[f] = {}
-
-                                    counts_data_list = []
-                                    counts_data = pd.DataFrame()
-                                    if type(intersecting_ftus[f])==list:
-                                        for ind_ftu in intersecting_ftus[f]:
-
-                                            if 'Cell' in ind_ftu:
-                                                counts_data_list.append({
-                                                    'Cell': ind_ftu['Cell'],
-                                                    'Cluster': ind_ftu['Cluster']
-                                                })
-                                            elif 'Cluster' in ind_ftu:
-                                                counts_data_list.append({
-                                                    'Cluster':ind_ftu['Cluster'],
-                                                    'Cell': 'Unlabeled'
-                                                })
-                                            else:
-                                                counts_data_list.append({
-                                                    'Cluster': 'No Cluster',
-                                                    'Cell': 'Unlabeled'
-                                                })
-
-                                    if len(counts_data_list)>0:
-                                        counts_data = pd.DataFrame.from_records(counts_data_list)
-
-                                        viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                    else:
-                                        viewport_store_data[f]['data'] = []
-
-                                    viewport_store_data[f]['count'] = len(counts_data_list)
-                                    viewport_store_data[f]['view_type'] = cell_view_type
-
-                included_ftus = list(viewport_store_data.keys())
-                if len(included_ftus)>0:
-
-                    tab_list = []
-                    for f_idx,f in enumerate(included_ftus):
-                        counts_data = viewport_store_data[f]['data']
-                        if len(counts_data)==0:
-                            continue
-
-                        if self.wsi.spatial_omics_type=='Visium':
-                            
-                            counts_data = pd.DataFrame.from_records(counts_data)
-                            first_chart_label = f'{f} Cell Type Proportions'
-
-                        elif self.wsi.spatial_omics_type=='CODEX':
-                            
-                            counts_data = pd.DataFrame.from_records(counts_data)
-
-                            if cell_view_type == 'channel_hist':
-                                first_chart_label = 'Channel Intensity Histogram'
-
-                            elif cell_view_type == 'features':
-                                first_chart_label = 'Nucleus Features'
-
-                            elif cell_view_type == 'cell':
-                                first_chart_label = 'Cell Compositions'
-
-                        if not counts_data.empty:
-                            
-                            if self.wsi.spatial_omics_type=='Visium':
-                                f_pie = px.pie(counts_data,values=f,names='index')
-                                f_pie.update_traces(textposition='inside')
-                                f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
-
-                            elif self.wsi.spatial_omics_type=='CODEX':
-                                # For CODEX images, have the tissue tab be one histogram                                    
-                                # Getting one of the channels. Maybe just the first one
-                                cluster_disable = True
-                                eps = 0.3
-                                min_samples = 10
-
-                                if cell_view_type=='channel_hist':
-                                    cluster_disable = True
-                                    f_pie = px.bar(
-                                        data_frame = counts_data,
-                                        x = 'Intensity',
-                                        y = 'Frequency',
-                                        color = 'Channel'
-                                    )
-                                elif cell_view_type=='features':
-                                    
-                                    if len(frame_list)==1:
-                                        f_pie = gen_violin_plot(
-                                            feature_data = counts_data,
-                                            label_col = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
-                                            label_name = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
-                                            feature_col = f'Channel {self.wsi.channel_names.index(frame_list[0])}',
-                                            custom_col = 'Hidden'
-                                        )
-                                        f_pie.update_layout({
-                                            'yaxis': {
-                                                'title': {
-                                                    'text': frame_list[0]
-                                                }
-                                            }
-                                        })
-
-                                    elif len(frame_list)==2:
-                                        f_names = [i for i in counts_data.columns.tolist() if 'Channel' in i]
-                                        f_pie = px.scatter(
-                                            data_frame = counts_data,
-                                            x = f_names[0],
-                                            y = f_names[1],
-                                            color = 'Cell Type' if frame_label is None else frame_label,
-                                            custom_data = 'Hidden'
-                                        )
-                                        f_pie.update_layout({
-                                            'xaxis': {
-                                                'title': {
-                                                    'text': f'{self.wsi.channel_names[int(float(f_names[0].split(" ")[-1]))]}'
-                                                }
-                                            },
-                                            'yaxis': {
-                                                'title': {
-                                                    'text': f'{self.wsi.channel_names[int(float(f_names[1].split(" ")[-1]))]}'
-                                                }
-                                            }
-                                        })
-                                        
-                                    elif len(frame_list)>2:
-                                        # Generate UMAP dimensional reduction for channel mean data
-                                        if update_data:
-                                            f_umap_data = gen_umap(
-                                                feature_data = counts_data,
-                                                feature_cols = [i for i in counts_data.columns.tolist() if 'Channel' in i],
-                                                label_and_custom_cols=[i for i in counts_data.columns.tolist() if not 'Channel' in i]
-                                            )
-
-                                            viewport_store_data[f]['UMAP'] = f_umap_data.to_dict('records')
-                                        else:
-                                            f_umap_data = pd.DataFrame.from_records(viewport_store_data[f]['UMAP'])
-
-                                        cluster_disable = False
-
-                                        if not ctx.triggered_id=='slide-map':
-                                            if ctx.triggered_id['type']=='cell-label-cluster':
-                                                # Get clustering labels:
-                                                eps = get_pattern_matching_value(cluster_eps)
-                                                min_samples = get_pattern_matching_value(cluster_min_samples)
-                                                cluster_labels = gen_clusters(f_umap_data,['UMAP1','UMAP2'],eps=eps, min_samples=min_samples)
-
-                                                f_umap_data['Cluster'] = cluster_labels
-
-                                                frame_label = 'Cluster'
-
-
-                                        f_pie = px.scatter(
-                                            data_frame = f_umap_data,
-                                            x = 'UMAP1',
-                                            y = 'UMAP2',
-                                            color = 'Cell Type' if frame_label is None else frame_label,
-                                            custom_data = 'Hidden'
-                                        )
-
-                                elif cell_view_type=='cell':
-
-                                    cluster_disable = True
-                                    counts_value_dict = counts_data['Cluster'].value_counts().to_dict()
-                                    pie_chart_data = []
-                                    for key,val in counts_value_dict.items():
-                                        pie_chart_data.append(
-                                            {'Cluster': key, 'Count': val}
-                                        )
-                                    pie_chart_df = pd.DataFrame.from_records(pie_chart_data)
-                                    f_pie = px.pie(
-                                        data_frame = pie_chart_df,
-                                        values = 'Count',
-                                        names = 'Cluster'
-                                    )
-                                    f_pie.update_traces(textposition='inside')
-                                    f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
-                                    
-                            if self.wsi.spatial_omics_type=='Visium':
-                                
-                                # Finding cell state proportions per main cell type in the current region
-                                second_plot_label = f'{f} Cell State Proportions'
-
-                                top_cell = counts_data['index'].tolist()[0]
-
-                                pct_states = pd.DataFrame.from_records(viewport_store_data[f]['states'][top_cell])
-                                state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
-
-                                f_tab = dbc.Tab(
-                                    dbc.Row([
-                                        dbc.Col([
-                                            dbc.Label(first_chart_label),
-                                            dcc.Graph(
-                                                id = {'type':'ftu-cell-pie','index':f_idx},
-                                                figure = go.Figure(f_pie)
-                                            )
-                                        ],md=6),
-                                        dbc.Col([
-                                            dbc.Label(second_plot_label),
-                                            dcc.Graph(
-                                                id = {'type':'ftu-state-bar','index':f_idx},
-                                                figure = go.Figure(state_bar)
-                                            )
-                                        ],md=6)
-                                    ]),label = f+f' ({viewport_store_data[f]["count"]})',tab_id = f'tab_{f_idx}'
-                                )
-
-                            elif self.wsi.spatial_omics_type=='CODEX':
-
-                                # Returning blank for now
-                                state_bar = []
-                                second_plot_label = 'This is CODEX'
-
-                                f_tab = dbc.Tab([
-                                    dbc.Row([
-                                        dbc.Col(
-                                            dbc.Label('Select a Channel Name:',html_for={'type':'frame-histogram-drop','index':0}),
-                                            md = 3, align = 'center',
-                                        ),
-                                        dbc.Col(
-                                            dcc.Dropdown(
-                                                options = [i for i in self.wsi.channel_names if not i=='Histology (H&E)'],
-                                                value = frame_list,
-                                                multi = True,
-                                                id = {'type':'frame-histogram-drop','index':0}
-                                            ),
-                                            md = 6, align = 'center'
-                                        ),
-                                        dbc.Col(
-                                            dbc.Button(
-                                                'Plot it!',
-                                                className = 'd-grid col-12 mx-auto',
-                                                n_clicks = 0,
-                                                style = {'width':'100%'},
-                                                id = {'type':'frame-data-butt','index':0}
-                                            ),
-                                            md = 3
-                                        )
-                                    ], style = {'display':'none'} if not cell_view_type in ['channel_hist','features'] else {}),
-                                    dbc.Row([
-                                        dbc.Col(
-                                            dbc.Label('Select a label: ',html_for = {'type':'frame-label-drop','index':0}),
-                                            md = 3
-                                        ),
-                                        dbc.Col(
-                                            dcc.Dropdown(
-                                                options = [
-                                                    {
-                                                        'label': i,
-                                                        'value': i
-                                                    }
-                                                    if not i=='Cluster' else {'label':i, 'value': i, 'disabled': True if 'Cluster' in counts_data.columns else False}
-                                                    for i in self.wsi.channel_names+['Cluster']
-                                                ],
-                                                value = frame_label,
-                                                id = {'type':'frame-label-drop','index':0},
-                                                disabled = True if len(frame_list)<2 else False
-                                            )
-                                        )
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Col([
-                                            dbc.Label(first_chart_label),
-                                            dcc.Graph(
-                                                id = {'type':'ftu-cell-pie','index':f_idx},
-                                                figure = go.Figure(f_pie)
-                                            )
-                                        ],md=12)
-                                    ]),
-                                    ],
-                                    label = f+f' ({viewport_store_data[f]["count"]})',tab_id = f'tab_{len(tab_list)}'
-                                )
-
-                            tab_list.append(f_tab)
-
-                    if self.wsi.spatial_omics_type=='Visium' or self.wsi.spatial_omics_type=='Regular':
-                        return dbc.Tabs(tab_list,active_tab = 'tab_0'), no_update, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
-                    elif self.wsi.spatial_omics_type=='CODEX':
-
-                        return_div = html.Div([
-                            dbc.Row([
-                                dbc.Col(
-                                    children = [
-                                        dbc.Label('Select View Type: '),
-                                        self.layout_handler.gen_info_button('Select different options here to vary how to view information in the current viewport')
-                                    ],
-                                    md = 4
-                                ),
-                                dbc.Col(
-                                    dcc.Dropdown(
-                                        options = [
-                                            {'label':'Channel Intensity Histograms','value':'channel_hist'},
-                                            {'label':'Nucleus Features','value':'features'},
-                                            {'label':'Cell Type Composition','value':'cell'}
-                                        ],
-                                        value = cell_view_type,
-                                        multi = False,
-                                        id = {'type':'roi-view-data','index':0}
-                                    )
-                                )
-                            ]),
-                            html.Hr(),
-                            dbc.Row(
-                                dbc.Tabs(tab_list,active_tab=f'tab_0')
-                            )
-                        ])
-
-                        return return_div, no_update, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
-
-                else:
-                    return html.P('No FTUs in current view'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
-                """
             else:
-                return html.P('Select a slide to get started!'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return html.P('Select a slide to get started!'), [json.dumps(viewport_store_data)], json.dumps(user_data_store)
     
         elif current_tab=='annotation-tab':
             if self.dataset_handler.username=='fusionguest':
-                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return html.P('Sign in or create an account to start annotating!'), [json.dumps(viewport_store_data)], json.dumps(user_data_store)
             else:
                 
                 # Getting intersecting FTU information
@@ -2339,7 +1895,7 @@ class FUSION:
                         )
                 ])
 
-                return html.Div(), annotation_tab_group, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return annotation_tab_group, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
         
         else:
             raise exceptions.PreventUpdate
@@ -2383,11 +1939,17 @@ class FUSION:
 
         # Converting to RGB
         if len(raw_values_list)>0:
-            if max(raw_values_list)>0:
-                scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
+            raw_values_list = np.unique(raw_values_list).tolist()
+            if all([not type(i)==str for i in raw_values_list]):
+                if max(raw_values_list)>0:
+                    scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
+                else:
+                    scaled_values = raw_values_list
+                
+                rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
             else:
-                scaled_values = raw_values_list
-            rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
+                scaled_values = [i/len(raw_values_list) for i in range(len(raw_values_list))]
+                rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
 
             hex_list = []
             for row in range(rgb_values.shape[0]):
@@ -2751,16 +2313,31 @@ class FUSION:
 
                 cell_sub_select_children = []
 
-                color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
-                    width=300,height=10,position='bottomleft',
-                    id=f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style)
+
+                if all([not type(i)==str for i in list(self.hex_color_key.keys())]):
+                    color_bar = dl.Colorbar(
+                        colorscale = list(self.hex_color_key.values()),
+                        width=300,height=10,position='bottomleft',
+                        id=f'colorbar{random.randint(0,100)}',
+                        style = color_bar_style)
+                else:
+                    color_bar = dlx.categorical_colorbar(
+                        categories = sorted(list(self.hex_color_key.keys())),
+                        colorscale = list(self.hex_color_key.values()),
+                        width = 600, height = 10, position = 'bottomleft',
+                        id = f'colorbar{random.randint(0,100)}',
+                        style = color_bar_style
+                    )
 
                 if not len(list(self.hex_color_key.keys()))==0:
-                    filter_min_val = np.min(list(self.hex_color_key.keys()))
-                    filter_max_val = np.max(list(self.hex_color_key.keys()))
-                    filter_disable = False
+                    if all([not type(i)==str for i in list(self.hex_color_key.keys())]):
+                        filter_min_val = np.min(list(self.hex_color_key.keys()))
+                        filter_max_val = np.max(list(self.hex_color_key.keys()))
+                        filter_disable = False
+                    else:
+                        filter_min_val = 0.0
+                        filter_max_val = 1.0
+                        filter_disable = True
                 else:
                     filter_min_val = 0
                     filter_max_val = 1.0
@@ -2801,6 +2378,8 @@ class FUSION:
 
         self.cell_vis_val = vis_val/100
         n_layers = len(callback_context.outputs_list[0])
+
+        print(self.overlay_prop)
         geojson_hideout = [
             {
                 'color_key':self.hex_color_key,
@@ -3483,6 +3062,16 @@ class FUSION:
                         manual_rois = [],
                         marked_ftus = []
                     )
+
+                elif slide_type == 'Xenium':
+                    self.wsi = XeniumSlide(
+                        item_id = slide_info['_id'],
+                        user_details = user_data_store,
+                        girder_handler = self.dataset_handler,
+                        ftu_colors = self.ftu_colors,
+                        manual_rois = [],
+                        marked_ftus = []
+                    )
                 else:
                     self.wsi = DSASlide(
                         item_id = slide_info['_id'],
@@ -3677,7 +3266,7 @@ class FUSION:
                     dl.BaseLayer(
                         dl.TileLayer(
                             url = self.wsi.channel_tile_url[c_idx],
-                            tileSize = 240,
+                            tileSize = self.wsi.tile_dims[0],
                             maxNativeZoom = self.wsi.zoom_levels-1,
                             id = {'type':'codex-tile-layer','index':c_idx}
                         ),
@@ -3694,7 +3283,7 @@ class FUSION:
                 cell_annotation_tab_disable = True
                 slide_tile_layer = [
                     dl.TileLayer(
-                        id = 'slide-tile',
+                        id = f'slide-tile{np.random.randint(0,100)}',
                         url = self.wsi.tile_url,
                         tileSize = self.wsi.tile_dims[0],
                         maxNativeZoom = self.wsi.zoom_levels-1
@@ -7499,7 +7088,7 @@ class FUSION:
 
                 patched_list = Patch()
                 # Find min and max vals
-                filter_val = [i for i in self.wsi.properties_list if not 'Cell_Subtypes' in i and not i=='Max Cell Type'][0]
+                filter_val = [i for i in self.wsi.properties_list if not 'Cell_Subtypes' in i and not i in ['Max Cell Type','Cell Type']][0]
                 if '-->' in filter_val:
                     filter_val_parts = filter_val.split(' --> ')
                     m_prop = filter_val_parts[0]
@@ -7540,8 +7129,8 @@ class FUSION:
                         dbc.Row([
                             dbc.Col(
                                 dcc.Dropdown(
-                                    options = [i for i in self.wsi.properties_list if not i=='Max Cell Type' and not 'Cell_Subtypes' in i],
-                                    value = [i for i in self.wsi.properties_list if not i=='Max Cell Type' and not 'Cell_Subtypes' in i][0],
+                                    options = [i for i in self.wsi.properties_list if not i in ['Max Cell Type','Cell Type'] and not 'Cell_Subtypes' in i],
+                                    value = [i for i in self.wsi.properties_list if not i in ['Max Cell Type','Cell Type'] and not 'Cell_Subtypes' in i][0],
                                     placeholder = 'Select new property to filter FTUs',
                                     id = {'type':'added-filter-drop','index':butt_click}
                                 ),

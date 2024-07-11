@@ -51,16 +51,25 @@ def extract_overlay_value(structure_list,overlay_prop):
                     if overlay_prop['value'] in st[overlay_prop['name']]:
                         if not overlay_prop['sub_value'] is None:
                             if overlay_prop['sub_value'] in st[overlay_prop['name']][overlay_prop['value']]:
-                                raw_values_list.append(float(st[overlay_prop['name']][overlay_prop['value']][overlay_prop['sub_value']]))
+                                if not type(st[overlay_prop['name']][overlay_prop['sub_value']])==str:
+                                    raw_values_list.append(float(st[overlay_prop['name']][overlay_prop['value']][overlay_prop['sub_value']]))
+                                else:
+                                    raw_values_list.append(st[overlay_prop['name']][overlay_prop['value']][overlay_prop['sub_value']])
                         else:
-                            raw_values_list.append(float(st[overlay_prop['name']][overlay_prop['value']]))
+                            if not type(st[overlay_prop['name']][overlay_prop['value']])==str:
+                                raw_values_list.append(float(st[overlay_prop['name']][overlay_prop['value']]))
+                            else:
+                                raw_values_list.append(st[overlay_prop['name']][overlay_prop['value']])
                     elif overlay_prop['value']=='max':
                         # Getting the max index of st[overlay_prop['name']][overlay_prop['value']]
                         check_values = list(st[overlay_prop['name']].values())
                         raw_values_list.append(np.argmax(check_values))
                 else:
-                    raw_values_list.append(float(st[overlay_prop['name']]))
-    
+                    if not type(st[overlay_prop['name']])==str:
+                        raw_values_list.append(float(st[overlay_prop['name']]))
+                    else:
+                        raw_values_list.append(st[overlay_prop['name']])
+
     return raw_values_list
 
 def gen_violin_plot(feature_data, label_col, label_name, feature_col, custom_col):
