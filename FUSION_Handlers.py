@@ -179,9 +179,15 @@ class LayoutHandler:
                      children = [
                          dl.Colorbar(id='map-colorbar')
                          ]),
-            dl.LayersControl(id='layer-control',
-                             children = self.initial_overlays
-                             ),
+            html.Div(
+                id = 'layer-control-holder',
+                children = [
+                    dl.LayersControl(
+                        id='layer-control',
+                        children = self.initial_overlays
+                        )
+                    ]
+            ),
             #dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
             #html.Div(id='ask-fusey-box',style={'visibility':'hidden','position':'absolute','top':'50px','right':'10px','zIndex':'1000'}),
             html.Div(id='marker-add-div',children = []),
@@ -2410,13 +2416,14 @@ class LayoutHandler:
         # Accessing the folder structure saved in dataset_handler            
         for f in dataset_handler.slide_datasets:
             folder_dict = {}
-            folder_dict['Name'] = dataset_handler.slide_datasets[f]['name']
-            
-            folder_meta_keys = list(dataset_handler.slide_datasets[f]['Metadata'])
-            for m in folder_meta_keys:
-                folder_dict[m] = dataset_handler.slide_datasets[f]['Metadata'][m]
+            if 'name' in dataset_handler.slide_datasets[f]:
+                folder_dict['Name'] = dataset_handler.slide_datasets[f]['name']
+                
+                folder_meta_keys = list(dataset_handler.slide_datasets[f]['Metadata'])
+                for m in folder_meta_keys:
+                    folder_dict[m] = dataset_handler.slide_datasets[f]['Metadata'][m]
 
-            combined_dataset_dict.append(folder_dict)
+                combined_dataset_dict.append(folder_dict)
 
         dataset_df = pd.DataFrame.from_records(combined_dataset_dict)
 
@@ -3706,7 +3713,6 @@ class GirderHandler:
             path = self.base_path
             path_type = self.base_path_type
 
-
         self.current_collection = {
             'path':[],
             'id':[]
@@ -3735,6 +3741,7 @@ class GirderHandler:
                 self.slide_datasets[f] = {}
                 folder_info = self.gc.get(f'/folder/{f}')
                 folder_name = folder_info['name']
+
                 if not folder_name=='histoqc_outputs' and folder_info['parentId'] in self.current_collection['id']:
                     self.slide_datasets[f]['name'] = folder_name
                 
@@ -3763,7 +3770,7 @@ class GirderHandler:
                             self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
                         elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
-    
+
         # Adding Public folders if any "FUSION_Upload" are in there
         user_folder_path = f'/user/{username}/Public'
         folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder_path})['_id']
@@ -3815,6 +3822,8 @@ class GirderHandler:
 
         if len(default_slide_list)>0:
             self.default_slides = default_slide_list
+        else:
+            self.default_slides = []
         
     def get_collection_annotation_meta(self,select_ids:list):
 
@@ -4037,30 +4046,32 @@ class GirderHandler:
         
         # Checking usability study usernames in FUSION Assets folder
         # Running at startup and then when pages change so we can update this file without restarting FUSION
+        try:
+            usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
+            if updated_info is None:
+                usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
+                self.usability_users = usability_info
+                return usability_info
+            else:
+                
+                item_files = self.gc.get(f'/item/{usability_usernames_id["_id"]}/files',parameters={'limit':1000})
+                put_response = self.gc.put(f'/file/{item_files[0]["_id"]}/contents',
+                    parameters={'size':len(json.dumps(updated_info).encode('utf-8'))},
+                    data = json.dumps(updated_info)
+                )
 
-        usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
-        if updated_info is None:
-            usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
-            self.usability_users = usability_info
-            return usability_info
-        else:
-            
-            item_files = self.gc.get(f'/item/{usability_usernames_id["_id"]}/files',parameters={'limit':1000})
-            put_response = self.gc.put(f'/file/{item_files[0]["_id"]}/contents',
-                parameters={'size':len(json.dumps(updated_info).encode('utf-8'))},
-                data = json.dumps(updated_info)
-            )
+                post_response = self.gc.post(f'/file/chunk',
+                    parameters={
+                        'size':len(json.dumps(updated_info).encode('utf-8')),
+                        'offset':0,
+                        'uploadId':put_response['_id']
+                        },
+                    data = json.dumps(updated_info)
+                )
 
-            post_response = self.gc.post(f'/file/chunk',
-                parameters={
-                    'size':len(json.dumps(updated_info).encode('utf-8')),
-                    'offset':0,
-                    'uploadId':put_response['_id']
-                    },
-                data = json.dumps(updated_info)
-            )
-
-            self.usability_users = updated_info
+                self.usability_users = updated_info
+        except girder_client.HttpError:
+            self.usability_users = {}
 
     def check_usability(self,username):
 

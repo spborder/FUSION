@@ -856,7 +856,7 @@ class CODEXSlide(DSASlide):
                 self.channel_names.append('Histology (H&E)')
                 self.channel_names = [i for i in self.channel_names if i not in ['red','green','blue']]
 
-        if self.channel_names == []:
+        if len(self.channel_names) == 0:
             # Fill in with dummy channel_names (test case with 16 or 17 channels)
             self.channel_names = [f'Channel_{i}' for i in range(0,self.n_frames)]
 
@@ -1101,7 +1101,7 @@ class CODEXSlide(DSASlide):
                         viewport_data[f]['UMAP'] = f_umap_data.to_dict('records')
 
                         f_tab_plot = px.scatter(
-                            data_Frame = f_umap_data,
+                            data_frame = f_umap_data,
                             x = 'UMAP1',
                             y = 'UMAP2',
                             color = f_label if not f_label is None else 'label',
@@ -1232,7 +1232,7 @@ class CODEXSlide(DSASlide):
                 dbc.Tabs(tab_list,active_tab=f'tab_{len(tab_list)-1}')
             )
         ])
-        
+
 
         return viewport_data_components, viewport_data
 

@@ -769,7 +769,7 @@ class FUSION:
         # Loading new WSI from dropdown selection
         self.app.callback(
             [Output('slide-tile-holder','children'),
-             Output('layer-control','children'),
+             Output('layer-control-holder','children'),
              Output({'type':'edit_control','index':ALL},'editToolbar'),
              Output('slide-map','center'),
              Output('cell-drop','options'),
@@ -1449,21 +1449,24 @@ class FUSION:
             # Pulling dataset metadata
             # Dataset name in this case is associated with a folder or collection
             dataset_ids = list(self.dataset_handler.slide_datasets.keys())
-            d_name = [self.dataset_handler.slide_datasets[i]['name'] for i in dataset_ids][d]
+
+            d_name = [self.dataset_handler.slide_datasets[i]['name'] for i in dataset_ids if 'name' in self.dataset_handler.slide_datasets[i]][d]
             d_id = dataset_ids[d]
-            metadata_available = self.dataset_handler.slide_datasets[d_id]['Metadata']
-            # This will store metadata, id, name, etc. for every slide in that dataset
-            slides_list = [i for i in self.dataset_handler.slide_datasets[d_id]['Slides']]
-            full_slides_list.extend(slides_list)
+            if d_id in list(self.dataset_handler.slide_datasets.keys()):
+                if len(list(self.dataset_handler.slide_datasets[d_id].keys()))>0:
+                    metadata_available = self.dataset_handler.slide_datasets[d_id]['Metadata']
+                    # This will store metadata, id, name, etc. for every slide in that dataset
+                    slides_list = [i for i in self.dataset_handler.slide_datasets[d_id]['Slides']]
+                    full_slides_list.extend(slides_list)
 
-            slide_dataset_dict.extend([{'Slide Names':s['name'],'Dataset':d_name} for s in slides_list])
+                    slide_dataset_dict.extend([{'Slide Names':s['name'],'Dataset':d_name} for s in slides_list])
 
-            # Grabbing dataset-level metadata
-            metadata_available['FTU Expression Statistics'] = []
-            metadata_available['FTU Morphometrics'] = []
+                    # Grabbing dataset-level metadata
+                    metadata_available['FTU Expression Statistics'] = []
+                    metadata_available['FTU Morphometrics'] = []
 
-            all_metadata.append(metadata_available)
-            all_metadata_labels.extend(list(metadata_available.keys()))
+                    all_metadata.append(metadata_available)
+                    all_metadata_labels.extend(list(metadata_available.keys()))
 
         #self.metadata = all_metadata
         all_metadata_labels = np.unique(all_metadata_labels)
@@ -3352,7 +3355,7 @@ class FUSION:
                             url = self.wsi.channel_tile_url[c_idx],
                             tileSize = self.wsi.tile_dims[0],
                             maxNativeZoom = self.wsi.zoom_levels-1,
-                            id = {'type':'codex-tile-layer','index':c_idx}
+                            id = f'codex-tile-layer{random.randint(0,100)}'
                         ),
                         name = c_name,
                         checked = c_name== self.wsi.channel_names[0]
@@ -3479,7 +3482,12 @@ class FUSION:
                 for idx,struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-            return slide_tile_layer, new_children, remove_old_edits, map_center, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs, cell_annotation_tab_disable
+            new_layer_control = dl.LayersControl(
+                id = f'layer-control{random.randint(0,100)}',
+                children = new_children
+            )
+
+            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs, cell_annotation_tab_disable
         else:
             raise exceptions.PreventUpdate
 
@@ -8265,10 +8273,7 @@ def app(*args):
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides)
-    layout_handler.gen_vis_layout(
-        wsi,
-        cli_list
-        )
+    layout_handler.gen_vis_layout(wsi,cli_list)
     layout_handler.gen_builder_layout(dataset_handler,initial_user_info)
     layout_handler.gen_uploader_layout()
 
