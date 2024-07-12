@@ -462,6 +462,46 @@ class FUSION:
             return not is_open
         return is_open
 
+    def open_plugin_collapse(self,n,is_open):
+        """
+        Opening the running plugins collapse to see all the user's current jobs
+        """
+        if n:
+            return not is_open
+        return is_open
+
+    def open_job_collapse(self,n,is_open,user_store_data):
+        """
+        Opening a specific job's collapse and updating with logs
+        """
+        if n:
+            user_store_data = json.loads(user_store_data)
+
+            # Getting the clicked job index:
+            user_jobs = self.dataset_handler.get_user_jobs(user_store_data['_id'])
+
+            job_id = user_jobs[ctx.triggered_id['index']]['_id']
+
+            job_status, job_logs = self.dataset_handler.get_job_status(job_id)
+            job_logs = job_logs.split('\n')
+
+            if job_status==3:
+                badge_children = html.A('Complete')
+                badge_color = 'success'
+            elif job_status==2:
+                badge_children = html.A('Running')
+                badge_color = 'warning'
+            elif job_status==4:
+                badge_children = html.A('Failed')
+                badge_color = 'danger'
+            else:
+                badge_children = html.A(f'Unknown: ({job_status})')
+                badge_color = 'info'
+
+            return not is_open, badge_children, badge_color, [html.P(i) for i in job_logs]
+
+        return is_open, no_update, no_update, []
+
     def ga_callbacks(self):
 
         # Callbacks with recorded user data for Google Analytics
@@ -547,7 +587,8 @@ class FUSION:
                 Output('user-id-div', 'children'),
                 Output({'type':'usability-sign-up','index':ALL},'style'),
                 Output({'type':'usability-butt','index':ALL},'style'),
-                Output('user-store','data')
+                Output('user-store','data'),
+                Output('long-plugin-div','children')
             ],
             [
                 Input('login-submit','n_clicks'),
@@ -563,6 +604,30 @@ class FUSION:
             prevent_initial_call=True
         )(self.girder_login)
 
+        # Open up job status collapse
+        self.app.callback(
+            Output('plugin-collapse','is_open'),
+            Input('long-plugin-butt','n_clicks'),
+            State('plugin-collapse','is_open'),
+            prevent_initial_call = True
+        )(self.open_plugin_collapse)
+
+        # Update job status and view logs
+        self.app.callback(
+            [
+                Output({'type':'checked-job-collapse','index': MATCH},'is_open'),
+                Output({'type': 'job-status-badge','index': MATCH},'children'),
+                Output({'type': 'job-status-badge','index':MATCH},'color'),
+                Output({'type': 'checked-job-logs','index': MATCH},'children')
+            ],
+            Input({'type':'job-status-button','index': MATCH},'n_clicks'),
+            [
+                State({'type':'checked-job-collapse','index': MATCH},'is_open'),
+                State('user-store','data')
+            ],
+        prevent_initial_call = True
+        )(self.open_job_collapse)
+
         # Loading new tutorial slides
         self.app.callback(
             Input({'type':'tutorial-tabs','index':ALL},'active_tab'),
@@ -572,7 +637,7 @@ class FUSION:
         # Updating questions in question tab
         self.app.callback(
             Input({'type':'questions-tabs','index':ALL},'active_tab'),
-            State('logged-in-user','children'),
+            State('user-data','store'),
             Output({'type':'question-div','index':ALL},'children'),
         )(self.update_question_div)
 
@@ -651,6 +716,8 @@ class FUSION:
         # Updating Cell Composition pie charts
         self.app.callback(
             [Output('roi-pie-holder','children'),
+             Output('annotation-session-div','children'),
+             Output('cell-annotation-div','children'),
              Output({'type':'viewport-store-data','index':ALL},'data'),
              Output('user-store','data')
              ],
@@ -1044,7 +1111,8 @@ class FUSION:
                 State({'type':'annotation-image-label','index':ALL},'value'),
                 State({'type':'annotation-station-ftu','index':ALL},'children'),
                 State({'type':'annotation-station-ftu-idx','index':ALL},'children'),
-                State('user-store','data')
+                State('user-store','data'),
+                State('viewport-store-data','data')
             ],
             prevent_initial_call = True
         )(self.update_current_annotation)
@@ -1790,12 +1858,15 @@ class FUSION:
         """
         user_data_store = json.loads(user_data_store)
         
-        frame_label_disable = [no_update]*len(ctx.outputs_list[2])
         if not len(get_pattern_matching_value(current_data))==0:
             viewport_store_data = json.loads(get_pattern_matching_value(current_data))
         else:
             viewport_store_data = {}
         cell_view_type = get_pattern_matching_value(cell_view_type)
+
+        viewport_data_components = no_update
+        annotation_session_components = no_update
+        cell_annotation_components = no_update
         
         if update_data or ctx.triggered_id=='roi-view-data':
             if not self.wsi is None:
@@ -1837,9 +1908,6 @@ class FUSION:
                         'name': cell_view_type
                     }
 
-                print(f'cell_view_type: {cell_view_type}')
-                print(view_type_dict)
-
                 viewport_store_data['view_type_dict'] = view_type_dict
 
                 # Generalized get_viewport_data method for self.wsi which should return a list of all the stuff needed for that tab
@@ -1853,21 +1921,24 @@ class FUSION:
                 viewport_data_return = json.dumps(viewport_store_data)
                 user_data_return = json.dumps(user_data_store)
 
-                return viewport_data_components, [viewport_data_return], user_data_return
+                return viewport_data_components, annotation_session_components, cell_annotation_components, [viewport_data_return], user_data_return
 
             else:
-                return html.P('Select a slide to get started!'), [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return [html.P('Select a slide to get started!')], [json.dumps(viewport_store_data)], json.dumps(user_data_store)
     
         elif current_tab=='annotation-tab':
             if self.dataset_handler.username=='fusionguest':
-                return html.P('Sign in or create an account to start annotating!'), [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return viewport_data_components, html.P('Sign in or create an account to start annotating!'), cell_annotation_components, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
             else:
                 
                 # Getting intersecting FTU information
                 intersecting_ftus = {}
                 for ftu in self.current_ftu_layers:
                     if not ftu=='Spots':
-                        intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                        intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(
+                            viewport_store_data['current_slide_bounds'],
+                            ftu
+                        )
 
                 for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
                     intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
@@ -1895,8 +1966,22 @@ class FUSION:
                         )
                 ])
 
-                return annotation_tab_group, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return viewport_data_components, annotation_tab_group, cell_annotation_components, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
         
+        elif current_tab == 'cell-annotation-tab':
+
+            # Getting cell annotation components from CODEXSlide
+            current_cell_annotation_data = {
+                'current_ontology': None,
+                'n_labeled': 0,
+                'current_rules': []
+            }
+            cell_annotation_components = self.wsi.populate_cell_annotation(
+                viewport_store_data['current_slide_bounds'], 
+                current_cell_annotation_data
+            )
+
+            return viewport_data_components, annotation_session_components,cell_annotation_components, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
         else:
             raise exceptions.PreventUpdate
 
@@ -5168,20 +5253,102 @@ class FUSION:
     def girder_login(self,p_butt,create_butt,username,pword,email,firstname,lastname):
 
         create_user_children = []
-        print(f'login ctx.triggered_id: {ctx.triggered_id}')
         usability_signup_style = no_update
         usability_butt_style = no_update
+        long_plugin_components = [no_update]
 
         if ctx.triggered_id=='login-submit':
 
             try:
                 user_info, user_details = self.dataset_handler.authenticate(username,pword)
-
                 user_id = user_details['_id']
+
+                user_jobs = self.dataset_handler.get_user_jobs(user_id)
+                if len(user_jobs)>0:
+                    plugin_progress_div = []
+                    for job_idx, job in enumerate(user_jobs):
+                        plugin_name = job['title']
+                        plugin_status = job['status']
+                        
+                        if plugin_status==3:
+                            current_status_badge = dbc.Badge(
+                                html.A('Complete'),
+                                color = 'success',
+                                id = {'type': 'job-status-badge','index': job_idx}
+                            )
+                        elif plugin_status==2:
+                            current_status_badge = dbc.Badge(
+                                html.A('Running'),
+                                color = 'warning',
+                                id = {'type': 'job-status-badge','index': job_idx}
+                            )
+                        elif plugin_status==4:
+                            current_status_badge = dbc.Badge(
+                                html.A('Failed'),
+                                color = 'danger',
+                                id = {'type': 'job-status-badge','index': job_idx}
+                            )
+                        else:
+                            current_status_badge = dbc.Badge(
+                                html.A(f'Unknown: ({plugin_status})'),
+                                color = 'info',
+                                id = {'type': 'job-status-badge','index': job_idx}
+                            )
+
+                        plugin_progress_div.append(
+                            dbc.Card([
+                                dbc.CardHeader([
+                                    plugin_name,
+                                    current_status_badge,
+                                    html.I(
+                                        className = 'bi bi-info-circle-fill me-5',
+                                        id = {'type': 'job-status-button','index': job_idx}
+                                    ),
+                                    dbc.Popover(
+                                        children = [
+                                            html.Img(src = './assets/fusey_clean.svg',height=20,width=20),
+                                            'Update job status and view logs'
+                                        ],
+                                        target = {'type': 'job-status-button','index': job_idx},
+                                        body = True,
+                                        trigger = 'hover'
+                                    )
+                                ]),
+                                dbc.Collapse(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            html.Div(
+                                                id = {'type': 'checked-job-logs','index': job_idx},
+                                                children = [],
+                                                style = {'maxHeight': '20vh','overflow':'scroll'}
+                                            )
+                                        )
+                                    ),
+                                    id = {'type': 'checked-job-collapse','index':job_idx},
+                                    is_open = False
+                                )
+                            ])
+                        )
+
+                else:
+                    plugin_progress_div = ['No jobs run yet!']
+                
+                long_plugin_components = [html.Div(
+                    children = plugin_progress_div,
+                    style = {'maxHeight': '30vh','overflow':'scroll'}
+                )]
+
 
                 button_color = 'success'
                 button_text = 'Success!'
-                logged_in_user = f'Welcome: {username}'
+                logged_in_user = [
+                    f'Welcome: {username}',
+                    dbc.Badge(
+                        html.A('Jobs'),
+                        color = 'success' if len(user_jobs)>0 else 'secondary',
+                        id = 'long-plugin-butt'
+                    )
+                ]
                 upload_disabled = False
 
                 user_data_output = user_details
@@ -5197,12 +5364,19 @@ class FUSION:
 
                 button_color = 'warning'
                 button_text = 'Login Failed'
-                logged_in_user = 'Welcome: fusionguest'
+                logged_in_user = [
+                    'Welcome: fusionguest',
+                    dbc.Badge(
+                        html.A('Jobs'),
+                        color = 'secondary',
+                        id = 'long-plugin-butt'
+                    )
+                ]
                 upload_disabled = True
 
                 user_data_output = no_update
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output, long_plugin_components
         
         elif ctx.triggered_id=='create-user-submit':
             if len(email)==0 or len(firstname)==0 or len(lastname)==0:
@@ -5224,10 +5398,17 @@ class FUSION:
 
                 button_color = 'success'
                 button_text = 'Login'
-                logged_in_user = 'Welcome: fusionguest'
+                logged_in_user = [
+                    'Welcome: fusionguest',
+                    dbc.Badge(
+                        html.A('Jobs'),
+                        color = 'secondary',
+                        id = 'long-plugin-butt'
+                    )
+                ]
                 upload_disabled = True
 
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], no_update
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], no_update, long_plugin_components
 
 
             else:
@@ -5237,7 +5418,14 @@ class FUSION:
 
                     button_color = 'success',
                     button_text = 'Success!',
-                    logged_in_user = f'Welcome: {username}'
+                    logged_in_user = [
+                        f'Welcome: {username}',
+                        dbc.Badge(
+                            html.A('Jobs'),
+                            color = 'secondary',
+                            id = 'long-plugin-butt'
+                        )
+                    ]
                     upload_disabled = False
 
                     user_data_output = {
@@ -5256,12 +5444,19 @@ class FUSION:
 
                     button_color = 'warning'
                     button_text = 'Login Failed'
-                    logged_in_user = f'Welcome: fusionguest'
+                    logged_in_user = [
+                        f'Welcome: fusionguest',
+                        dbc.Badge(
+                            html.A('Jobs'),
+                            color = 'secondary',
+                            id = 'long-plugin-butt'
+                        )
+                    ]
                     upload_disabled = True
 
                     user_data_output = no_update
             
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output, long_plugin_components
 
         else:
             raise exceptions.PreventUpdate
@@ -6598,9 +6793,10 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def update_question_div(self,question_tab,logged_in_user):
+    def update_question_div(self,question_tab,user_store_data):
 
-        logged_in_username = logged_in_user.split(' ')[-1]
+        user_store_data = json.loads(user_store_data)
+        logged_in_username = user_store_data['login']
         # Updating the questions that the user sees in the usability questions tab
         usability_info = self.dataset_handler.update_usability()
         # Username is also present in the welcome div thing
@@ -7361,7 +7557,7 @@ class FUSION:
         
         return return_div, new_annotation_tab_group, json.dumps(user_data_store)
     
-    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data):
+    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data, viewport_store_data):
         """
         Getting current annotation data (text or image) and saving to annotation session folder on the server
         """
@@ -7374,6 +7570,7 @@ class FUSION:
         session_ftu_progress_label = [no_update]*len(ctx.outputs_list[7])
 
         user_store_data = json.loads(user_store_data)
+        viewport_store_data = json.loads(viewport_store_data)
 
         line_slide = get_pattern_matching_value(line_slide)
         if line_slide is None:
@@ -7429,7 +7626,10 @@ class FUSION:
             if not 'Manual' in clicked_ftu_name and not 'Marked' in clicked_ftu_name:
                 if clicked_ftu_name=='FTU':
                     clicked_ftu_name = ftu_names[0][0].split(':')[0]
-                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(
+                    viewport_store_data['current_slide_bounds'],
+                    clicked_ftu_name
+                )
             elif 'Manual' in clicked_ftu_name:
                 manual_idx = int(clicked_ftu_name.split(':')[-1])-1
                 intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson']['features'][0]['geometry'])]
@@ -7459,7 +7659,11 @@ class FUSION:
             ftu_bbox = np.array(self.wsi.convert_map_coords(ftu_bbox_coords))
             ftu_bbox = [np.min(ftu_bbox[:,0])-50,np.min(ftu_bbox[:,1])-50,np.max(ftu_bbox[:,0])+50,np.max(ftu_bbox[:,1])+50]
             #TODO: This method only grabs histology images that are single frame or multi-frame with RGB at 0,1,2
-            ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,user_store_data,[int(i) for i in ftu_bbox])
+            ftu_image = self.dataset_handler.get_image_region(
+                self.wsi.item_id,
+                user_store_data,
+                [int(i) for i in ftu_bbox]
+            )
 
             if not ann_class_color is None:
                 color_parts = ann_class_color.replace('rgb(','').replace(')','').split(',')
@@ -7501,7 +7705,10 @@ class FUSION:
             if ctx.triggered_id['type']=='annotation-set-label':
                 # Grab the first member of the clicked ftu
                 if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
-                    intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+                    intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(
+                        viewport_store_data['current_slide_bounds'],
+                        clicked_ftu_name
+                    )
                 elif 'Manual' in clicked_ftu_name:
                     manual_idx = int(clicked_ftu_name.split(':')[-1])
                     intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
@@ -7553,7 +7760,10 @@ class FUSION:
 
             # Grab the first member of the clicked ftu
             if not 'Manual' in clicked_ftu_name and not 'Marked' in clicked_ftu_name:
-                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(
+                    viewport_store_data['current_slide_bounds'],
+                    clicked_ftu_name
+                )
             elif 'Manual' in clicked_ftu_name:
                 manual_idx = int(clicked_ftu_name.split(':')[-1])
                 intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]

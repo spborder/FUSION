@@ -863,6 +863,16 @@ class LayoutHandler:
             ])
         ])
 
+        # Cell annotation tab
+        cell_annotation_tab = dbc.Card([
+            dbc.CardBody([
+                html.Div(
+                    id = 'cell-annotation-div',
+                    children = []
+                )
+            ])
+        ])
+
 
         # List of all tools tabs
         tool_tabs = [
@@ -872,7 +882,7 @@ class LayoutHandler:
             dbc.Tab(cluster_card,label = 'Morphological Clustering',tab_id='clustering-tab'),
             dbc.Tab(extract_card,label = 'Download Data',tab_id='download-tab'),
             dbc.Tab(annotation_session_tab, label = 'Annotation Station', tab_id = 'annotation-tab'),
-            dbc.Tab(children = [], label = "Cell Annotation", tab_id = 'cell-annotation-tab',disabled = True,id = 'cell-annotation-tab')
+            dbc.Tab(cell_annotation_tab, label = "Cell Annotation", tab_id = 'cell-annotation-tab',disabled = True,id = 'cell-annotation-tab')
             #dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True,tab_id='analyses-tab'),
         ]
         
@@ -3180,7 +3190,14 @@ class LayoutHandler:
                         style={'marginLeft':'5px','display':'none'},
                         disabled=False
                     ),
-                    html.Div(id='logged-in-user',children = [f'Welcome, {initial_user["login"]}!']),
+                    html.Div(id='logged-in-user',children = [
+                        f'Welcome, {initial_user["login"]}!',
+                        dbc.Badge(
+                            html.A('Jobs'),
+                            color = 'secondary',
+                            id = 'long-plugin-butt'
+                        )
+                        ]),
                     html.Div(
                         id = 'user-store-div',
                         children = [
@@ -3204,9 +3221,13 @@ class LayoutHandler:
                     )
                 ]),
                 dbc.CardFooter([
-                    html.Div(
-                        id = {'type':'long-plugin-div','index': 0},
-                        children = []
+                    dbc.Collapse(
+                        html.Div(
+                            id = 'long-plugin-div',
+                            children = []
+                        ),
+                        id = 'plugin-collapse',
+                        is_open = False
                     )
                 ])
             ],style={'marginBottom':'20px'}
@@ -3919,6 +3940,19 @@ class GirderHandler:
             return new_upload_id
         else:
             return None
+
+    def get_user_jobs(self, user_id):
+        """
+        Returns list of job ids for a user. 
+        """
+
+        user_job_list = self.gc.get('/job',
+                                    parameters = {
+                                        'userId': user_id,
+                                        'limit': 10
+                                    })
+
+        return user_job_list
 
     def get_job_status(self,job_id: Union[str,None]):
         """

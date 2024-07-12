@@ -1232,16 +1232,66 @@ class CODEXSlide(DSASlide):
                 dbc.Tabs(tab_list,active_tab=f'tab_{len(tab_list)-1}')
             )
         ])
-
-
-
-
-
-
-
-
+        
 
         return viewport_data_components, viewport_data
+
+    def populate_cell_annotation(self, region_selection, current_data):
+        """
+        Populating cell annotation tab based on previous/new selections
+        """
+        # region_selection = whether running for the whole slide or just a specific region (current viewport)
+        # current_data = dictionary containing any previous cell annotation information
+        # Main component should be a big plot showing dimensional reduction, either select points
+        # or run some clustering to pull out groups of points, see violin plots of specific channels, parent structures,
+        # and some connectivity/graph-based measurement
+
+        print(f'region_selection: {region_selection}')
+        print(f'current_data: {current_data}')
+
+        cell_annotation_components = []
+
+        cell_annotation_components = [html.Div([
+                                        dbc.Row('Some header here to describe the tab'),
+                                        html.Hr(),
+                                        dbc.Row('Then something about either using all data or the current viewport'),
+                                        html.Hr(),
+                                        dbc.Row('Then something that will show the big plot of all all/select cell features'),
+                                        html.Hr(),
+                                        dbc.Row([
+                                            dbc.Col([
+                                                dbc.Row(
+                                                    'Maybe something here where you can specify cell type names or view current ontologies'
+                                                )
+                                            ],md = 6),
+                                            dbc.Col([
+                                                dbc.Row(
+                                                    'Then something here where you can pick and choose labels for individual cells that were selected'
+                                                )
+                                            ],md=6)
+                                        ]),
+                                        html.Hr(),
+                                        dbc.Row(
+                                            'Should be some kind of progress indicator down here'
+                                        )
+                                    ])]
+        
+
+        return cell_annotation_components
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class XeniumSlide(DSASlide):
