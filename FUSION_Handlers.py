@@ -251,7 +251,7 @@ class LayoutHandler:
                     dcc.Store(
                         id = {'type':'viewport-store-data','index':0},
                         storage_type='memory',
-                        data = []
+                        data = json.dumps({})
                     )
                 )
             ])
@@ -3278,7 +3278,7 @@ class LayoutHandler:
                         ),
                         dcc.Store(
                             id = 'slide-info-store',
-                            data = [],
+                            data = json.dumps({'overlay_prop': None,'cell_vis_val': 0.5,'current_channels': None, 'filter_vals': None}),
                             storage_type='memory'
                         ),
                         dcc.Store(

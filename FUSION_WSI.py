@@ -902,7 +902,6 @@ class CODEXSlide(DSASlide):
         slide_coords_list = [min_x,min_y,max_x,max_y]
         frame_properties = {}
         for frame in frame_indices:
-            #print(f'Working on frame {frame} of {self.n_frames}')
             # Get the image region associated with that frame
             # Or just get the histogram for that channel? not sure if this can be for a specific image region
             image_histogram = self.girder_handler.gc.get(f'/item/{self.item_id}/tiles/histogram',
@@ -1023,7 +1022,6 @@ class CODEXSlide(DSASlide):
                     
                     counts_data_list = []
                     counts_data = pd.DataFrame()
-                    print(len(list(intersecting_ftus.keys())))
                     if type(intersecting_ftus[f])==list:
                         for ftu_idx,ind_ftu in enumerate(intersecting_ftus[f]):
                             cell_features = {}
@@ -1041,7 +1039,7 @@ class CODEXSlide(DSASlide):
                             
                             cell_features['label'] = 'Cell Nucleus'
 
-                            cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][f_idx].bounds)}
+                            cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
 
                             counts_data_list.append(cell_features)
 

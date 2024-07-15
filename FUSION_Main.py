@@ -171,14 +171,6 @@ class FUSION:
             self.ftus = []
             self.current_ftu_layers = []
 
-        # Specifying available properties with visualizations implemented
-        self.visualization_properties = [
-            'Cluster','Main_Cell_Types','Max Cell Type','Gene Counts','Morphometrics','Cell_Subtypes'
-        ]
-
-        # Initializing some parameters
-        self.overlay_prop = None
-
         # Cell Hierarchy related properties
         self.node_cols = {
             'Anatomical Structure':{'abbrev':'AS','x_start':50,'y_start':75,
@@ -191,11 +183,6 @@ class FUSION:
 
         # Colormap settings (customize later)
         self.color_map = colormaps['jet']
-        self.cell_vis_val = 0.5
-        self.filter_vals = None
-        self.overlap_prop = None
-        self.hex_color_key = {}
-        self.current_channels = {}
 
         # JavaScript functions for controlling annotation properties
         self.ftu_style_handle = assign("""function(feature,context){
@@ -637,7 +624,7 @@ class FUSION:
         # Updating questions in question tab
         self.app.callback(
             Input({'type':'questions-tabs','index':ALL},'active_tab'),
-            State('user-data','store'),
+            State('user-store','data'),
             Output({'type':'question-div','index':ALL},'children'),
         )(self.update_question_div)
 
@@ -671,14 +658,16 @@ class FUSION:
             [Output({'type':'ftu-bounds','index':ALL},'hideout'),Output('colorbar-div','children'),
              Output('filter-slider','min'),Output('filter-slider','max'),Output('filter-slider','disabled'),
              Output('cell-sub-select-div','children'),Output({'type':'gene-info-div','index':ALL},'style'),
-             Output({'type':'gene-info-div','index':ALL},'children')],
+             Output({'type':'gene-info-div','index':ALL},'children'),
+             Output('slide-info-store','data')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
              Input('filter-slider','value'), Input({'type':'added-filter-slider','index':ALL},'value'),
              Input({'type':'added-filter-drop','index':ALL},'value'),
              Input({'type':'ftu-bound-color-butt','index':ALL},'n_clicks'),
              Input({'type':'cell-sub-drop','index':ALL},'value')],
             [State({'type':'ftu-bound-color','index':ALL},'value'),
-             State({'type':'added-filter-slider-div','index':ALL},'style')],
+             State({'type':'added-filter-slider-div','index':ALL},'style'),
+             State('slide-info-store','data')],
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -699,6 +688,7 @@ class FUSION:
                 Input('add-filter-button','n_clicks'),
                 Input({'type':'delete-filter','index':ALL},'n_clicks')
             ],
+            State('slide-info-store','data'),
             prevent_initial_call = True
         )(self.add_filter)
 
@@ -858,6 +848,7 @@ class FUSION:
             [Output('layer-control','children'),
              Output('data-select','options'),
              Output('user-annotations-div', 'children')],
+            State('slide-info-store','data'),
             prevent_initial_call=True
         )(self.add_manual_roi)
 
@@ -979,18 +970,22 @@ class FUSION:
         # Special overlay populating
         self.app.callback(
             [Output({'type':'channel-overlay-select-div','index': ALL},'children'),
-             Output({'type':'channel-overlay-butt','index':ALL},'disabled')],
+             Output({'type':'channel-overlay-butt','index':ALL},'disabled'),
+             Output('slide-info-store','data')],
             Input({'type':'channel-overlay-drop','index': ALL},'value'),
+            State('slide-info-store','data'),
             prevent_initial_call = True,
         )(self.add_channel_color_select)
 
         # Adding CODEX channel overlay
         self.app.callback(
             [Output({'type':'codex-tile-layer','index':ALL},'url'),
-             Output({'type':'overlay-channel-tab','index':ALL},'label_style')],
+             Output({'type':'overlay-channel-tab','index':ALL},'label_style'),
+             Output('slide-info-store','data')],
             Input({'type':'channel-overlay-butt','index':ALL},'n_clicks'),
             [State({'type':'overlay-channel-color','index':ALL},'value'),
-            State({'type':'overlay-channel-tab','index':ALL},'label')],
+            State({'type':'overlay-channel-tab','index':ALL},'label'),
+            State('slide-info-store','data')],
             prevent_initial_call = True
         )(self.add_channel_overlay)
 
@@ -1007,8 +1002,6 @@ class FUSION:
         # Grabbing points from current viewport umap (CODEX) and plotting other properties
         self.app.callback(
             [
-                Output({'type':'extracted-cell-labeling','index':ALL},'children'),
-                Output({'type':'cell-labeling-criteria','index':ALL},'children'),
                 Output('marker-add-div','children')
             ],
             [
@@ -1112,7 +1105,7 @@ class FUSION:
                 State({'type':'annotation-station-ftu','index':ALL},'children'),
                 State({'type':'annotation-station-ftu-idx','index':ALL},'children'),
                 State('user-store','data'),
-                State('viewport-store-data','data')
+                State({'type':'viewport-store-data','index': ALL},'data')
             ],
             prevent_initial_call = True
         )(self.update_current_annotation)
@@ -1893,8 +1886,6 @@ class FUSION:
             if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
                 if self.wsi.spatial_omics_type=='CODEX':
-
-                    print(frame_list)
                     if frame_list is None or len(frame_list)==0:
                         frame_list = [[self.wsi.channel_names[0]]]
                     
@@ -1913,18 +1904,21 @@ class FUSION:
 
                 viewport_store_data['view_type_dict'] = view_type_dict
 
-                # Generalized get_viewport_data method for self.wsi which should return a list of all the stuff needed for that tab
-                viewport_data_components, viewport_data = self.wsi.update_viewport_data(
-                    bounds_box = viewport_store_data['current_slide_bounds'],
-                    view_type = view_type_dict
-                )
+                if update_data or not update_data and not ctx.triggered_id=='slide-map':
+                    # Generalized get_viewport_data method for self.wsi which should return a list of all the stuff needed for that tab
+                    viewport_data_components, viewport_data = self.wsi.update_viewport_data(
+                        bounds_box = viewport_store_data['current_slide_bounds'],
+                        view_type = view_type_dict
+                    )
 
-                viewport_store_data['data'] = viewport_data
+                    viewport_store_data['data'] = viewport_data
 
-                viewport_data_return = json.dumps(viewport_store_data)
-                user_data_return = json.dumps(user_data_store)
+                    viewport_data_return = json.dumps(viewport_store_data)
+                    user_data_return = json.dumps(user_data_store)
 
-                return viewport_data_components, annotation_session_components, cell_annotation_components, [viewport_data_return], user_data_return
+                    return viewport_data_components, annotation_session_components, cell_annotation_components, [viewport_data_return], user_data_return
+                else:
+                    raise exceptions.PreventUpdate
 
             else:
                 return [html.P('Select a slide to get started!')], [json.dumps(viewport_store_data)], json.dumps(user_data_store)
@@ -2010,7 +2004,7 @@ class FUSION:
         else:
             return go.Figure()
     
-    def update_hex_color_key(self):
+    def update_hex_color_key(self, overlay_prop):
         
         # Iterate through all structures (and spots) in current wsi,
         # concatenate all of their proportions of specific cell types together
@@ -2021,9 +2015,9 @@ class FUSION:
 
         #TODO: Add a scaling/range thing for values used as overlays
         raw_values_list = []
-        if not self.overlay_prop is None:
-            if not self.overlay_prop['name'] is None:
-                raw_values_list.extend(self.wsi.get_overlay_value_list(self.overlay_prop))
+        if not overlay_prop is None:
+            if not overlay_prop['name'] is None:
+                raw_values_list.extend(self.wsi.get_overlay_value_list(overlay_prop))
 
         # Converting to RGB
         if len(raw_values_list)>0:
@@ -2043,19 +2037,32 @@ class FUSION:
             for row in range(rgb_values.shape[0]):
                 hex_list.append('#'+"%02x%02x%02x" % (rgb_values[row,0],rgb_values[row,1],rgb_values[row,2]))
 
-            self.hex_color_key = {i:j for i,j in zip(raw_values_list,hex_list)}
+            hex_color_key = {i:j for i,j in zip(raw_values_list,hex_list)}
         else:
-            self.hex_color_key = {}
+            hex_color_key = {}
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style):
+        return hex_color_key
+
+    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style, slide_info_store):
         """
         Updating overlay hideout property in GeoJSON layer used in self.ftu_style_handle        
         """
 
-        print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
-
+        if cell_val is None:
+            raise exceptions.PreventUpdate     
         m_prop = None
         cell_sub_select_children = no_update
+        slide_info_store = json.loads(slide_info_store)
+        
+        if 'overlay_prop' in slide_info_store:
+            overlay_prop = slide_info_store['overlay_prop']
+        else:
+            overlay_prop = None
+
+        if 'filter_vals' in slide_info_store:
+            ftu_filter_vals = slide_info_store['filter_vals']
+        else:
+            ftu_filter_vals = None
 
         if self.wsi.spatial_omics_type=='Visium':
             gene_info_style = [{'display':'none'}]
@@ -2071,8 +2078,7 @@ class FUSION:
             'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
             'border-radius':'10px',
             'width':'',
-            'padding':'0px 0px 0px 25px',
-
+            'padding':'0px 0px 0px 25px'
         }
 
         cell_sub_val = get_pattern_matching_value(cell_sub_val)
@@ -2114,7 +2120,7 @@ class FUSION:
                 if ctx.triggered_id == 'cell-drop':
                     
                     cell_sub_val= None
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value': cell_name,
                         'sub_value': cell_sub_val
@@ -2146,7 +2152,7 @@ class FUSION:
                     }
                 
                 elif cell_sub_val=='All':
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value': cell_name,
                         'sub_value': None
@@ -2154,22 +2160,22 @@ class FUSION:
                 
                 else:
                     # Visualizing a sub-property of a main cell type
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': 'Cell_States',
                         'value': cell_name,
                         'sub_value': cell_sub_val
                     }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
                 color_bar_style['width'] = '350px'
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=300,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
-                filter_min_val = np.min(list(self.hex_color_key.keys()))
-                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_min_val = np.min(list(hex_color_key.keys()))
+                filter_max_val = np.max(list(hex_color_key.keys()))
                 filter_disable = False
             
             elif m_prop == 'Cell_Subtypes':
@@ -2199,74 +2205,74 @@ class FUSION:
                     cell_sub_select_children = []
 
                 if cell_sub_val == 'All':
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': 'Main_Cell_Types',
                         'value':cell_name,
                         'sub_value':None
                     }
 
                 elif not cell_sub_val is None:
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value':cell_name,
                         'sub_value': cell_sub_val
                     }
 
                 else:
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': 'Main_Cell_Types',
                         'value': cell_name,
                         'sub_value': None
                     }
                 
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
                 color_bar_style['width'] = '350px'
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width = 300,height = 10,position = 'bottomleft',
                     id = f'colorbar{random.randint(0,100)}',
                     style = color_bar_style
                 )
 
-                if len(list(self.hex_color_key.keys()))==0:
+                if len(list(hex_color_key.keys()))==0:
                     filter_min_val = 0.0
                     filter_max_val = 1.0
                     filter_disable = True
                 else:
-                    filter_min_val = np.min(list(self.hex_color_key.keys()))
-                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                    filter_min_val = np.min(list(hex_color_key.keys()))
+                    filter_max_val = np.max(list(hex_color_key.keys()))
                     filter_disable = False
 
             elif m_prop == 'Cell_States':
                 # Selecting a specific cell state value for overlays
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': m_prop,
                     'value': cell_val,
                     'sub_value': None
                 }
 
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
                 color_bar_style['width'] = '350px'
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=300,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
                 
-                filter_min_val = np.min(list(self.hex_color_key.keys()))
-                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_min_val = np.min(list(hex_color_key.keys()))
+                filter_max_val = np.max(list(hex_color_key.keys()))
                 filter_disable = False
 
             elif m_prop == 'Max Cell Type':
                 # Getting the maximum cell type present for each structure
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': 'Main_Cell_Types',
                     'value':'max',
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
                 color_bar_style['width'] = '650px'
 
                 cell_sub_select_children = []
@@ -2274,7 +2280,7 @@ class FUSION:
                 cell_types = sorted(list(self.cell_graphics_key.keys()))
                 color_bar = dlx.categorical_colorbar(
                     categories = cell_types,
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=600,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
@@ -2285,17 +2291,17 @@ class FUSION:
 
             elif m_prop == 'Cluster':
                 # Getting cluster value associated with each structure
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': 'Cluster',
                     'value': None,
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
-                cluster_labels = sorted(list(self.hex_color_key.keys()))
+                cluster_labels = sorted(list(hex_color_key.keys()))
                 color_bar = dlx.categorical_colorbar(
                     categories = cluster_labels,
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width = 600, height = 10, position = 'bottomleft',
                     id = f'colorbar{random.randint(0,100)}',
                     style = color_bar_style
@@ -2307,19 +2313,19 @@ class FUSION:
                 filter_disable = True
                 
             elif m_prop == 'FTU Label':
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': 'Structure',
                     'value': None,
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
                 cell_sub_select_children = []
 
-                ftu_types = list(self.hex_color_key.keys())
+                ftu_types = list(hex_color_key.keys())
                 color_bar = dlx.categorical_colorbar(
                     categories = ftu_types,
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width = 600, height = 10, position = 'bottom left',
                     id = f'colorbar{random.randint(0,100)}',
                     style = color_bar_style
@@ -2331,12 +2337,12 @@ class FUSION:
             
             elif m_prop == 'Gene Counts':
 
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': 'Gene Counts',
                     'value': cell_val,
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
                 # Now displaying gene info
                 if triggered_id=='cell-drop':
@@ -2350,14 +2356,14 @@ class FUSION:
                 cell_sub_select_children = []
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=300,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
-                if len(list(self.hex_color_key.keys()))>0:
-                    filter_min_val = np.min(list(self.hex_color_key.keys()))
-                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                if len(list(hex_color_key.keys()))>0:
+                    filter_min_val = np.min(list(hex_color_key.keys()))
+                    filter_max_val = np.max(list(hex_color_key.keys()))
                 else:
                     filter_min_val = 0.0
                     filter_max_val = 1.0
@@ -2365,62 +2371,62 @@ class FUSION:
             
             elif m_prop == 'Morphometrics':
 
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': m_prop,
                     'value': cell_val,
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
                 cell_sub_select_children = []
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=300,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
-                filter_min_val = np.min(list(self.hex_color_key.keys()))
-                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_min_val = np.min(list(hex_color_key.keys()))
+                filter_max_val = np.max(list(hex_color_key.keys()))
                 filter_disable = False
             
             else:
                 if m_prop==cell_val:
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value': None,
                         'sub_value': None
                     }
                 else:
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value': cell_val,
                         'sub_value': None
                     }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
                 cell_sub_select_children = []
 
 
-                if all([not type(i)==str for i in list(self.hex_color_key.keys())]):
+                if all([not type(i)==str for i in list(hex_color_key.keys())]):
                     color_bar = dl.Colorbar(
-                        colorscale = list(self.hex_color_key.values()),
+                        colorscale = list(hex_color_key.values()),
                         width=300,height=10,position='bottomleft',
                         id=f'colorbar{random.randint(0,100)}',
                         style = color_bar_style)
                 else:
                     color_bar = dlx.categorical_colorbar(
-                        categories = sorted(list(self.hex_color_key.keys())),
-                        colorscale = list(self.hex_color_key.values()),
+                        categories = sorted(list(hex_color_key.keys())),
+                        colorscale = list(hex_color_key.values()),
                         width = 600, height = 10, position = 'bottomleft',
                         id = f'colorbar{random.randint(0,100)}',
                         style = color_bar_style
                     )
 
-                if not len(list(self.hex_color_key.keys()))==0:
-                    if all([not type(i)==str for i in list(self.hex_color_key.keys())]):
-                        filter_min_val = np.min(list(self.hex_color_key.keys()))
-                        filter_max_val = np.max(list(self.hex_color_key.keys()))
+                if not len(list(hex_color_key.keys()))==0:
+                    if all([not type(i)==str for i in list(hex_color_key.keys())]):
+                        filter_min_val = np.min(list(hex_color_key.keys()))
+                        filter_max_val = np.max(list(hex_color_key.keys()))
                         filter_disable = False
                     else:
                         filter_min_val = 0.0
@@ -2432,12 +2438,12 @@ class FUSION:
                     filter_disable = True
 
         else:
-            self.overlay_prop = {
+            overlay_prop = {
                 'name': None,
                 'value': None,
                 'sub_value': None
             }
-            self.update_hex_color_key()
+            hex_color_key = self.update_hex_color_key(overlay_prop)
 
             cell_sub_select_children = []
 
@@ -2447,11 +2453,11 @@ class FUSION:
             filter_max_val = 1
 
         if not filter_disable:
-            self.filter_vals = [
+            ftu_filter_vals = [
                 {
-                    'name': self.overlay_prop['name'],
-                    'value': self.overlay_prop['value'],
-                    'sub_value': self.overlay_prop['sub_value'],
+                    'name': overlay_prop['name'],
+                    'value': overlay_prop['value'],
+                    'sub_value': overlay_prop['sub_value'],
                     'range': filter_vals
                 }
             ]
@@ -2459,26 +2465,30 @@ class FUSION:
             # Processing the add-on filters:
             processed_filters = process_filters(added_filter_keys, added_filter_slider,added_slide_style, self.cell_names_key)
 
-            self.filter_vals.extend(processed_filters)
+            ftu_filter_vals.extend(processed_filters)
 
         else:
-            self.filter_vals = None
+            ftu_filter_vals = None
 
-        self.cell_vis_val = vis_val/100
+        cell_vis_val = vis_val/100
         n_layers = len(callback_context.outputs_list[0])
 
         geojson_hideout = [
             {
-                'color_key':self.hex_color_key,
-                'overlay_prop':self.overlay_prop,
-                'fillOpacity': self.cell_vis_val,
-                'ftu_colors':self.ftu_colors,
-                'filter_vals':self.filter_vals
+                'color_key':hex_color_key,
+                'overlay_prop':overlay_prop,
+                'fillOpacity': cell_vis_val,
+                'ftu_colors': self.ftu_colors,
+                'filter_vals': ftu_filter_vals
             }
             for i in range(0,n_layers)
         ]
 
-        return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children, gene_info_style, gene_info_components
+        slide_info_store['overlay_prop'] = overlay_prop
+        slide_info_store['filter_vals'] = ftu_filter_vals
+        slide_info_store = json.dumps(slide_info_store)
+
+        return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children, gene_info_style, gene_info_components, slide_info_store
 
     def update_cell_hierarchy(self,cell_clickData):
         """
@@ -3099,15 +3109,15 @@ class FUSION:
 
         return f'Label: {label}', dcc.Link(f'ID: {id}', href = new_url), f'Notes: {notes}'
     
-    def load_new_slide(self,slide_id,new_interval,modal_is_open,slide_info_store, user_data_store):
+    def load_new_slide(self,slide_id,new_interval,modal_is_open,slide_info_store_data, user_data_store):
         """
         Progress indicator for loading a new WSI and annotations
         """
         modal_open = True
         modal_children = []
-        slide_info_store_data = [no_update]
         disable_slide_load = False
 
+        slide_info_store_data = json.loads(slide_info_store_data)
         user_data_store = json.loads(user_data_store)
 
         if ctx.triggered_id=='slide-select':
@@ -3181,7 +3191,11 @@ class FUSION:
             # Storing some info in a data store component (erases upon refresh)
             slide_annotation_info = {
                 'slide_info': slide_info,
-                'annotations': annotation_info
+                'annotations': annotation_info,
+                'overlay_prop': None,
+                'cell_vis_val': 0.5,
+                'filter_vals': None,
+                'current_channels': None
             }
 
             n_annotations = len(annotation_info)
@@ -3189,9 +3203,8 @@ class FUSION:
                 first_annotation = annotation_info[0]['annotation']['name']
                 slide_annotation_info['loading_annotation'] = annotation_info[0]['_id']
 
-                slide_info_store_data = [
-                    json.dumps(slide_annotation_info)
-                ]
+                slide_info_store_data = json.dumps(slide_annotation_info)
+                
 
                 # Starting the get_annotation_geojson function on a new thread
                 new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = first_annotation, args = [0])
@@ -3215,9 +3228,8 @@ class FUSION:
                 ]
             else:
 
-                slide_info_store_data = [
-                    json.dumps(slide_annotation_info)
-                ]         
+                slide_info_store_data = json.dumps(slide_annotation_info)
+                         
                 modal_children = [
                     html.Div(
                         dbc.ModalHeader(html.H4(f'Loading Slide: {slide_info["name"]}'))
@@ -3226,19 +3238,17 @@ class FUSION:
         
         elif ctx.triggered_id=='slide-load-interval':
             
-            if not new_interval:
+            if not new_interval or self.wsi is None:
                 raise exceptions.PreventUpdate
             
-            slide_info_store = json.loads(slide_info_store[0])
-
-            if len(slide_info_store['annotations'])>0:
+            if len(slide_info_store_data['annotations'])>0:
 
                 # Checking if previous annotation is complete
-                all_annotation_ids = [i['_id'] for i in slide_info_store['annotations']]
-                previous_annotation_id = slide_info_store['loading_annotation']
+                all_annotation_ids = [i['_id'] for i in slide_info_store_data['annotations']]
+                previous_annotation_id = slide_info_store_data['loading_annotation']
                 
                 if not previous_annotation_id == 'done':
-                    previous_annotation_name = slide_info_store['annotations'][all_annotation_ids.index(previous_annotation_id)]['annotation']['name']
+                    previous_annotation_name = slide_info_store_data['annotations'][all_annotation_ids.index(previous_annotation_id)]['annotation']['name']
 
                     # Getting names of current threads to see if that one is still active
                     thread_names = [i.name for i in threading.enumerate()]
@@ -3248,12 +3258,12 @@ class FUSION:
                         next_ann_idx = all_annotation_ids.index(previous_annotation_id) + 1
 
                         n_annotations = len(all_annotation_ids)
-                        slide_name = slide_info_store['slide_info']['name']
+                        slide_name = slide_info_store_data['slide_info']['name']
 
                         if next_ann_idx<len(all_annotation_ids):
 
-                            next_annotation = slide_info_store['annotations'][next_ann_idx]['annotation']['name']
-                            slide_info_store['loading_annotation'] = slide_info_store['annotations'][next_ann_idx]['_id']
+                            next_annotation = slide_info_store_data['annotations'][next_ann_idx]['annotation']['name']
+                            slide_info_store_data['loading_annotation'] = slide_info_store_data['annotations'][next_ann_idx]['_id']
                             
                             # Starting the get_annotation_geojson function on a new thread
                             new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = next_annotation, args = [next_ann_idx])
@@ -3276,7 +3286,7 @@ class FUSION:
                                 ])
                             ]
                         else:
-                            slide_info_store['loading_annotation'] = 'done'
+                            slide_info_store_data['loading_annotation'] = 'done'
 
                             modal_children = [
                                 html.Div([
@@ -3293,9 +3303,9 @@ class FUSION:
 
                     else:
                         old_ann_idx = all_annotation_ids.index(previous_annotation_id)
-                        old_ann_name = slide_info_store['annotations'][old_ann_idx]['annotation']['name']
+                        old_ann_name = slide_info_store_data['annotations'][old_ann_idx]['annotation']['name']
                         n_annotations = len(all_annotation_ids)
-                        slide_name = slide_info_store['slide_info']['name']
+                        slide_name = slide_info_store_data['slide_info']['name']
 
                         modal_children = [
                             html.Div([
@@ -3318,9 +3328,7 @@ class FUSION:
                     disable_slide_load = True
                     modal_open = False
 
-                slide_info_store_data = [
-                    json.dumps(slide_info_store)
-                ]
+                slide_info_store_data = json.dumps(slide_info_store_data)
 
             else:
                 disable_slide_load = True
@@ -3332,13 +3340,17 @@ class FUSION:
         """
         Populating slide visualization components after loading annotation and tile information
         """
+
         load_slide_done = get_pattern_matching_value(load_slide_done)
         if load_slide_done:
             # Updating in the case that an FTU isn't in the previous set of ftu_colors
             self.ftu_colors = self.wsi.ftu_colors
 
             # Updating overlays colors according to the current cell
-            self.update_hex_color_key()
+            overlay_prop = None
+            cell_vis_val = 0.5
+            filter_vals = None
+            hex_color_key = self.update_hex_color_key(overlay_prop)
 
             special_overlays_opts = self.layout_handler.gen_special_overlay_opts(self.wsi)
 
@@ -3355,7 +3367,8 @@ class FUSION:
                             url = self.wsi.channel_tile_url[c_idx],
                             tileSize = self.wsi.tile_dims[0],
                             maxNativeZoom = self.wsi.zoom_levels-1,
-                            id = f'codex-tile-layer{random.randint(0,100)}'
+                            #id = f'codex-tile-layer{random.randint(0,100)}',
+                            id = {'type': 'codex-tile-layer','index': c_idx}
                         ),
                         name = c_name,
                         checked = c_name== self.wsi.channel_names[0]
@@ -3381,7 +3394,7 @@ class FUSION:
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(url = self.wsi.map_dict['FTUs'][struct]['url'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
-                                    hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
+                                    hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = filter_vals),
                                     hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                                     zoomToBounds=False,children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
                     ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
@@ -3395,7 +3408,7 @@ class FUSION:
                     dl.Overlay(
                         dl.LayerGroup(
                             dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
-                                        hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
+                                        hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
                                         hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')),
                                         children = [dl.Popup(id=man['popup_id'])])
                         ),
@@ -4414,12 +4427,17 @@ class FUSION:
         else:
             return go.Figure()
 
-    def add_manual_roi(self,new_geojson):
+    def add_manual_roi(self,new_geojson, slide_info_store):
         """
         Adding a rectangle, polygon, or marker annotation to the current image
         """
         
         if not self.wsi is None:
+            slide_info_store = json.loads(slide_info_store)
+            overlay_prop = slide_info_store['overlay_prop']
+            cell_vis_val = slide_info_store['cell_vis_val']
+            hex_color_key = slide_info_store['hex_color_key']
+
             try:
                 # Used for pattern-matching callbacks
                 triggered_id = ctx.triggered_id['type']
@@ -4514,7 +4532,7 @@ class FUSION:
                                 new_child = dl.Overlay(
                                     dl.LayerGroup(
                                         dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle),
-                                                hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
+                                                hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
                                                 hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
                                                 children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
                                             )
@@ -4599,7 +4617,7 @@ class FUSION:
                             new_child = dl.Overlay(
                                 dl.LayerGroup(
                                     dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), pointToLayer = self.render_marker_handle,
-                                            hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
+                                            hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
                                             hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
                                             children = []
                                             )
@@ -4617,7 +4635,7 @@ class FUSION:
                         if len(self.wsi.marked_ftus)>0:
                             data_select_options[3]['disabled'] = False
 
-                        self.update_hex_color_key()
+                        hex_color_key = self.update_hex_color_key(overlay_prop)
                         
                         if new_roi:
                             user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
@@ -4637,7 +4655,7 @@ class FUSION:
 
                         data_select_options = self.layout_handler.data_options
 
-                        self.update_hex_color_key()
+                        hex_color_key = self.update_hex_color_key(overlay_prop)
                         
                         return self.current_overlays, data_select_options, no_update
                 else:
@@ -6083,7 +6101,7 @@ class FUSION:
                 if not self.layer_ann is None:
 
                     ftu_value = self.feature_extract_ftus[self.layer_ann['current_layer']]
-                    image, mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_info,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                    image, mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_data_store,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
                     self.layer_ann['current_image'] = image
                     self.layer_ann['current_mask'] = mask
@@ -6177,7 +6195,7 @@ class FUSION:
 
             if ctx_triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
                 
-                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_info,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_data_store,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
                 self.layer_ann['current_image'] = new_image
                 self.layer_ann['current_mask'] = new_mask
 
@@ -7083,11 +7101,15 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def add_channel_color_select(self,channel_opts):
+    def add_channel_color_select(self,channel_opts, slide_info_store):
 
         # Creating a new color selector thing for overlaid channels?
         #TODO: get_pattern_matching_value test here
+
         if not channel_opts is None:
+            slide_info_store = json.loads(slide_info_store)
+            current_channels = slide_info_store['current_channels']
+
             if type(channel_opts)==list:
                 if len(channel_opts[0])>0:
                     channel_opts = channel_opts[0]
@@ -7097,13 +7119,14 @@ class FUSION:
                     active_tab = None
                     disable_butt = False
                     channel_opts = channel_opts[0]
-                    self.current_channels = {}
             
             # Removing any channels which aren't included from self.current_channels
-            intermediate_dict = self.current_channels.copy()
-            current_channels = list(self.current_channels.keys())
+            if not current_channels is None:
+                intermediate_dict = current_channels.copy()
+            else:
+                intermediate_dict = {}
 
-            self.current_channels = {}
+            current_channels = {}
             channel_tab_list = []
             for c_idx,channel in enumerate(channel_opts):
                 
@@ -7112,7 +7135,7 @@ class FUSION:
                 else:
                     channel_color = 'rgba(255,255,255,255)'
 
-                self.current_channels[channel] = {
+                current_channels[channel] = {
                     'index': self.wsi.channel_names.index(channel),
                     'color': channel_color
                 }
@@ -7123,6 +7146,7 @@ class FUSION:
                         tab_id = channel,
                         label = channel,
                         activeTabClassName='fw-bold fst-italic',
+                        label_style = {'color': channel_color if not channel_color=='rgba(255,255,255,255)' else 'rgb(0,0,0,255)'},
                         children = [
                             dmc.ColorPicker(
                                 id =  {'type':'overlay-channel-color','index':c_idx},
@@ -7140,25 +7164,32 @@ class FUSION:
                 active_tab = active_tab
             )
 
-            return [channel_tabs],[disable_butt]
-        else:
-            self.current_channels = {}
+            slide_info_store['current_channels'] = current_channels
+            slide_info_store = json.dumps(slide_info_store)
 
-            return [],[False]
+            return [channel_tabs],[disable_butt], slide_info_store
+        else:
+            current_channels = {}
+
+            slide_info_store['current_channels'] = current_channels
+
+            return [],[False], slide_info_store
     
-    def add_channel_overlay(self,butt_click,channel_colors,channels):
+    def add_channel_overlay(self,butt_click,channel_colors,channels, slide_info_store):
 
         # Adding an overlay for channel with a TileLayer containing stylized grayscale info
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
         
+        slide_info_store = json.loads(slide_info_store)
+        current_channels = slide_info_store['current_channels']
         # self.current_channels contains a list of all the currently overlaid channels
         # Updating the color for this channel
         for ch, co in zip(channels,channel_colors):
-            self.current_channels[ch]['color'] = co
+            current_channels[ch]['color'] = co
 
-        updated_channel_idxes = [self.current_channels[i]['index'] for i in self.current_channels]
-        updated_channel_colors = [self.current_channels[i]['color'] for i in self.current_channels]
+        updated_channel_idxes = [current_channels[i]['index'] for i in current_channels]
+        updated_channel_colors = [current_channels[i]['color'] for i in current_channels]
 
         update_style = {
             c_idx: color
@@ -7192,7 +7223,10 @@ class FUSION:
             for co in channel_colors
         ]
 
-        return updated_urls, tab_label_style
+        slide_info_store['current_channels'] = current_channels
+        slide_info_store = json.dumps(slide_info_store)
+
+        return updated_urls, tab_label_style, slide_info_store
 
     def get_asct_table(self,butt_click,hgnc_id):
         """
@@ -7281,11 +7315,14 @@ class FUSION:
         """
         pass
     
-    def add_filter(self,butt_click, delete_click):
+    def add_filter(self,butt_click, delete_click, slide_info_store):
         """
         Adding a new filter to apply to current FTUs
         """
-        if not self.wsi is None and not self.overlay_prop is None and not self.filter_vals is None:
+
+        slide_info_store = json.loads(slide_info_store)
+        overlay_prop = slide_info_store['overlay_prop']
+        if not self.wsi is None and not overlay_prop is None and not self.filter_vals is None:
             if ctx.triggered_id=='add-filter-button':
                 # Returning a new dropdown for selecting properties to use for a filter
 
@@ -7397,84 +7434,23 @@ class FUSION:
         """
         Takes as input some selected cells, a frame to plot their distribution of intensities, and then a Set button that labels those cells
         """
-        selectedData = get_pattern_matching_value(selectedData)
-        return_div = html.Div()
-        cell_markers = no_update
 
         if ctx.triggered_id is None:
             raise exceptions.PreventUpdate
-        
+            
         if ctx.triggered_id['type'] in ['ftu-cell-pie', 'cell-labeling-channel-drop']:
+            
+            all_cell_markers = []
+            for sD in selectedData:
+                if not sD is None:
+                    # Pulling customdata from each point object
+                    labeling_cells = [i['customdata'] for i in sD['points']]
 
-            if not selectedData is None:
-                print('Pulling new cells from clusters')
-                # Pulling customdata from each point object
-                labeling_cells = [i['customdata'] for i in selectedData['points']]
-
-                if not ctx.triggered_id['type']=='cell-labeling-channel-drop':
-                    channel_val = []
-
-                updated_cell_geojson, cell_markers = make_marker_geojson([i[0]['Bbox'] if type(i)==list else i['Bbox'] for i in labeling_cells],convert_coords = True, wsi = self.wsi)
-
-                return_div = html.Div([
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Row(html.H6('Selected Cells')),
-                            dbc.Card(
-                                dbc.CardBody(
-                                    children = [
-                                        dcc.Checklist(
-                                            options = [
-                                                {'label':f'Cell {idx}','value':'_'.join([str(j) for j in i[0]['Bbox']]) if type(i)==list else '_'.join([str(j) for j in i['Bbox']])}
-                                                for idx,i in enumerate(labeling_cells)
-                                            ],
-                                            value = ['_'.join([str(j) for j in i[0]['Bbox']]) if type(i)==list else '_'.join([str(j) for j in i['Bbox']]) for i in labeling_cells]
-                                        )
-                                        ],
-                                    style = {'maxHeight':'60vh','overflow':'scroll'}
-                                    )
-                                )
-                            ],
-                            md = 4
-                        ),
-                        dbc.Col([
-                            dbc.Row(html.H6('Selected Cell Labeling')),
-                            dbc.Row([
-                                dbc.Col(
-                                    'Label for Checked Cells: ',
-                                    md = 3
-                                ),
-                                dbc.Col(
-                                    dcc.Input(
-                                        id = {'type':'checked-cell-label','index':0},
-                                        placeholder = 'Type cell label here'
-                                    ),
-                                    md = 6
-                                ),
-                                dbc.Col(
-                                    dbc.Button(
-                                        'Submit',
-                                        className = 'd-grid col-12 mx-auto',
-                                        id = {'type':'checked-cell-label-butt','index':0}
-                                    ),
-                                    md = 3
-                                )
-                            ]),
-                            dbc.Row([
-                                html.Div(
-                                    id = 'cell-labeling-rationale',
-                                    children = [
-                                        'This is where the cell labeling rationale goes'
-                                    ]
-                                )
-                            ])
-                        ],md = 8)
-                    ])
-                ])
-            else:
-                raise exceptions.PreventUpdate
-
-        return [return_div], [f'{len(selectedData["points"])} Cells selected'], cell_markers
+                    updated_cell_geojson, cell_markers = make_marker_geojson([i[0]['Bbox'] if type(i)==list else i['Bbox'] for i in labeling_cells],convert_coords = True, wsi = self.wsi)
+                    all_cell_markers.extend(cell_markers)
+            return all_cell_markers
+        else:
+            raise exceptions.PreventUpdate
 
     def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types, user_data_store):
         """
