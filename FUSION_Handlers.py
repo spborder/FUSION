@@ -169,12 +169,21 @@ class LayoutHandler:
                 ]
             ),
             dl.FullScreenControl(position='topleft'),
-            dl.FeatureGroup(id='feature-group',
-                            children = [
-                                dl.EditControl(id = {'type':'edit_control','index':0},
-                                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
-                                                position='topleft')
-                            ]),
+            html.Div(
+                id = 'edit-control-holder',
+                children = [
+                    dl.FeatureGroup(
+                        id='feature-group',
+                        children = [
+                            dl.EditControl(
+                                id = {'type':'edit-control','index':0},
+                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
+                                position='topleft'
+                            )
+                        ]
+                    )
+                ]
+            ),
             html.Div(id='colorbar-div',
                      children = [
                          dl.Colorbar(id='map-colorbar')

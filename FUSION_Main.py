@@ -760,7 +760,7 @@ class FUSION:
         self.app.callback(
             [Output('slide-tile-holder','children'),
              Output('layer-control-holder','children'),
-             Output({'type':'edit_control','index':ALL},'editToolbar'),
+             Output({'type':'edit-control','index':ALL},'editToolbar'),
              Output('slide-map','center'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
@@ -844,7 +844,7 @@ class FUSION:
 
         # Adding manual ROIs using EditControl
         self.app.callback(
-            Input({'type':'edit_control','index':ALL},'geojson'),
+            Input({'type':'edit-control','index':ALL},'geojson'),
             [Output('layer-control','children'),
              Output('data-select','options'),
              Output('user-annotations-div', 'children')],
@@ -3496,7 +3496,7 @@ class FUSION:
             ]
 
             new_layer_control = dl.LayersControl(
-                id = f'layer-control{random.randint(0,100)}',
+                id = f'layer-control',
                 children = new_children
             )
 
@@ -4427,16 +4427,30 @@ class FUSION:
         else:
             return go.Figure()
 
-    def add_manual_roi(self,new_geojson, slide_info_store):
+    def add_manual_roi(self,new_geojson_list, slide_info_store):
         """
         Adding a rectangle, polygon, or marker annotation to the current image
         """
-        
         if not self.wsi is None:
             slide_info_store = json.loads(slide_info_store)
-            overlay_prop = slide_info_store['overlay_prop']
-            cell_vis_val = slide_info_store['cell_vis_val']
-            hex_color_key = slide_info_store['hex_color_key']
+            if 'overlay_prop' in slide_info_store:
+                overlay_prop = slide_info_store['overlay_prop']
+            else:
+                overlay_prop = None
+            if 'cell_vis_val' in slide_info_store:
+                cell_vis_val = slide_info_store['cell_vis_val']
+            else:
+                cell_vis_val = 0.5
+            
+            if 'hex_color_key' in slide_info_store:
+                hex_color_key = slide_info_store['hex_color_key']
+            else:
+                hex_color_key = {}
+
+            if 'filter_vals' in slide_info_store:
+                filter_vals = slide_info_store['filter_vals']
+            else:
+                filter_vals = []
 
             try:
                 # Used for pattern-matching callbacks
@@ -4445,219 +4459,207 @@ class FUSION:
                 # Used for normal callbacks
                 triggered_id = ctx.triggered_id
 
-            if triggered_id == 'edit_control':
+            if triggered_id == 'edit-control':
                 
-                if triggered_id=='edit_control':
-                    #TODO: get_pattern_matching_value test here
-                    if type(new_geojson)==list:
-                        new_geojson = new_geojson[0]    
-
-                if not new_geojson is None:
+                if not new_geojson_list is None:
                     new_roi = None
-                    if len(new_geojson['features'])>0:
-                        
-                        # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
-                        self.wsi.manual_rois = []
-                        self.wsi.marked_ftus = []
+                    for new_geo in new_geojson_list:
+                        if len(new_geo['features'])>0:
+                            
+                            # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
+                            self.wsi.manual_rois = []
+                            self.wsi.marked_ftus = []
 
-                        if not self.wsi.spatial_omics_type=='CODEX':
-                            # This is starting off only with the FTU annotations for Visium and Regular slides
-                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
-                        else:
-                            # This is for CODEX images where each frame is added as a BaseLayer
                             self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
 
-                        for geo in new_geojson['features']:
+                            for geo in new_geo['features']:
 
-                            if not geo['properties']['type'] == 'marker':
+                                if not geo['properties']['type'] == 'marker':
 
-                                new_roi = {'type':'FeatureCollection','features':[geo]}
+                                    new_roi = {'type':'FeatureCollection','features':[geo]}
+
+                                    agg_properties = self.wsi.spatial_aggregation(shape(geo['geometry']))
+                                    new_roi['features'][0]['properties'] = {'user':agg_properties}
+                                    
+                                    """
+                                    # New geojson has no properties which can be used for overlays or anything so we have to add those
+                                    if self.wsi.spatial_omics_type=='Visium':
+                                        # Step 1, find intersecting spots:
+                                        overlap_props,_ = self.wsi.find_intersecting_ftu(shape(new_roi['features'][0]['geometry']),'Spots')
+                                        # Adding Main_Cell_Types from intersecting spots data
+                                        main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
+                                        main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
+                                        main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
+                                        main_counts_dict = main_counts_data.astype(float).to_dict()[0]
+
+                                        # Repeating for Gene Counts
+                                        gene_counts_data = pd.DataFrame.from_records([i['Gene Counts'] for i in overlap_props if 'Gene Counts' in i]).sum(axis=0).to_frame()
+                                        main_counts_data = (gene_counts_data/gene_counts_data.sum()).fillna(0.000).round(decimals=18)
+                                        gene_counts_data[0] = gene_counts_data[0].map('{:.19f}'.format)
+                                        gene_counts_dict = gene_counts_data.astype(float).to_dict()[0]
+
+                                        # Aggregating cell state information from intersecting spots
+                                        agg_cell_states = {}
+                                        for m_c in list(main_counts_dict.keys()):
+
+                                            cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_props]).sum(axis=0).to_frame()
+                                            cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
+                                            cell_states[0] = cell_states[0].map('{:.19f}'.format)
+
+                                            agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
+
+                                        new_roi['features'][0]['properties']['user'] = {
+                                            'Main_Cell_Types': main_counts_dict,
+                                            'Cell_States': agg_cell_states,
+                                            'Gene Counts': gene_counts_dict
+                                        }
+
+                                    elif self.wsi.spatial_omics_type=='CODEX':
+                                        overlap_props = self.wsi.intersecting_frame_intensity(shape(new_roi['features'][0]['geometry']),'all')
+
+                                        # Adding channel intensity histogram to properties.
+                                        new_roi['features'][0]['properties']['user'] = {}
+                                        for frame in overlap_props:
+                                            new_roi['features'][0]['properties']['user'][frame] = overlap_props[frame]
+                                    
+                                    """
+                                    # Have to normalize and make this visible in the "Cell Compositions" or something tab (since it might be more than just cells)
+
+                                    new_manual_roi_dict = {
+                                            'geojson':new_roi,
+                                            'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                            'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
+                                            'color':'white',
+                                            'hover_color':'#32a852'
+                                        }
+                                    self.wsi.manual_rois.append(new_manual_roi_dict)
+
+                                    new_child = dl.Overlay(
+                                        dl.LayerGroup(
+                                            dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle),
+                                                    hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = filter_vals),
+                                                    hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
+                                                    children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
+                                                )
+                                        ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
+                                    )
+
+                                    self.current_overlays.append(new_child)
+
+                                elif geo['properties']['type']=='marker':
+                                    # Separate procedure for marking regions/FTUs with a marker
+                                    new_marked = {'type':'FeatureCollection','features':[geo]}
+
+                                    overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
+                                    if not overlap_poly is None:
+                                        # Getting the intersecting ROI geojson
+                                        if len(self.wsi.marked_ftus)==0:
+                                            if triggered_id=='edit_control':
+                                                new_marked_roi = {
+                                                    'type':'FeatureCollection',
+                                                    'features':[
+                                                        {
+                                                            'type':'Feature',
+                                                            'geometry':{
+                                                                'type':'Polygon',
+                                                                'coordinates':[list(overlap_poly.exterior.coords)],
+                                                            },
+                                                            'properties': {
+                                                                'user': overlap_dict
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            elif triggered_id=='add-marker-cluster':
+                                                new_marked_roi = {
+                                                    'type':'FeatureCollection',
+                                                    'features':[
+                                                        {
+                                                            'type':'Feature',
+                                                            'geometry':{
+                                                                'type':'Polygon',
+                                                                'coordinates':[list(overlap_poly.exterior.coords)]
+                                                            },
+                                                            'properties':{
+                                                                'user': overlap_dict
+                                                            }
+                                                        },
+                                                        #new_marked['features'][0]
+                                                    ]
+                                                }
+
+                                            self.wsi.marked_ftus = [{
+                                                'geojson':new_marked_roi,
+                                            }]
+
+                                        else:
+                                            self.wsi.marked_ftus[0]['geojson']['features'].append(
+                                                {
+                                                    'type':'Feature',
+                                                    'geometry':{
+                                                        'type':'Polygon',
+                                                        'coordinates':[list(overlap_poly.exterior.coords)],
+                                                    },
+                                                    'properties':{
+                                                        'user':overlap_dict
+                                                    }
+                                                }
+                                            )
+
+                            # Adding the marked ftus layer if any were added
+                            if len(self.wsi.marked_ftus)>0:
+                                print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
                                 
-                                # New geojson has no properties which can be used for overlays or anything so we have to add those
-                                if self.wsi.spatial_omics_type=='Visium':
-                                    # Step 1, find intersecting spots:
-                                    overlap_props,_ = self.wsi.find_intersecting_ftu(shape(new_roi['features'][0]['geometry']),'Spots')
-                                    # Adding Main_Cell_Types from intersecting spots data
-                                    main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
-                                    main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
-                                    main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
-                                    main_counts_dict = main_counts_data.astype(float).to_dict()[0]
+                                self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
+                                self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
 
-                                    # Repeating for Gene Counts
-                                    gene_counts_data = pd.DataFrame.from_records([i['Gene Counts'] for i in overlap_props if 'Gene Counts' in i]).sum(axis=0).to_frame()
-                                    main_counts_data = (gene_counts_data/gene_counts_data.sum()).fillna(0.000).round(decimals=18)
-                                    gene_counts_data[0] = gene_counts_data[0].map('{:.19f}'.format)
-                                    gene_counts_dict = gene_counts_data.astype(float).to_dict()[0]
-
-                                    # Aggregating cell state information from intersecting spots
-                                    agg_cell_states = {}
-                                    for m_c in list(main_counts_dict.keys()):
-
-                                        cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_props]).sum(axis=0).to_frame()
-                                        cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
-                                        cell_states[0] = cell_states[0].map('{:.19f}'.format)
-
-                                        agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
-
-                                    new_roi['features'][0]['properties']['user'] = {
-                                        'Main_Cell_Types': main_counts_dict,
-                                        'Cell_States': agg_cell_states,
-                                        'Gene Counts': gene_counts_dict
-                                    }
-
-
-                                elif self.wsi.spatial_omics_type=='CODEX':
-                                    overlap_props = self.wsi.intersecting_frame_intensity(shape(new_roi['features'][0]['geometry']),'all')
-
-                                    # Adding channel intensity histogram to properties.
-                                    new_roi['features'][0]['properties']['user'] = {}
-                                    for frame in overlap_props:
-                                        new_roi['features'][0]['properties']['user'][frame] = overlap_props[frame]
-
-                                #TODO: include overlapping FTU properties in visualization within Manual ROIs
-                                # Now including properties of intersecting FTUs
-                                #overlap_ftu_props, _ = self.wsi.find_intersecting_ftu(shape(new_roi['features'][0]['geometry']),'all')
-
-                                # Have to normalize and make this visible in the "Cell Compositions" or something tab (since it might be more than just cells)
-
-                                new_manual_roi_dict = {
-                                        'geojson':new_roi,
-                                        'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                        'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
-                                        'color':'white',
-                                        'hover_color':'#32a852'
-                                    }
-                                self.wsi.manual_rois.append(new_manual_roi_dict)
-
+                                new_marked_dict = {
+                                    'geojson':self.wsi.marked_ftus[0]['geojson'],
+                                    'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                    'color':'white',
+                                    'hover_color':'#32a852'
+                                }
                                 new_child = dl.Overlay(
                                     dl.LayerGroup(
-                                        dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle),
-                                                hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
-                                                hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
-                                                children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
-                                            )
-                                    ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
+                                        dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), pointToLayer = self.render_marker_handle,
+                                                hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = filter_vals),
+                                                hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
+                                                children = []
+                                                )
+                                    ), name = f'Marked FTUs', checked=True, id = self.wsi.item_id+f'_marked_ftus'
                                 )
-
+                                
                                 self.current_overlays.append(new_child)
 
-                            elif geo['properties']['type']=='marker':
-                                # Separate procedure for marking regions/FTUs with a marker
-                                new_marked = {'type':'FeatureCollection','features':[geo]}
+                            if len(self.wsi.manual_rois)>0:
+                                data_select_options = self.layout_handler.data_options
+                                data_select_options[4]['disabled'] = False
+                            else:
+                                data_select_options = self.layout_handler.data_options
 
-                                overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
-                                if not overlap_poly is None:
-                                    # Getting the intersecting ROI geojson
-                                    if len(self.wsi.marked_ftus)==0:
-                                        if triggered_id=='edit_control':
-                                            new_marked_roi = {
-                                                'type':'FeatureCollection',
-                                                'features':[
-                                                    {
-                                                        'type':'Feature',
-                                                        'geometry':{
-                                                            'type':'Polygon',
-                                                            'coordinates':[list(overlap_poly.exterior.coords)],
-                                                        },
-                                                        'properties': {
-                                                            'user': overlap_dict
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        elif triggered_id=='add-marker-cluster':
-                                            new_marked_roi = {
-                                                'type':'FeatureCollection',
-                                                'features':[
-                                                    {
-                                                        'type':'Feature',
-                                                        'geometry':{
-                                                            'type':'Polygon',
-                                                            'coordinates':[list(overlap_poly.exterior.coords)]
-                                                        },
-                                                        'properties':{
-                                                            'user': overlap_dict
-                                                        }
-                                                    },
-                                                    #new_marked['features'][0]
-                                                ]
-                                            }
+                            if len(self.wsi.marked_ftus)>0:
+                                data_select_options[3]['disabled'] = False
 
-                                        self.wsi.marked_ftus = [{
-                                            'geojson':new_marked_roi,
-                                        }]
-
-                                    else:
-                                        self.wsi.marked_ftus[0]['geojson']['features'].append(
-                                            {
-                                                'type':'Feature',
-                                                'geometry':{
-                                                    'type':'Polygon',
-                                                    'coordinates':[list(overlap_poly.exterior.coords)],
-                                                },
-                                                'properties':{
-                                                    'user':overlap_dict
-                                                }
-                                            }
-                                        )
-
-                        # Adding the marked ftus layer if any were added
-                        if len(self.wsi.marked_ftus)>0:
-                            print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
+                            hex_color_key = self.update_hex_color_key(overlay_prop)
                             
-                            self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
-                            self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
-
-                            new_marked_dict = {
-                                'geojson':self.wsi.marked_ftus[0]['geojson'],
-                                'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                'color':'white',
-                                'hover_color':'#32a852'
-                            }
-                            new_child = dl.Overlay(
-                                dl.LayerGroup(
-                                    dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), pointToLayer = self.render_marker_handle,
-                                            hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
-                                            hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
-                                            children = []
-                                            )
-                                ), name = f'Marked FTUs', checked=True, id = self.wsi.item_id+f'_marked_ftus'
-                            )
+                            if new_roi:
+                                user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
+                                return self.current_overlays, data_select_options, user_ann_tracking
                             
-                            self.current_overlays.append(new_child)
-
-                        if len(self.wsi.manual_rois)>0:
-                            data_select_options = self.layout_handler.data_options
-                            data_select_options[4]['disabled'] = False
+                            return self.current_overlays, data_select_options, no_update
                         else:
-                            data_select_options = self.layout_handler.data_options
 
-                        if len(self.wsi.marked_ftus)>0:
-                            data_select_options[3]['disabled'] = False
+                            # Clearing manual ROIs and reverting overlays
+                            self.wsi.manual_rois = []
+                            self.wsi.marked_ftus = []
 
-                        hex_color_key = self.update_hex_color_key(overlay_prop)
-                        
-                        if new_roi:
-                            user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
-                            return self.current_overlays, data_select_options, user_ann_tracking
-                        
-                        return self.current_overlays, data_select_options, no_update
-                    else:
-
-                        # Clearing manual ROIs and reverting overlays
-                        self.wsi.manual_rois = []
-                        self.wsi.marked_ftus = []
-
-                        if not self.wsi.spatial_omics_type=='CODEX':
-                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
-                        else:
                             self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
 
-                        data_select_options = self.layout_handler.data_options
+                            data_select_options = self.layout_handler.data_options
 
-                        hex_color_key = self.update_hex_color_key(overlay_prop)
-                        
-                        return self.current_overlays, data_select_options, no_update
+                            hex_color_key = self.update_hex_color_key(overlay_prop)
+                            
+                            return self.current_overlays, data_select_options, no_update
                 else:
                     raise exceptions.PreventUpdate
             else:

@@ -336,7 +336,8 @@ class DSASlide:
 
     def find_intersecting_ftu(self, box_poly, ftu: str):
 
-        box_poly = box(*box_poly)
+        if type(box_poly)==list:
+            box_poly = box(*box_poly)
 
         if ftu in self.ftu_names:
             # Finding which members of a specfied ftu group intersect with the provided box_poly
@@ -512,6 +513,78 @@ class DSASlide:
         
         return viewport_data_components, viewport_data
 
+    def spatial_aggregation(self, agg_polygon):
+        """
+        Generalized aggregation of underlying structure properties for a given polygon
+        """
+
+        ignore_columns = ['unique_index','name','structure','ftu_name','image_id','ftu_type',
+                          'Min_x_coord','Max_x_coord','Min_y_coord','Max_y_coord',
+                          'x_tsne','y_tsne','x_umap','y_umap']
+
+        # Step 1: Find intersecting structures with polygon
+        aggregated_properties = {}
+        for ftu_idx, ftu in enumerate(self.ftu_names):
+            overlap_properties, overlap_polys = self.find_intersecting_ftu(agg_polygon, ftu)
+
+            overlap_area = [(i.intersection(agg_polygon).area)/(agg_polygon.area) for i in overlap_polys]
+            # overlap_properties is a list of properties for each intersecting polygon
+            agg_prop_df = pd.DataFrame.from_records(overlap_properties)
+            agg_prop_df = agg_prop_df.drop(columns = [i for i in ignore_columns if i in agg_prop_df.columns.tolist()])
+
+            # string and dict types will be called "object" dtypes in pandas
+            agg_numeric_props = agg_prop_df.select_dtypes(exclude = 'object')
+
+            # Scaling numeric props by area
+            for row_idx, area in enumerate(overlap_area):
+                agg_numeric_props.iloc[row_idx,:] *= area
+
+            agg_numeric_dict = agg_numeric_props.mean(axis=0).to_dict()
+            
+            aggregated_properties[ftu] = agg_numeric_dict
+            aggregated_properties[ftu][f'{ftu} Count'] = len(overlap_area)
+
+            agg_object_props = agg_prop_df.select_dtypes(include='object')
+            for col_idx, col_name in enumerate(agg_object_props.columns.tolist()):
+                col_values = agg_object_props[col_name].tolist()
+                col_vals_dict = {col_name: {}}
+                if type(col_values[0])==dict:
+                    
+                    # Test for single nested dictionary
+                    sub_values = list(col_values[0].keys())
+                    if not type(col_values[0][sub_values[0]])==dict:
+                        col_df = pd.DataFrame.from_records(col_values).astype(float)
+
+                        # Scaling by intersection area
+                        for row_idx, area in enumerate(overlap_area):
+                            col_df.iloc[row_idx,:] *= area
+
+                        col_df_norm = col_df.sum(axis=0).to_frame()
+                        col_df_norm = (col_df_norm/col_df_norm.sum()).fillna(0.000).round(decimals=18)
+                        col_df_norm[0] = col_df_norm[0].map('{:.19f}'.format)
+                        col_vals_dict[col_name] = col_df_norm.astype(float).to_dict()[0]
+                    
+                    else:
+                        for sub_val in sub_values:
+                            if type(col_values[0][sub_val])==dict:
+                                col_df = pd.DataFrame.from_records([i[sub_val] for i in col_values]).astype(float)
+                                
+                                # Scaling by intersection area
+                                for row_idx, area in enumerate(overlap_area):
+                                    col_df.iloc[row_idx,:] *= area
+
+                                col_df_norm = col_df.sum(axis=0).to_frame()
+                                col_df_norm = (col_df_norm/col_df_norm.sum()).fillna(0.000).round(decimals=18)
+                                col_df_norm[0] = col_df_norm[0].map('{:.19f}'.format)
+                                col_vals_dict[col_name][sub_val] = col_df_norm.astype(float).to_dict()[0]
+                    
+                elif type(col_values[0])==str:
+                    # Just getting the count of each unique value here
+                    col_vals_dict[col_name] = {i:col_values.count(i) for i in np.unique(col_values).tolist()}
+
+                aggregated_properties[ftu] = aggregated_properties[ftu] | col_vals_dict
+
+        return aggregated_properties
 
 
 
@@ -539,6 +612,8 @@ class VisiumSlide(DSASlide):
         self.default_view_type = {
             'name': 'Main_Cell_Types',
         }
+
+        self.n_frames = 0
 
     def run_change_level(self,main_cell_types):
         """
@@ -592,7 +667,9 @@ class VisiumSlide(DSASlide):
             intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
 
         for m_idx,m_ftu in enumerate(self.manual_rois):
-            intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
+            manual_intersect_ftus = list(m_ftu['geojson']['features'][0]['properties']['user'])
+            for int_ftu in manual_intersect_ftus:
+                intersecting_ftus[f'Manual ROI: {m_idx+1}, {int_ftu}'] = [m_ftu['geojson']['features'][0]['properties']['user'][int_ftu]]
 
         for marked_idx, marked_ftu in enumerate(self.marked_ftus):
             intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
@@ -604,12 +681,10 @@ class VisiumSlide(DSASlide):
             tab_list = []
 
             for f_idx,f in enumerate(list(intersecting_ftus.keys())):
-                
                 viewport_data[f] = {}
                 if view_type['name'] in ['Main_Cell_Types','Cell_Subtypes']:
                     if view_type['name']=='Main_Cell_Types':
                         counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
-                        
                         if len(counts_dict_list)>0:
                             counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
                             counts_data.columns = [f]
@@ -620,7 +695,10 @@ class VisiumSlide(DSASlide):
                             counts_data = counts_data.reset_index()
 
                             viewport_data[f]['data'] = counts_data.to_dict('records')
-                            viewport_data[f]['count'] = len(counts_dict_list)
+                            if not 'Manual' in f:
+                                viewport_data[f]['count'] = len(counts_dict_list)
+                            else:
+                                viewport_data[f]['count'] = intersecting_ftus[f][0][f.split(', ')[-1]+ ' Count']
 
                             # Getting cell state info:
                             viewport_data[f]['states'] = {}
@@ -881,7 +959,8 @@ class CODEXSlide(DSASlide):
     def intersecting_frame_intensity(self,box_poly,frame_list):
         # Finding the intensity of each "frame" representing a channel in the original CODEX image within a region
         
-        box_poly = box(*box_poly)
+        if type(box_poly)==list:
+            box_poly = box(*box_poly)
 
         if frame_list=='all':
             frame_list = [i for i in self.wsi.channel_names if not i=='Histology (H&E)']
@@ -1065,6 +1144,9 @@ class CODEXSlide(DSASlide):
                                 'title': {
                                     'text': f_frame_list[0]
                                 }
+                            },
+                            'title': {
+                                'text': f_frame_list[0]
                             }
                         })
                     elif len(f_frame_list)==2:
@@ -1279,19 +1361,6 @@ class CODEXSlide(DSASlide):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 class XeniumSlide(DSASlide):
     def __init__(self,
                  item_id: str,
@@ -1305,6 +1374,8 @@ class XeniumSlide(DSASlide):
         self.default_view_type = {
             'name': 'cell_composition',
         }
+
+        self.n_frames = 0
 
     def update_viewport_data(self,bounds_box,view_type):
         """
