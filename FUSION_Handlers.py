@@ -3724,7 +3724,7 @@ class GirderHandler:
             folder_ids = np.unique([i['folderId'] for i in image_items]).tolist()
             folder_info = [self.gc.get(f'/folder/{i}') for i in folder_ids]
             # Don't want to see histoqc outputs (which should all be pngs) or anything in the annotation sessions (Masks are tiff, Images are pngs)
-            folder_info = [i for i in folder_info if not i['name'] not in ['histoqc_outputs','Masks','Images']]
+            folder_info = [i for i in folder_info if not i['name'] in ['histoqc_outputs','Masks','Images']]
 
             # Aggregating slide metadata in each folder
             for f in folder_info:
