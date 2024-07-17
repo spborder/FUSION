@@ -2422,15 +2422,17 @@ class LayoutHandler:
         # Table with metadata for each dataset in dataset_handler
         combined_dataset_dict = []
 
-        # Accessing the folder structure saved in dataset_handler            
-        for f in dataset_handler.slide_datasets:
+        # Accessing the folder structure saved in dataset_handler     
+        slide_datasets = dataset_handler.update_slide_datasets(user_info)
+
+        for f in slide_datasets:
             folder_dict = {}
-            if 'name' in dataset_handler.slide_datasets[f]:
-                folder_dict['Name'] = dataset_handler.slide_datasets[f]['name']
+            if 'name' in f:
+                folder_dict['Name'] = f['name']
                 
-                folder_meta_keys = list(dataset_handler.slide_datasets[f]['Metadata'])
+                folder_meta_keys = list(f['Aggregated_Metadata'])
                 for m in folder_meta_keys:
-                    folder_dict[m] = dataset_handler.slide_datasets[f]['Metadata'][m]
+                    folder_dict[m] = f['Aggregated_Metadata'][m]
 
                 combined_dataset_dict.append(folder_dict)
 
@@ -2474,6 +2476,15 @@ class LayoutHandler:
                     html.H3('Select a Dataset to add slides to current session'),
                     html.Hr(),
                     self.gen_info_button('Click on one of the circles in the far left of the table to load metadata for that dataset. You can also filter/sort the rows using the arrow icons in the column names and the text input in the first row'),
+                    html.Div(
+                        children = [
+                            dcc.Store(
+                                id = 'available-datasets-store',
+                                data = json.dumps(slide_datasets),
+                                storage_type='memory'
+                            )
+                        ]
+                    ),
                     table_layout,
                     html.B(),
                     html.H3('Select Slides to include in current session'),
@@ -3679,6 +3690,95 @@ class GirderHandler:
 
         return cli
 
+    def update_slide_datasets(self,user_info):
+        """
+        Grabbing available collections as well as user public folders
+        outputs list of accessible folders' info (folders that are immediate parents of slides)
+        """
+
+        slide_datasets = []
+        
+        # This is all collections in the DSA instance
+        all_collections = self.gc.get('/collection',parameters={'limit': 1000})
+
+        # Checking user access (only include public collections)
+        all_collections = [i for i in all_collections if i['public']]
+
+        # Adding in user public folders
+        user_folder_path = f'/user/{user_info["login"]}/Public'
+        user_public_folder = self.gc.get('/resource/lookup',parameters={'path':user_folder_path})
+
+        all_collections += [user_public_folder]         
+
+        for c in all_collections:
+
+            # Get all large image objects in each collection that are not in histoqc outputs
+            if not c["_id"]==user_public_folder["_id"]:
+                collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'collection'})
+            else:
+                collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'folder'})
+
+            
+            image_items = [i for i in collection_items if 'largeImage' in i and not 'png' in i['name']]
+
+            folder_ids = np.unique([i['folderId'] for i in image_items]).tolist()
+            folder_info = [self.gc.get(f'/folder/{i}') for i in folder_ids]
+            # Don't want to see histoqc outputs (which should all be pngs) or anything in the annotation sessions (Masks are tiff, Images are pngs)
+            folder_info = [i for i in folder_info if not i['name'] not in ['histoqc_outputs','Masks','Images']]
+
+            # Aggregating slide metadata in each folder
+            for f in folder_info:
+
+                folder_slides = [i for i in image_items if i['folderId']==f["_id"]]
+                f['Aggregated_Metadata'] = {}
+                
+                folder_slides_meta = [i['meta'] for i in folder_slides]
+
+                meta_keys = []
+                for f_s_m in folder_slides_meta:
+                    meta_keys.extend(list(f_s_m.keys()))
+
+                for m in meta_keys:
+                    items_meta = [i['meta'][m] for i in folder_slides if m in i['meta']]
+                    
+                    if all([type(i)==str for i in items_meta]):
+                        f['Aggregated_Metadata'][m] = ', '.join(list(set(items_meta)))
+                    elif all([type(i)==int or type(i)==float for i in items_meta]):
+                        f['Aggregated_Metadata'][m] = sum(items_meta)
+                
+                slide_datasets.append(f)
+
+
+        return slide_datasets
+
+    def get_folder_slides(self,folder_id):
+        """
+        Get all the slides in a given folder id        
+        """
+
+        # Get all large image objects in each collection that are not in histoqc outputs
+        try:
+            collection_items = self.gc.get(f'/resource/{folder_id}/items',parameters={'limit': 1000,'type':'collection'})
+        except girder_client.HttpError:
+            collection_items = self.gc.get(f'/resource/{folder_id}/items',parameters={'limit': 1000,'type':'folder'})
+        
+        image_items = [i for i in collection_items if 'largeImage' in i and not 'png' in i['name']]
+
+        return image_items
+    
+    def get_folder_name(self,folder_id):
+        """
+        Return the name for a folder_id (checks if it's either a "collection" or a "folder")
+        """
+
+        try:
+            folder_info = self.gc.get(f'/folder/{folder_id}')
+        except girder_client.HttpError:
+            folder_info = self.gc.get(f'/collection/{folder_id}')
+        
+        return folder_info['name']
+
+    """
     def update_folder_structure(self,username):
 
         # Adding Public folders if any "FUSION_Upload" are in there
@@ -3809,6 +3909,7 @@ class GirderHandler:
                             self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
                         elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+    """
 
     def clean_old_annotations(self, days = 1):
         """
@@ -4016,17 +4117,13 @@ class GirderHandler:
         self.usability_users = self.update_usability()
 
         # Downloading JSON resource
-        #cell_graphics_resource = self.gc.get('resource/lookup',parameters={'path':assets_path+'cell_graphics/graphic_reference.json'})
         with open('./assets/graphic_reference.json','r') as f:
             self.cell_graphics_key = json.load(f)
-        #self.cell_graphics_key = self.gc.get(f'/item/{cell_graphics_resource["_id"]}/download')
 
         self.cell_names = []
         for ct in self.cell_graphics_key:
             self.cell_names.append(self.cell_graphics_key[ct]['full'])
 
-        #morpho_item = self.gc.get('resource/lookup',parameters={'path':assets_path+'morphometrics/morphometrics_reference.json'})
-        #self.morphometrics_reference = self.gc.get(f'/item/{morpho_item["_id"]}/download')
         with open('./assets/morphometrics_reference.json','r') as f:
             self.morphometrics_reference = json.load(f)
         
@@ -4044,8 +4141,6 @@ class GirderHandler:
                         self.morpho_names.append(mo_name.replace('{}',sc))
 
         # Getting asct+b table
-        #asct_b_table_id = self.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
-        #self.asct_b_table = pd.read_csv(self.apiUrl+f'item/{asct_b_table_id}/download?token={self.user_token}',skiprows=list(range(10)))
         self.asct_b_table = pd.read_csv('./assets/Kidney_v1.2 - Kidney_v1.2.csv',skiprows=list(range(10)))
 
         # Generating plot feature selection dictionary
@@ -4099,6 +4194,8 @@ class GirderHandler:
         
         # Given a list of slides (output of GET /item/{item_id}), generate label options, feature options, and filter options
         slide_folders = np.unique([i['folderId'] for i in slide_list]).tolist()
+
+        folder_names = [self.gc.get(f'/folder/{i}')['name'] for i in slide_folders]
         slide_names = [i['name'] for i in slide_list]
 
         # Default labels are FTU, Slide Name, Cell Type, and Morphometric
@@ -4109,11 +4206,18 @@ class GirderHandler:
             {'label':'Cell Type','value':'Cell Type','disabled':True},
             {'label':'Morphometric','value':'Morphometric','disabled':True}
         ]
-
+        
+        # Change this if you ever want to filter slides based on metadata values (Spatial Omics Type might be one)
+        self.filter_keys = []
+        l_i = -1
+        label_filter_children = []
+        """
         # Adding labels according to current slide-dataset metadata
         meta_labels = []
         for f in slide_folders:
-            meta_labels.extend(list(self.slide_datasets[f]['Metadata'].keys()))
+            slides_in_f = [i for i in slide_list if i['folderId']==f]
+            for s in slides_in_f:
+                meta_labels.extend(list(s['meta'].keys()))
         # Adding only unique labels
         meta_labels = np.unique(meta_labels).tolist()
         for m in meta_labels:
@@ -4159,6 +4263,7 @@ class GirderHandler:
                 if len(l_vals)>0:
                     label_filter_children.append(l_dict)
                     self.filter_keys.append({'title':l['label'],'key':f'0-{l_i}'})
+        """
 
         # Adding slide names to label_filter_children
         slide_names_children = {
@@ -4184,14 +4289,14 @@ class GirderHandler:
             'key':f'0-{l_i+2}',
             'children':[]
         }
-        for f_i, f in enumerate(slide_folders):
+        for f_i, f in enumerate(folder_names):
             folder_names_children['children'].append(
                 {
-                    'title':self.slide_datasets[f]['name'],
+                    'title':f,
                     'key':f'0-{l_i+2}-{f_i}'
                 }
             )
-            self.filter_keys.append({'title':self.slide_datasets[f]['name'],'key':f'0-{l_i+2}-{f_i}'})
+            self.filter_keys.append({'title':f,'key':f'0-{l_i+2}-{f_i}'})
 
         self.filter_keys.append({'title':'Folder Names','key':f'0-{l_i+2}'})
         label_filter_children.append(folder_names_children)

@@ -408,8 +408,8 @@ class FUSION:
                     container_content = self.layout_handler.layout_dict[self.current_page]
                 else:
                     # Checking if there was any new slides added via uploader (or just added externally)
-                    self.dataset_handler.update_folder_structure(user_data['login'])
-                    self.layout_handler.gen_builder_layout(self.dataset_handler,user_data['login'])
+                    #self.dataset_handler.update_folder_structure(user_data['login'])
+                    self.layout_handler.gen_builder_layout(self.dataset_handler,user_data)
 
                     container_content = self.layout_handler.layout_dict[self.current_page]
 
@@ -746,6 +746,7 @@ class FUSION:
         self.app.callback(
             Output({'type':'ftu-state-bar','index':MATCH},'figure'),
             Input({'type':'ftu-cell-pie','index':MATCH},'clickData'),
+            State({'type': 'viewport-store-data','index': ALL},'data'),
             prevent_initial_call = True
         )(self.update_state_bar)
 
@@ -1150,7 +1151,8 @@ class FUSION:
         # Initializing plot after selecting dataset(s)
         self.app.callback(
             Input('dataset-table','selected_rows'),
-            State('visualization-session-store','data'),
+            [State('visualization-session-store','data'),
+             State('available-datasets-store','data')],
             [Output('selected-dataset-slides','children'),
              Output('slide-metadata-plots','children'),
              Output('slide-select','options'),
@@ -1164,7 +1166,8 @@ class FUSION:
              Input({'type':'cell-meta-drop','index':ALL},'value'),
              Input({'type':'agg-meta-drop','index':ALL},'value'),
              Input({'type':'slide-dataset-table','index':ALL},'selected_rows')],
-             State('visualization-session-store','data'),
+            [State('visualization-session-store','data'),
+             State('available-datasets-store','data')],
              [Output('slide-select','options'),
              Output({'type':'meta-plot','index':ALL},'figure'),
              Output({'type':'cell-meta-drop','index':ALL},'options'),
@@ -1425,15 +1428,15 @@ class FUSION:
 
         return new_slides, tutorial_name, slide_active_index, style_list, sub_parts, sub_parts_style
 
-    def initialize_metadata_plots(self,selected_dataset_list,vis_sess_store):
+    def initialize_metadata_plots(self,selected_dataset_list,vis_sess_store,dataset_store):
         """
         Creating plot and slide select divs in dataset-builder
         """
         vis_sess_store = json.loads(vis_sess_store)
+        dataset_store = json.loads(dataset_store)
 
         # Extracting metadata from selected datasets and plotting
         all_metadata_labels = []
-        all_metadata = []
         slide_dataset_dict = []
         full_slides_list = []
 
@@ -1441,25 +1444,17 @@ class FUSION:
 
             # Pulling dataset metadata
             # Dataset name in this case is associated with a folder or collection
-            dataset_ids = list(self.dataset_handler.slide_datasets.keys())
+            metadata_available = list(dataset_store[d]['Aggregated_Metadata'].keys())
+            # This will store metadata, id, name, etc. for every slide in that dataset
+            slides_list = self.dataset_handler.get_folder_slides(dataset_store[d]["_id"])
+            full_slides_list.extend(slides_list)
 
-            d_name = [self.dataset_handler.slide_datasets[i]['name'] for i in dataset_ids if 'name' in self.dataset_handler.slide_datasets[i]][d]
-            d_id = dataset_ids[d]
-            if d_id in list(self.dataset_handler.slide_datasets.keys()):
-                if len(list(self.dataset_handler.slide_datasets[d_id].keys()))>0:
-                    metadata_available = self.dataset_handler.slide_datasets[d_id]['Metadata']
-                    # This will store metadata, id, name, etc. for every slide in that dataset
-                    slides_list = [i for i in self.dataset_handler.slide_datasets[d_id]['Slides']]
-                    full_slides_list.extend(slides_list)
+            slide_dataset_dict.extend([{'Slide Names':s['name'],'Dataset':d} for s in slides_list])
 
-                    slide_dataset_dict.extend([{'Slide Names':s['name'],'Dataset':d_name} for s in slides_list])
+            # Grabbing dataset-level metadata
+            metadata_available += ['FTU Expression Statistics', 'FTU Morphometrics']
 
-                    # Grabbing dataset-level metadata
-                    metadata_available['FTU Expression Statistics'] = []
-                    metadata_available['FTU Morphometrics'] = []
-
-                    all_metadata.append(metadata_available)
-                    all_metadata_labels.extend(list(metadata_available.keys()))
+            all_metadata_labels.extend(metadata_available)
 
         #self.metadata = all_metadata
         all_metadata_labels = np.unique(all_metadata_labels)
@@ -1477,7 +1472,7 @@ class FUSION:
             dbc.Col(dcc.Dropdown(list(self.cell_names_key.keys()),list(self.cell_names_key.keys())[0],id={'type':'cell-meta-drop','index':2},disabled=True),md=2)
         ]
 
-        if not all_metadata==[]:
+        if not len(all_metadata_labels)==0:
             drop_div = html.Div([
                 dash_table.DataTable(
                     id = {'type':'slide-dataset-table','index':0},
@@ -1528,8 +1523,6 @@ class FUSION:
                 )
             ])
 
-            self.selected_meta_df = pd.DataFrame.from_records(all_metadata)
-
             plot_div = html.Div([
                 dcc.Graph(id = {'type':'meta-plot','index':0},figure = go.Figure())
             ])
@@ -1543,12 +1536,13 @@ class FUSION:
 
         return drop_div, plot_div, slide_select_options, json.dumps(vis_sess_store)
 
-    def update_metadata_plot(self,new_meta,sub_meta,group_type,slide_rows,vis_sess_store):
+    def update_metadata_plot(self,new_meta,sub_meta,group_type,slide_rows,vis_sess_store,dataset_store):
         """
         Plotting slide/dataset-level metadata in dataset-builder
         """
 
         vis_sess_store = json.loads(vis_sess_store)
+        dataset_store = json.loads(dataset_store)
 
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
@@ -1568,7 +1562,6 @@ class FUSION:
             if not ctx.triggered_id['type']=='meta-drop':
                 cell_types_options = (no_update,no_update,no_update)
             else:
-                print(new_meta)
                 if new_meta==['FTU Expression Statistics']:
                     # These are the options for expression statistics
                     cell_types_options = (
@@ -1613,9 +1606,9 @@ class FUSION:
                 included_slides = [t for t in present_slides if vis_sess_store]                    
 
                 dataset_metadata = []
-                for d_id in self.dataset_handler.slide_datasets:
-                    slide_data = self.dataset_handler.slide_datasets[d_id]['Slides']
-                    dataset_name = self.dataset_handler.slide_datasets[d_id]['name']
+                for dataset in dataset_store:
+                    slide_data = self.dataset_handler.get_folder_slides(dataset["_id"])
+                    dataset_name = self.dataset_handler.get_folder_name(dataset["_id"])
                     d_include = [s for s in slide_data if s['name'] in included_slides]
 
                     if len(d_include)>0:
@@ -1797,7 +1790,7 @@ class FUSION:
             for f in unique_folders:
 
                 # Adding all the slides in the same folder under the same disabled folder label option (not selectable)
-                folder_name = self.dataset_handler.slide_datasets[f]['name']
+                folder_name = self.dataset_handler.get_folder_name(f)
 
                 slide_options.append({
                     'label': html.Span([
@@ -1823,7 +1816,7 @@ class FUSION:
             for f in unique_folders:
                 
                 # Getting the folder names for the slides
-                folder_name = self.dataset_handler.slide_datasets[f]['name']
+                folder_name = self.dataset_handler.get_folder_name(f)
 
                 slide_options.append(
                     {
@@ -1921,11 +1914,11 @@ class FUSION:
                     raise exceptions.PreventUpdate
 
             else:
-                return [html.P('Select a slide to get started!')], [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return [html.P('Select a slide to get started!')], [no_update], [no_update], [viewport_data_return], json.dumps(user_data_store)
     
         elif current_tab=='annotation-tab':
             if self.dataset_handler.username=='fusionguest':
-                return viewport_data_components, html.P('Sign in or create an account to start annotating!'), cell_annotation_components, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return [no_update], [html.P('Sign in or create an account to start annotating!')], [no_update], [json.dumps(viewport_store_data)], json.dumps(user_data_store)
             else:
                 
                 # Getting intersecting FTU information
@@ -1943,8 +1936,6 @@ class FUSION:
                 for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
                     intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
                 
-                self.current_ftus = intersecting_ftus
-
                 #TODO: Check for current annotation session in user's public folder
                 annotation_tabs, first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler,self.current_ftus, user_data_store)
                 user_data_store["current_ann_session"] = first_session
@@ -1982,23 +1973,27 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def update_state_bar(self,cell_click):
+    def update_state_bar(self,cell_click, viewport_data_store):
         """
         View cell state proportions for clicked main cell type
         
         """
 
         if not cell_click is None:
-            self.pie_cell = cell_click['points'][0]['label']
+            pie_cell = cell_click['points'][0]['label']
+            viewport_data_store = json.loads(get_pattern_matching_value(viewport_data_store))
 
-            self.pie_ftu = list(self.current_ftus.keys())[ctx.triggered_id['index']]
+            current_ftu_data = viewport_data_store['data']
+            pie_ftu = list(current_ftu_data.keys())[ctx.triggered_id['index']]
 
-            pct_states = pd.DataFrame.from_records([i['Cell_States'][self.pie_cell] for i in self.current_ftus[self.pie_ftu] if 'Cell_States' in i]).sum(axis=0).to_frame()
-            pct_states = pct_states.reset_index()
-            pct_states.columns = ['Cell State', 'Proportion']
-            pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+            pct_states = pd.DataFrame.from_records(current_ftu_data[pie_ftu]['states'][pie_cell])
 
-            state_bar = go.Figure(px.bar(pct_states,x='Cell State', y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[self.pie_cell]["full"]} in:</sup><br><sup>{self.pie_ftu}</sup>'))
+            if pie_cell in self.cell_graphics_key:
+                cell_title = self.cell_graphics_key[pie_cell]["full"]
+            else:
+                cell_title = pie_cell
+
+            state_bar = go.Figure(px.bar(pct_states,x='Cell State', y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{cell_title} in:</sup><br><sup>{pie_ftu}</sup>'))
 
             return state_bar
         else:
@@ -3762,7 +3757,7 @@ class FUSION:
                         item_data = self.dataset_handler.gc.get(f'/item/{u}')
                         folderId = item_data['folderId']
 
-                        folder_names.append(self.dataset_handler.slide_datasets[folderId]['name'])
+                        folder_names.append(self.dataset_handler.get_folder_name(folderId))
                     
                     label_data = [folder_names[unique_ids.index(i)] for i in sample_ids]
 
@@ -3800,7 +3795,7 @@ class FUSION:
                         item_data = self.dataset_handler.gc.get(f'/item/{u_id}')
                         item_meta = item_data['meta']
                         item_name = item_data['name']
-                        item_folder = self.dataset_handler.slide_datasets[item_data['folderId']]['name']
+                        item_folder = self.dataset_handler.get_folder_name(item_data['folderId'])
                         
                         # If this slide is filtered out then we don't need to check if it's filtered out for any other reason
                         if item_name in filter_label_names or item_folder in filter_label_names:
@@ -4065,7 +4060,7 @@ class FUSION:
                             item_data = self.dataset_handler.gc.get(f'/item/{u}')
                             folderId = item_data['folderId']
 
-                            folder_names.append(self.dataset_handler.slide_datasets[folderId]['name'])
+                            folder_names.append(self.dataset_handler.get_folder_name(folderId))
                         
                         label_data = [folder_names[unique_ids.index(i)] for i in sample_ids]
 
@@ -4584,7 +4579,6 @@ class FUSION:
                                                                 'user': overlap_dict
                                                             }
                                                         },
-                                                        #new_marked['features'][0]
                                                     ]
                                                 }
 
@@ -8207,7 +8201,7 @@ def app(*args):
     # Saving & organizing relevant id's in GirderHandler
     print('Getting initial items metadata')
     dataset_handler.set_default_slides(initial_collection_contents)
-    dataset_handler.initialize_folder_structure(username,initial_collection,path_type)
+    #dataset_handler.initialize_folder_structure(username,initial_collection,path_type)
 
     # Getting graphics_reference.json from the FUSION Assets folder
     print(f'Getting asset items')
