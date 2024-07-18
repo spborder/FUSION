@@ -419,7 +419,8 @@ class FUSION:
                 self.wsi = None
                 self.filter_vals = None
                 self.layout_handler.gen_vis_layout(
-                    self.wsi
+                    self.wsi,
+                    self.gene_handler
                 )
 
                 # Checking vis_sess_store for any slides, if there aren't any 'included'==True then revert to default set
@@ -730,8 +731,16 @@ class FUSION:
             [Output('cell-graphic','src'),
              Output('cell-hierarchy','elements'),
              Output('cell-vis-drop','options'),
-             Output('cell-graphic-name','children')],
-            Input('neph-img','clickData'),
+             Output('cell-graphic-name','children'),
+             Output('organ-hierarchy-store','data'),
+             Output('organ-hierarchy-cell-select','options'),
+             Output('organ-hierarchy-cell-select','value'),
+             Output('organ-hierarchy-cell-select-div','style'),
+             Output('nephron-diagram','style')],
+            [Input('neph-img','clickData'),
+             Input('organ-hierarchy-select','value'),
+             Input('organ-hierarchy-cell-select','value')],
+            State('organ-hierarchy-store','data')
         )(self.update_cell_hierarchy)
 
         # Getting nephron hover (cell type label)
@@ -799,6 +808,7 @@ class FUSION:
             Output('id-p','children'),
             Output('notes-p','children')],
             Input('cell-hierarchy','tapNodeData'),
+            State('organ-hierarchy-store','data'),
             prevent_initial_call=True
         )(self.get_cyto_data)
 
@@ -2485,10 +2495,32 @@ class FUSION:
 
         return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children, gene_info_style, gene_info_components, slide_info_store
 
-    def update_cell_hierarchy(self,cell_clickData):
+    def update_cell_hierarchy(self,cell_clickData,organ_select,organ_cell_select,organ_store):
         """
         Updating cell cytoscape visualization        
         """
+        organ_store = json.loads(organ_store)
+
+        if not organ_store['organ'] is None:
+            if not organ_store['organ']==organ_select:
+                new_table, new_table_info = self.gene_handler.get_table(organ_select.lower())
+
+                organ_store['organ'] = organ_select
+                organ_store['table'] = new_table.to_dict('records')
+                organ_store['info'] = new_table_info.to_dict('records')
+
+                organ_cell_options = new_table['CT/1'].dropna().unique().tolist()
+            else:
+                organ_cell_options = no_update
+        else:
+            new_table, new_table_info = self.gene_handler.get_table(organ_select.lower())
+
+            organ_store['organ'] = organ_select
+            organ_store['table'] = new_table.to_dict('records')
+            organ_store['info'] = new_table_info.to_dict('records')
+        
+            organ_cell_options = new_table['CT/1'].dropna().unique().tolist()
+
 
         # Loading the cell-graphic and hierarchy image
         cell_graphic = './assets/cell_graphics/default_cell_graphic.png'
@@ -2501,25 +2533,47 @@ class FUSION:
         cell_name = html.H3('Default Cell')
 
         # Getting cell_val from the clicked location in the nephron diagram
-        if not cell_clickData is None:
-            pt = cell_clickData['points'][0]
-            color = cell_clickData['points'][0]['color']
+        if organ_select == 'kidney':
 
-            color_code = [str(color[i]) for i in color]
+            nephron_diagram_style = {'display':'inline-block'}
+            organ_cell_style = {'display': 'none'}
+            organ_cell_value = no_update
+            if not cell_clickData is None:
+                pt = cell_clickData['points'][0]
+                color = cell_clickData['points'][0]['color']
 
-            if not color_code[-1]=='0':
-                color_code = ','.join(color_code[0:-1])
+                color_code = [str(color[i]) for i in color]
 
-                if color_code in list(self.cell_colors_key.keys()):
+                if not color_code[-1]=='0':
+                    color_code = ','.join(color_code[0:-1])
 
-                    cell_val = self.cell_graphics_key[self.cell_colors_key[color_code]]['full']                    
-                    cell_name = html.H3(cell_val)
-                    if self.cell_names_key[cell_val] in self.cell_graphics_key:
-                        cell_graphic = self.cell_graphics_key[self.cell_names_key[cell_val]]['graphic']
-                        cell_hierarchy = self.gen_cyto(self.cell_names_key[cell_val])
-                        cell_state_droptions = np.unique(self.cell_graphics_key[self.cell_names_key[cell_val]]['states'])
+                    if color_code in list(self.cell_colors_key.keys()):
 
-        return cell_graphic, cell_hierarchy, cell_state_droptions, cell_name
+                        cell_val = self.cell_graphics_key[self.cell_colors_key[color_code]]['full']                    
+                        cell_name = html.H3(cell_val)
+                        if self.cell_names_key[cell_val] in self.cell_graphics_key:
+                            cell_graphic = self.cell_graphics_key[self.cell_names_key[cell_val]]['graphic']
+                            cell_hierarchy = self.gen_cyto(cell_val,organ_store['table'])
+                            cell_state_droptions = np.unique(self.cell_graphics_key[self.cell_names_key[cell_val]]['states'])
+
+        else:
+            # This is just because no graphics are available for other organs
+            if not ctx.triggered_id=='organ-hierarchy-cell-select':
+                organ_cell_value = pd.DataFrame.from_records(organ_store['table'])['CT/1'].dropna().tolist()[0]
+                organ_cell_select = organ_cell_value
+            else:
+                organ_cell_value = no_update
+                if organ_cell_select=='':
+                    organ_cell_select = pd.DataFrame.from_records(organ_store['table'])['CT/1'].dropna().tolist()[0]
+
+            cell_hierarchy = self.gen_cyto(organ_cell_select,organ_store['table'])
+            nephron_diagram_style = {'display':'none'}
+            organ_cell_style = {'display': 'inline-block'}
+
+
+        organ_store = json.dumps(organ_store)
+
+        return cell_graphic, cell_hierarchy, cell_state_droptions, cell_name, organ_store, organ_cell_options, organ_cell_value, organ_cell_style, nephron_diagram_style
 
     def get_neph_hover(self,neph_hover):
         """
@@ -2943,18 +2997,29 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
         
-    def gen_cyto(self,cell_val):
+    def gen_cyto(self,cell_val,table):
         """
         Generating cytoscape for selected cell type (referenced in self.update_cell_hierarchy)
         """
         cyto_elements = []
-
-        # Getting cell sub-types under that main cell
-        cell_subtypes = self.cell_graphics_key[cell_val]['subtypes']
-
+        
+        table = pd.DataFrame.from_records(table)
         # Getting all the rows that contain these sub-types
-        table_data = self.table_df.dropna(subset = ['CT/1/ABBR'])
-        cell_data = table_data[table_data['CT/1/ABBR'].isin(cell_subtypes)]
+        if not cell_val in self.cell_names_key:
+            table_data = table.dropna(subset=['CT/1'])
+            cell_data = table_data[table_data['CT/1'].isin([cell_val])]
+            cell_types_table = cell_data.filter(regex=self.node_cols['Cell Types']['abbrev']).dropna(axis=1)
+            cell_subtypes = []
+            for c in cell_types_table.columns.tolist():
+                if 'LABEL' in c:
+                    cell_subtypes.extend(cell_types_table[c].unique().tolist())
+            cell_subtypes = np.unique(cell_subtypes).tolist()
+
+        else:
+            table_data = table.dropna(subset=['CT/1/ABBR'])
+
+            cell_subtypes = self.cell_graphics_key[self.cell_names_key[cell_val]]['subtypes']
+            cell_data = table_data[table_data['CT/1/ABBR'].isin(cell_subtypes)]
 
         # cell type
         cyto_elements.append(
@@ -2968,7 +3033,6 @@ class FUSION:
 
         # Getting the anatomical structures for this cell type
         an_structs = cell_data.filter(regex=self.node_cols['Anatomical Structure']['abbrev']).dropna(axis=1)
-
         an_start_y = self.node_cols['Anatomical Structure']['y_start']
         col_vals = an_structs.columns.values.tolist()
         col_vals = [i for i in col_vals if 'LABEL' in i]
@@ -2997,8 +3061,12 @@ class FUSION:
         cell_start_y = self.node_cols['Cell Types']['y_start']
         gene_start_y = self.node_cols['Genes']['y_start']
         for idx_1,c in enumerate(cell_subtypes):
+            
+            if 'CT/1/ABBR' in table_data.columns.tolist():
+                matching_rows = table_data[table_data['CT/1/ABBR'].astype(str).str.match(c)]
+            else:
+                matching_rows = table_data[table_data['CT/1'].str.match(c)]
 
-            matching_rows = table_data[table_data['CT/1/ABBR'].str.match(c)]
 
             if not matching_rows.empty:
                 cell_start_y+=75
@@ -3016,33 +3084,51 @@ class FUSION:
 
                 # Getting genes
                 genes = matching_rows.filter(regex=self.node_cols['Genes']['abbrev']).dropna(axis=1)
-                col_vals = genes.columns.values.tolist()
-                col_vals = [i for i in col_vals if 'LABEL' in i]
+                gene_col_vals = genes.columns.values.tolist()
+                if any(['LABEL' in i for i in gene_col_vals]):
+                    gene_col_vals = [i for i in gene_col_vals if 'LABEL' in i]
+                else:
+                    gene_col_vals = [i for i in gene_col_vals if len(i.split('/'))==2]
 
-                for idx,col in enumerate(col_vals):
+                gene_col_vals = np.unique(gene_col_vals).tolist()
+
+                for gidx,gcol in enumerate(gene_col_vals):
+                    print(genes[gcol].tolist()[0])
                     cyto_elements.append(
-                        {'data':{'id':col,
-                                 'label':genes[col].tolist()[0],
+                        {'data':{'id':gcol,
+                                 'label':genes[gcol].tolist()[0],
                                  'url':'./assets/gene.png'},
                         'classes':'G',
                         'position':{'x':self.node_cols['Genes']['x_start'],'y':gene_start_y}}
                     )
 
                     cyto_elements.append(
-                        {'data':{'source':col,'target':f'ST_{idx_1}'}}
+                        {'data':{'source':gcol,'target':f'ST_{idx_1}'}}
                     )
+
                     gene_start_y+=75
+                    print(gene_start_y)
+        
+        print(cyto_elements)
 
         return cyto_elements
 
-    def get_cyto_data(self,clicked):
+    def get_cyto_data(self,clicked, organ_store):
         """
         Getting information for clicked node in cell hierarchy cytoscape vis.
         """
         if not clicked is None:
+
+            organ_store = json.loads(organ_store)
+
+            table = pd.DataFrame.from_records(organ_store['table'])
             if 'ST' in clicked['id']:
-                table_data = self.table_df.dropna(subset=['CT/1/ABBR'])
-                table_data = table_data[table_data['CT/1/ABBR'].str.match(clicked['label'])]
+                if 'CT/1/ABBR' in table.columns.tolist():
+                    table_data = table.dropna(subset=['CT/1/ABBR'])
+                    table_data = table_data[table_data['CT/1/ABBR'].str.match(clicked['label'])]
+                else:
+                    table_data = table.dropna(subset=['CT/1'])
+                    table_data = table_data[table_data['CT/1'].str.match(clicked['label'])]
 
                 label = clicked['label']
                 try:
@@ -3069,7 +3155,7 @@ class FUSION:
 
             elif 'Main_Cell' not in clicked['id']:
                 
-                table_data = self.table_df.dropna(subset=[clicked['id']])
+                table_data = table.dropna(subset=[clicked['id']])
                 table_data = table_data[table_data[clicked['id']].str.match(clicked['label'])]
 
                 base_label = '/'.join(clicked['id'].split('/')[0:-1])
@@ -8245,7 +8331,7 @@ def app(*args):
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides)
-    layout_handler.gen_vis_layout(wsi,cli_list)
+    layout_handler.gen_vis_layout(wsi,GeneHandler(),cli_list)
     layout_handler.gen_builder_layout(dataset_handler,initial_user_info)
     layout_handler.gen_uploader_layout()
 

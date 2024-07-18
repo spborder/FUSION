@@ -104,7 +104,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self, wsi, cli_list = None):
+    def gen_vis_layout(self, wsi, gene_handler, cli_list = None):
 
         #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
@@ -359,15 +359,56 @@ class LayoutHandler:
                 ]),
                 html.Hr(),
                 dbc.Row([
+                    dbc.Col(dbc.Label('Select Organ: ',html_for = 'organ-hierarchy-select'),md = 2),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [
+                                {'label': i.title(), 'value': i}
+                                for i in gene_handler.asct_b['Organ'].tolist() if not i in ['anatomical systems','bone marrow']
+                            ],
+                            value = 'kidney',
+                            id = 'organ-hierarchy-select'
+                        ),
+                        md = 10
+                    ),
+                    html.Div(
+                        dcc.Store(
+                            id = 'organ-hierarchy-store',
+                            storage_type = 'memory',
+                            data = json.dumps({'organ': None,'table': None,'info': None})
+                        )
+                    )
+                ]),
+                dbc.Row([
                     dbc.Col([
-                        dbc.Row([
+                        html.Div([
+                            dbc.Row([
                             html.H2('Nephron Diagram')
-                        ]),
-                        dbc.Row([
-                            dcc.Graph(id='neph-img',figure=self.neph_figure),
-                            dcc.Tooltip(id='neph-tooltip',loading_text='')
-                        ])
+                            ]),
+                            dbc.Row([
+                                dcc.Graph(id='neph-img',figure=self.neph_figure),
+                                dcc.Tooltip(id='neph-tooltip',loading_text='')
+                            ])
+                        ], id = 'nephron-diagram'),
+                        html.Div(
+                            id = 'organ-hierarchy-cell-select-div',
+                            children = [
+                                html.H2('More Organ Graphics Coming Soon!'),
+                                dbc.Col([
+                                    dbc.Label('Select a cell type: ',html_for='organ-hierarchy-cell-select')
+                                ],md=2),
+                                dbc.Col([
+                                    dcc.Dropdown(
+                                        id = 'organ-hierarchy-cell-select',
+                                        options = '',
+                                        value = ''
+                                    )
+                                ],md=10)
+                            ],
+                            style = {'display': 'none'}
+                        )
                     ],md=5),
+
                     dbc.Col([
                         dbc.Tabs([
                             dbc.Tab(cell_graphic_tab, label = 'Cell Graphic',tab_id = 'cell-graphic-tab'),
@@ -3718,7 +3759,6 @@ class GirderHandler:
             else:
                 collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'folder'})
 
-            
             image_items = [i for i in collection_items if 'largeImage' in i and not 'png' in i['name']]
 
             folder_ids = np.unique([i['folderId'] for i in image_items]).tolist()
@@ -5176,6 +5216,9 @@ class GeneHandler:
         self.info_url = 'https://mygene.info/v3/'
         self.hra_url = 'https://grlc.io/api-git/hubmapconsortium/ccf-grlc/subdir/fusion//?endpoint=https://lod.humanatlas.io/sparql'
 
+        self.asct_b = pd.read_csv('./assets/asctb_release7.csv')
+
+
     def get_layout(self, gene_id:str):
         """
         Returns list of layout components (buttons and divs) when someone selects an overlay that contains "Gene Counts"
@@ -5265,7 +5308,10 @@ class GeneHandler:
         # Have to add on the whole iri here:
         # HGNC id is a number but should be interpreted as a string
         id = f'http://identifiers.org/hgnc/{id}'
-        request_response = requests.get(f'{self.hra_url.replace("fusion//","fusion//asct_by_biomarker")}&biomarker={id}',headers={'Accept':'application/json','Content-Type':'application/json'})
+        request_response = requests.get(
+            f'{self.hra_url.replace("fusion//","fusion//asct_by_biomarker")}&biomarker={id}',
+            headers={'Accept':'application/json','Content-Type':'application/json'}
+        )
         if request_response.ok:
             return pd.json_normalize(request_response.json()['results']['bindings'],max_level=1)
         else:
@@ -5281,7 +5327,10 @@ class GeneHandler:
 
         # Modifiying input id
         id = f'http://purl.odolibrary.org/obo/{id}'
-        request_response = requests.get(f'{self.hra_url.replace("fusion//","fusion//cell_by_location")}&location={id}',headers={'Accept':'application/json','Content-type':'application/json'})
+        request_response = requests.get(
+            f'{self.hra_url.replace("fusion//","fusion//cell_by_location")}&location={id}',
+            headers={'Accept':'application/json','Content-type':'application/json'}
+        )
 
         print(request_response)
         if request_response.ok:
@@ -5289,6 +5338,50 @@ class GeneHandler:
             return pd.DataFrame(request_response.content)
         else:
             return None
+
+    def get_table(self,organ_selection: str):
+        """
+        Getting csv table containing asct+b info for a given organ
+        """
+
+        if organ_selection in self.asct_b['Organ'].tolist():
+
+            csv_location = self.asct_b['csv'].tolist()[self.asct_b['Organ'].tolist().index(organ_selection)]
+
+            new_table_req = requests.get(
+                csv_location
+            )
+
+            if new_table_req.ok:
+                new_table = pd.read_csv(BytesIO(new_table_req.content))
+                new_table_content = pd.read_csv(BytesIO(new_table_req.content),skiprows=list(range(10)))
+                new_table_info = new_table.iloc[1:9,:1]
+
+            else:
+                new_table_content = None
+                new_table_info = None
+        else:
+            new_table_content = None
+            new_table_info = None
+
+        return new_table_content, new_table_info
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
