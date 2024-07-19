@@ -1041,10 +1041,11 @@ class CODEXSlide(DSASlide):
                 intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
             
             for m_idx, m_ftu in enumerate(self.manual_rois):
-                intersecting_ftus[f'Manual ROI: {m_idx+1}'], intersecting_ftu_polys[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']], [shape(i['geometry']) for i in m_ftu['geojson']['features']]
+                for int_ftu in m_ftu:
+                    intersecting_ftus[f'Manual ROI: {m_idx+1}, {int_ftu}'] = [m_ftu['geojson']['features'][0]['properties']['user'][int_ftu]]
 
             for marked_idx, marked_ftu in enumerate(self.marked_ftus):
-                intersecting_ftus[f'Marked FTUs: {marked_idx+1}'], intersecting_ftu_polys[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']], [shape(i['geometry']) for i in marked_ftu['geojson']['features']]
+                intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
 
         elif view_type['name']=='channel_hist':
             intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,view_type['frame_list'][0])
@@ -1119,7 +1120,8 @@ class CODEXSlide(DSASlide):
                             
                             cell_features['label'] = 'Cell Nucleus'
 
-                            cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
+                            if f in intersecting_ftu_polys:
+                                cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
 
                             counts_data_list.append(cell_features)
 
@@ -1392,7 +1394,7 @@ class XeniumSlide(DSASlide):
         viewport_data = None
 
         #TODO: Collect all FTUs within the bounds_box
-        
+
 
 
         return viewport_data_components, viewport_data

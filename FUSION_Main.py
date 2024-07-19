@@ -2509,7 +2509,11 @@ class FUSION:
                 organ_store['table'] = new_table.to_dict('records')
                 organ_store['info'] = new_table_info.to_dict('records')
 
-                organ_cell_options = new_table['CT/1'].dropna().unique().tolist()
+                if 'CT/1/LABEL' in new_table.columns.tolist():
+                    organ_cell_options = new_table['CT/1/LABEL'].dropna().unique().tolist()
+                else:
+                    organ_cell_options = new_table['CT/1'].dropna().unique().tolist()
+
             else:
                 organ_cell_options = no_update
         else:
@@ -2519,7 +2523,10 @@ class FUSION:
             organ_store['table'] = new_table.to_dict('records')
             organ_store['info'] = new_table_info.to_dict('records')
         
-            organ_cell_options = new_table['CT/1'].dropna().unique().tolist()
+            if 'CT/1/LABEL' in new_table.columns.tolist():
+                organ_cell_options = new_table['CT/1/LABEL'].dropna().unique().tolist()
+            else:
+                organ_cell_options = new_table['CT/1'].dropna().unique().tolist()
 
 
         # Loading the cell-graphic and hierarchy image
@@ -2559,12 +2566,20 @@ class FUSION:
         else:
             # This is just because no graphics are available for other organs
             if not ctx.triggered_id=='organ-hierarchy-cell-select':
-                organ_cell_value = pd.DataFrame.from_records(organ_store['table'])['CT/1'].dropna().tolist()[0]
+                organ_df = pd.DataFrame.from_records(organ_store['table'])
+                if 'CT/1/LABEL' in organ_df.columns.tolist():
+                    organ_cell_value = organ_df['CT/1/LABEL'].dropna().tolist()[0]
+                else:
+                    organ_cell_value = organ_df['CT/1'].dropna().tolist()[0]
                 organ_cell_select = organ_cell_value
             else:
                 organ_cell_value = no_update
                 if organ_cell_select=='':
-                    organ_cell_select = pd.DataFrame.from_records(organ_store['table'])['CT/1'].dropna().tolist()[0]
+                    organ_df = pd.DataFrame.from_records(organ_store['table'])
+                    if 'CT/1/LABEL' in organ_df.columns.tolist():
+                        organ_cell_select = organ_df['CT/1/LABEL'].dropna().tolist()[0]
+                    else:
+                        organ_cell_select = organ_df['CT/1'].dropna().tolist()[0]
 
             cell_hierarchy = self.gen_cyto(organ_cell_select,organ_store['table'])
             nephron_diagram_style = {'display':'none'}
@@ -3006,15 +3021,19 @@ class FUSION:
         table = pd.DataFrame.from_records(table)
         # Getting all the rows that contain these sub-types
         if not cell_val in self.cell_names_key:
-            table_data = table.dropna(subset=['CT/1'])
-            cell_data = table_data[table_data['CT/1'].isin([cell_val])]
+            if 'CT/1/LABEL' in table.columns.tolist():
+                table_data = table.dropna(subset=['CT/1/LABEL'])
+                cell_data = table_data[table_data['CT/1/LABEL'].isin([cell_val])]
+            else:
+                table_data = table.dropna(subset=['CT/1'])
+                cell_data = table_data[table_data['CT/1'].isin([cell_val])]
             cell_types_table = cell_data.filter(regex=self.node_cols['Cell Types']['abbrev']).dropna(axis=1)
             cell_subtypes = []
             unique_subtypes = []
             if any(['LABEL' in i for i in cell_types_table.columns.tolist()]):
                 for c in [i for i in cell_types_table.columns.tolist() if 'LABEL' in i]:
-                    unique_subtypes = cell_types_table[c].unique().tolist()
-                    for u_s in unique_subtypes:
+                    unique_subtype_col = cell_types_table[c].unique().tolist()
+                    for u_s in unique_subtype_col:
                         if not u_s in unique_subtypes:
                             cell_subtypes.append(
                                 {
@@ -3026,8 +3045,8 @@ class FUSION:
                 
             else:
                 for c in [i for i in cell_types_table.columns.tolist() if len(i.split('/'))==2]:
-                    unique_subtypes = cell_types_table[c].unique().tolist()
-                    for u_s in unique_subtypes:
+                    unique_subtypes_col = cell_types_table[c].unique().tolist()
+                    for u_s in unique_subtypes_col:
                         if not u_s in unique_subtypes:
                             cell_subtypes.append(
                                 {
@@ -3037,8 +3056,6 @@ class FUSION:
                             )
                             unique_subtypes.append(u_s)
             
-            print(unique_subtypes)
-            print(cell_val)
             main_cell_col = cell_subtypes[unique_subtypes.index(cell_val)]['col']
 
         else:
@@ -3120,9 +3137,11 @@ class FUSION:
 
             # Finding row which matches this cell subtype
             if cell_val in self.cell_names_key:
-                matching_rows = table_data[table_data['CT/1/ABBR'].astype(str).str.match(c['val'])]
+                matching_rows = table_data.dropna(subset=['CT/1/ABBR'])
+                matching_rows = matching_rows[matching_rows['CT/1/ABBR'].astype(str).str.match(c['val'])]
             else:
-                matching_rows = table_data[table_data[c['col']].str.match(c['val'])]
+                matching_rows = table_data.dropna(subset=[c["col"]])
+                matching_rows = matching_rows[matching_rows[c['col']].str.match(c['val'])]
 
             if not matching_rows.empty:
                 cell_start_y += 75
@@ -3253,6 +3272,9 @@ class FUSION:
                 else:
                     notes = 'No notes.'
             else:
+                print(table[clicked["col"]].tolist())
+                if clicked['col']+'/LABEL' in table.columns.tolist():
+                    print(table[clicked['col']+'/LABEL'].tolist())
                 raise exceptions.PreventUpdate
 
         else:
