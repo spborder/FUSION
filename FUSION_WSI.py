@@ -651,7 +651,7 @@ class VisiumSlide(DSASlide):
         """
         Find intersecting structures, including marked and manual.
 
-        Grabbing Main_Cell_Types, Cell_States, and (TODO) Gene_Counts
+        Grabbing Main_Cell_Types, Cell_States, and Gene_Counts
         """
 
         if view_type['name'] is None:
@@ -1024,6 +1024,7 @@ class CODEXSlide(DSASlide):
     def update_viewport_data(self,bounds_box: list,view_type:dict):
         """
         Finding viewport data according to view selection
+        view_types available: cell, features, channel_hist
         """
 
         if view_type['name'] is None:
@@ -1380,6 +1381,8 @@ class XeniumSlide(DSASlide):
     def update_viewport_data(self,bounds_box,view_type):
         """
         Updating data passed to charts based on change in viewport position
+
+        view_types available: cell_composition, features
         """
         
         if view_type['name'] is None:
@@ -1388,7 +1391,9 @@ class XeniumSlide(DSASlide):
         viewport_data_components = []
         viewport_data = None
 
-        pass
+        #TODO: Collect all FTUs within the bounds_box
+        
+
 
         return viewport_data_components, viewport_data
 

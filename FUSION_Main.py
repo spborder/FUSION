@@ -3010,46 +3010,99 @@ class FUSION:
             cell_data = table_data[table_data['CT/1'].isin([cell_val])]
             cell_types_table = cell_data.filter(regex=self.node_cols['Cell Types']['abbrev']).dropna(axis=1)
             cell_subtypes = []
-            for c in cell_types_table.columns.tolist():
-                if 'LABEL' in c:
-                    cell_subtypes.extend(cell_types_table[c].unique().tolist())
-            cell_subtypes = np.unique(cell_subtypes).tolist()
+            unique_subtypes = []
+            if any(['LABEL' in i for i in cell_types_table.columns.tolist()]):
+                for c in [i for i in cell_types_table.columns.tolist() if 'LABEL' in i]:
+                    unique_subtypes = cell_types_table[c].unique().tolist()
+                    for u_s in unique_subtypes:
+                        if not u_s in unique_subtypes:
+                            cell_subtypes.append(
+                                {
+                                    'col': c.replace('/LABEL',''),
+                                    'val': u_s
+                                }
+                            )
+                            unique_subtypes.append(u_s)
+                
+            else:
+                for c in [i for i in cell_types_table.columns.tolist() if len(i.split('/'))==2]:
+                    unique_subtypes = cell_types_table[c].unique().tolist()
+                    for u_s in unique_subtypes:
+                        if not u_s in unique_subtypes:
+                            cell_subtypes.append(
+                                {
+                                    'col': c,
+                                    'val': u_s
+                                }
+                            )
+                            unique_subtypes.append(u_s)
+            
+            print(unique_subtypes)
+            print(cell_val)
+            main_cell_col = cell_subtypes[unique_subtypes.index(cell_val)]['col']
 
         else:
             table_data = table.dropna(subset=['CT/1/ABBR'])
+            main_cell_col = 'CT/1'
 
-            cell_subtypes = self.cell_graphics_key[self.cell_names_key[cell_val]]['subtypes']
-            cell_data = table_data[table_data['CT/1/ABBR'].isin(cell_subtypes)]
+            cell_subtypes = []
+            for u_s in self.cell_graphics_key[self.cell_names_key[cell_val]]['subtypes']:
+                cell_subtypes.append(
+                    {
+                        'col': 'CT/1',
+                        'val': u_s
+                    }
+                )
+            cell_data = table_data[table_data['CT/1/ABBR'].isin([i['val'] for i in cell_subtypes])]
+        
+        # Getting the anatomical structures for this cell type
+        as_data = cell_data.filter(regex=self.node_cols['Anatomical Structure']['abbrev']).dropna(axis=1)
+        an_start_y = self.node_cols['Anatomical Structure']['y_start']
+        as_col_vals = as_data.columns.values.tolist()
 
-        # cell type
+        if any(['LABEL' in i for i in as_col_vals]):
+            as_col_vals = [i for i in as_col_vals if 'LABEL' in i]
+        else:
+            as_col_vals = [i for i in as_col_vals if len(i.split('/'))==2]
+
+        # Adding main cell node to connect edges to
         cyto_elements.append(
-            {'data':{'id':'Main_Cell',
-                     'label':cell_val,
-                     'url':'./assets/cell.png'},
+            {
+                'data':{
+                    'id':'Main_Cell',
+                    'label':cell_val,
+                    'url':'./assets/cell.png',
+                    'col': main_cell_col
+                },
             'classes': 'CT',
-            'position':{'x':self.node_cols['Cell Types']['x_start'],'y':self.node_cols['Cell Types']['y_start']},
-                     }
+            'position':{
+                'x':self.node_cols['Cell Types']['x_start'],
+                'y':self.node_cols['Cell Types']['y_start']
+            },
+        }
         )
 
-        # Getting the anatomical structures for this cell type
-        an_structs = cell_data.filter(regex=self.node_cols['Anatomical Structure']['abbrev']).dropna(axis=1)
-        an_start_y = self.node_cols['Anatomical Structure']['y_start']
-        col_vals = an_structs.columns.values.tolist()
-        col_vals = [i for i in col_vals if 'LABEL' in i]
-
-        for idx,col in enumerate(col_vals):
+        for idx,col in enumerate(as_col_vals):
+            as_value = as_data[col].tolist()[0]
             cyto_elements.append(
-                {'data':{'id':col,
-                         'label':an_structs[col].tolist()[0],
-                         'url':'./assets/kidney.png'},
+                {
+                'data':{
+                        'id':col,
+                        'label':as_value,
+                        'url':'./assets/kidney.png',
+                        'col': col.replace('/LABEL','')
+                    },
                 'classes':'AS',
-                'position':{'x':self.node_cols['Anatomical Structure']['x_start'],'y':an_start_y}
-                         }
+                'position':{
+                    'x':self.node_cols['Anatomical Structure']['x_start'],
+                    'y':an_start_y
+                    }
+                }
             )
             
             if idx>0:
                 cyto_elements.append(
-                    {'data':{'source':col_vals[idx-1],'target':col}}
+                    {'data':{'source':as_col_vals[idx-1],'target':col}}
                 )
             an_start_y+=75
         
@@ -3060,29 +3113,47 @@ class FUSION:
         
         cell_start_y = self.node_cols['Cell Types']['y_start']
         gene_start_y = self.node_cols['Genes']['y_start']
-        for idx_1,c in enumerate(cell_subtypes):
-            
-            if 'CT/1/ABBR' in table_data.columns.tolist():
-                matching_rows = table_data[table_data['CT/1/ABBR'].astype(str).str.match(c)]
-            else:
-                matching_rows = table_data[table_data['CT/1'].str.match(c)]
 
+        # Iterating through cell subtypes
+        unique_genes = []
+        for idx_1,c in enumerate(cell_subtypes):
+
+            # Finding row which matches this cell subtype
+            if cell_val in self.cell_names_key:
+                matching_rows = table_data[table_data['CT/1/ABBR'].astype(str).str.match(c['val'])]
+            else:
+                matching_rows = table_data[table_data[c['col']].str.match(c['val'])]
 
             if not matching_rows.empty:
-                cell_start_y+=75
-
+                cell_start_y += 75
+                # Adding subtype node to cytoscape
                 cyto_elements.append(
-                    {'data':{'id':f'ST_{idx_1}',
-                             'label':c,
-                             'url':'./assets/cell.png'},
-                    'classes':'CT',
-                    'position':{'x':self.node_cols['Cell Types']['x_start'],'y':cell_start_y}}
-                )
-                cyto_elements.append(
-                    {'data':{'source':'Main_Cell','target':f'ST_{idx_1}'}}
+                    {
+                        'data': {
+                            'id': f'ST_{idx_1}',
+                            'label': c['val'],
+                            'url': './assets/cell.png',
+                            'col': c['col'].replace('/LABEL','')
+                        },
+                        'classes': 'CT',
+                        'position': {
+                            'x': self.node_cols['Cell Types']['x_start'],
+                            'y': cell_start_y
+                        }
+                    }
                 )
 
-                # Getting genes
+                # Adding edge from main cell to subtype node
+                cyto_elements.append(
+                    {
+                        'data': {
+                            'source': 'Main_Cell',
+                            'target': f'ST_{idx_1}'
+                        }
+                    }
+                )
+
+
                 genes = matching_rows.filter(regex=self.node_cols['Genes']['abbrev']).dropna(axis=1)
                 gene_col_vals = genes.columns.values.tolist()
                 if any(['LABEL' in i for i in gene_col_vals]):
@@ -3091,25 +3162,38 @@ class FUSION:
                     gene_col_vals = [i for i in gene_col_vals if len(i.split('/'))==2]
 
                 gene_col_vals = np.unique(gene_col_vals).tolist()
+                if len(gene_col_vals)>0:
+                    for g_idx,g_col in enumerate(gene_col_vals):
+                        gene_label = genes[g_col].tolist()[0]
+                        if not gene_label in unique_genes:
+                            print(gene_label)
+                            unique_genes.append(gene_label)
 
-                for gidx,gcol in enumerate(gene_col_vals):
-                    print(genes[gcol].tolist()[0])
-                    cyto_elements.append(
-                        {'data':{'id':gcol,
-                                 'label':genes[gcol].tolist()[0],
-                                 'url':'./assets/gene.png'},
-                        'classes':'G',
-                        'position':{'x':self.node_cols['Genes']['x_start'],'y':gene_start_y}}
-                    )
+                            # Adding new gene node to cytoscape
+                            cyto_elements.append(
+                                {
+                                    'data':{
+                                        'id':f'G_{unique_genes.index(gene_label)}',
+                                        'label':gene_label,
+                                        'url':'./assets/gene.png',
+                                        'col': g_col.replace('/LABEL','')
+                                    },
+                                    'classes':'G',
+                                    'position':{'x':self.node_cols['Genes']['x_start'],'y':gene_start_y}
+                                }
+                            )
+                            gene_start_y+=75
 
-                    cyto_elements.append(
-                        {'data':{'source':gcol,'target':f'ST_{idx_1}'}}
-                    )
+                        # Adding edge between gene node and cell subtype node
+                        cyto_elements.append(
+                            {
+                                'data': {
+                                    'source': f'ST_{idx_1}',
+                                    'target': f'G_{unique_genes.index(gene_label)}'
+                                }
+                            }
+                        )
 
-                    gene_start_y+=75
-                    print(gene_start_y)
-        
-        print(cyto_elements)
 
         return cyto_elements
 
@@ -3118,70 +3202,59 @@ class FUSION:
         Getting information for clicked node in cell hierarchy cytoscape vis.
         """
         if not clicked is None:
-
+            
+            print(clicked)
             organ_store = json.loads(organ_store)
 
             table = pd.DataFrame.from_records(organ_store['table'])
-            if 'ST' in clicked['id']:
-                if 'CT/1/ABBR' in table.columns.tolist():
-                    table_data = table.dropna(subset=['CT/1/ABBR'])
-                    table_data = table_data[table_data['CT/1/ABBR'].str.match(clicked['label'])]
+
+            if organ_store['organ']=='kidney':
+                if 'CT' in clicked['col']:
+                    if not clicked['id']=='Main_Cell':
+                        table_data = table.dropna(subset=['CT/1/ABBR'])
+                        table_data = table_data[table_data['CT/1/ABBR'].str.match(clicked['label'])]
+                    else:
+                        table_data = pd.DataFrame()
                 else:
-                    table_data = table.dropna(subset=['CT/1'])
-                    table_data = table_data[table_data['CT/1'].str.match(clicked['label'])]
-
-                label = clicked['label']
-                try:
-                    try:
-                        id = table_data['CT/1/ID'].tolist()[0]
-                        # Modifying base url to make this link to UBERON
-                        base_url = self.node_cols['Cell Types']['base_url']
-                        new_url = base_url+id.replace('CL:','')
-                    except AttributeError:
-                        # for float objects
-                        print(id)
-                        base_url = self.node_cols['Cell Types']['base_url']
-                        new_url = base_url+str(id).replace('CL:','')
-
-                except IndexError:
-                    print(table_data['CT/1/ID'].tolist())
-                    id = ''
-                
-                try:
-                    notes = table_data['CT/1/NOTES'].tolist()[0]
-                except:
-                    print(table_data['CT/1/NOTES'])
-                    notes = ''
-
-            elif 'Main_Cell' not in clicked['id']:
-                
-                table_data = table.dropna(subset=[clicked['id']])
-                table_data = table_data[table_data[clicked['id']].str.match(clicked['label'])]
-
-                base_label = '/'.join(clicked['id'].split('/')[0:-1])
-                label = table_data[base_label+'/LABEL'].tolist()[0]
-
-                id = table_data[base_label+'/ID'].tolist()[0]
-                
-                if self.node_cols['Anatomical Structure']['abbrev'] in clicked['id']:
-                    base_url = self.node_cols['Anatomical Structure']['base_url']
-
-                    new_url = base_url+id.replace('UBERON:','')
-                else:
-                    base_url = self.node_cols['Genes']['base_url']
-
-                    new_url = base_url+id.replace('HGNC:','')
-
-                try:
-                    notes = table_data[base_label+'/NOTES'].tolist()[0]
-                except KeyError:
-                    notes = ''
-
+                    if clicked['col']+'/LABEL' in table.columns.tolist():
+                        table_data = table.dropna(subset=[clicked['col']+'/LABEL'])
+                        table_data = table_data[table_data[clicked['col']+'/LABEL'].str.match(clicked['label'])]
+                    else:
+                        table_data = table.dropna(subset=[clicked['col']])
+                        table_data = table_data[table_data[clicked['col']].str.match(clicked['label'])]
             else:
-                label = ''
-                id = ''
-                notes = ''
-                new_url = ''
+                if clicked['col']+'/LABEL' in table.columns.tolist():
+                    table_data = table.dropna(subset=[clicked['col']+'/LABEL'])
+                    table_data = table_data[table_data[clicked['col']+'/LABEL'].str.match(clicked['label'])]
+                else:
+                    table_data = table.dropna(subset=[clicked['col']])
+                    table_data = table_data[table_data[clicked['col']].str.match(clicked['label'])]
+
+            label = clicked['label']
+            print(table_data)
+
+            if not table_data.empty:
+                id = table_data[f'{clicked["col"]}/ID'].tolist()[0]
+
+                if 'CT' in clicked['col']:
+                    base_url = self.node_cols['Cell Types']['base_url']
+                    new_url = base_url+str(id).replace('CL:','')
+                elif 'AS' in clicked['col']:
+                    base_url = self.node_cols['Anatomical Structure']['base_url']
+                    new_url = base_url+str(id).replace('UBERON:','')
+                elif 'BGene' in clicked['col']:
+                    base_url = self.node_cols['Genes']['base_url']
+                    new_url = base_url+str(id).replace('HGNC:','')
+                else:
+                    new_url = ''
+
+                if f'{clicked["col"]}/NOTES' in table_data.columns.tolist():
+                    notes = table_data[f'{clicked["col"]}/NOTES'].tolist()[0]
+                else:
+                    notes = 'No notes.'
+            else:
+                raise exceptions.PreventUpdate
+
         else:
             label = ''
             id = ''
@@ -4562,50 +4635,6 @@ class FUSION:
                                     agg_properties = self.wsi.spatial_aggregation(shape(geo['geometry']))
                                     new_roi['features'][0]['properties'] = {'user':agg_properties}
                                     
-                                    """
-                                    # New geojson has no properties which can be used for overlays or anything so we have to add those
-                                    if self.wsi.spatial_omics_type=='Visium':
-                                        # Step 1, find intersecting spots:
-                                        overlap_props,_ = self.wsi.find_intersecting_ftu(shape(new_roi['features'][0]['geometry']),'Spots')
-                                        # Adding Main_Cell_Types from intersecting spots data
-                                        main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
-                                        main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
-                                        main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
-                                        main_counts_dict = main_counts_data.astype(float).to_dict()[0]
-
-                                        # Repeating for Gene Counts
-                                        gene_counts_data = pd.DataFrame.from_records([i['Gene Counts'] for i in overlap_props if 'Gene Counts' in i]).sum(axis=0).to_frame()
-                                        main_counts_data = (gene_counts_data/gene_counts_data.sum()).fillna(0.000).round(decimals=18)
-                                        gene_counts_data[0] = gene_counts_data[0].map('{:.19f}'.format)
-                                        gene_counts_dict = gene_counts_data.astype(float).to_dict()[0]
-
-                                        # Aggregating cell state information from intersecting spots
-                                        agg_cell_states = {}
-                                        for m_c in list(main_counts_dict.keys()):
-
-                                            cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_props]).sum(axis=0).to_frame()
-                                            cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
-                                            cell_states[0] = cell_states[0].map('{:.19f}'.format)
-
-                                            agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
-
-                                        new_roi['features'][0]['properties']['user'] = {
-                                            'Main_Cell_Types': main_counts_dict,
-                                            'Cell_States': agg_cell_states,
-                                            'Gene Counts': gene_counts_dict
-                                        }
-
-                                    elif self.wsi.spatial_omics_type=='CODEX':
-                                        overlap_props = self.wsi.intersecting_frame_intensity(shape(new_roi['features'][0]['geometry']),'all')
-
-                                        # Adding channel intensity histogram to properties.
-                                        new_roi['features'][0]['properties']['user'] = {}
-                                        for frame in overlap_props:
-                                            new_roi['features'][0]['properties']['user'][frame] = overlap_props[frame]
-                                    
-                                    """
-                                    # Have to normalize and make this visible in the "Cell Compositions" or something tab (since it might be more than just cells)
-
                                     new_manual_roi_dict = {
                                             'geojson':new_roi,
                                             'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
