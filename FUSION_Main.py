@@ -2179,9 +2179,14 @@ class FUSION:
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
-                filter_min_val = np.min(list(hex_color_key.keys()))
-                filter_max_val = np.max(list(hex_color_key.keys()))
-                filter_disable = False
+                if len(list(hex_color_key.keys()))>0:
+                    filter_min_val = np.min(list(hex_color_key.keys()))
+                    filter_max_val = np.max(list(hex_color_key.keys()))
+                    filter_disable = False
+                else:
+                    filter_min_val = 0
+                    filter_max_val = 1
+                    filter_disable = True
             
             elif m_prop == 'Cell_Subtypes':
 
@@ -2627,390 +2632,272 @@ class FUSION:
         """
         Controlling popup components when clicking on FTU in GeoJSON layer        
         """
+
+        pie_chart_features = [
+            'Main_Cell_Types','Cell_States', 'Cell Type', 'Channel_Means'
+        ]
+
+        if not ctx.triggered[0]['value']:
+            print('raising preventupdate')
+            return no_update
+
         if not ftu_click is None:
             self.clicked_ftu = ftu_click
             if 'unique_index' in ftu_click['properties']:
                 ftu_idx = ftu_click['properties']['unique_index']
 
-            if self.wsi.spatial_omics_type=='Visium':
-                if 'Main_Cell_Types' in ftu_click['properties']['user']:
+            accordion_children = []
+            # Getting other FTU/Spot properties
+            all_properties = list(ftu_click['properties']['user'].keys())
+            all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
+            all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
+            all_properties_df = pd.DataFrame(all_props_dict)
 
-                    # Getting the main cell type data (only using top-n)
-                    main_cell_types = ftu_click['properties']['user']['Main_Cell_Types']
-                    chart_data = [main_cell_types[i] for i in main_cell_types]
+            # Getting nested properties
+            nested_properties = list(ftu_click['properties']['user'].keys())
+            nested_properties = [i for i in nested_properties if type(ftu_click['properties']['user'][i])==dict]
 
-                    if not len(chart_data)==0:
-
-                        # Only keeping the first self.plot_cell_n
-                        top_idx = np.argsort(chart_data)[::-1][0:self.plot_cell_types_n]
-                        chart_data = [chart_data[i] for i in top_idx]
-                        chart_labels = [list(main_cell_types.keys())[i] for i in top_idx]
-                        chart_full_labels = [self.cell_graphics_key[i]['full'] for i in chart_labels]
-
-                        # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
-                        cell_states = ftu_click['properties']['user']['Cell_States']
-                        cells_for_cell_states = list(cell_states.keys())
-
-                        # Checking for non-zero cell states
-                        non_zero_list = []
-                        for cs in cells_for_cell_states:
-                            if sum(list(cell_states[cs].values()))>0:
-                                non_zero_list.append(cs)
-
-                        cs_df_list = []
-                        for nz_cs in non_zero_list:
-                            cell_state_info = cell_states[nz_cs]
-                            cell_state_df = pd.DataFrame({'States':list(cell_state_info.keys()),'Values':list(cell_state_info.values())})
-                            cs_df_list.append(cell_state_df)
-
-                        # Getting other FTU/Spot properties
-                        all_properties = list(ftu_click['properties']['user'].keys())
-                        all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
-                        all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
-                        all_properties_df = pd.DataFrame(all_props_dict)
-
-                        main_cells_df = pd.DataFrame.from_dict({'Values':chart_data,'Labels':chart_labels,'Full':chart_full_labels})
-                        f_pie = go.Figure(
-                            data = [
-                                go.Pie(
-                                    name = '',
-                                    values = main_cells_df['Values'],
-                                    labels = main_cells_df['Labels'],
-                                    customdata = main_cells_df['Full'],
-                                    hovertemplate = "Cell: %{customdata}: <br>Proportion: %{value}</br>"
-                                )],
-                            layout = {'autosize':True, 'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,'uniformtext_minsize':12,'uniformtext_mode':'hide'}
-                        )
-                        f_pie.update_traces(textposition='inside')
-
-                        # popup divs
-                        if 'unique_index' in ftu_click['properties']['user']:
-                            add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
-                            accordion_children = [
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dbc.Row([
-                                            dbc.Col(-
-                                                dcc.Graph(figure = f_pie),
-                                                md='auto')
-                                            ],style={'height':'100%','width':'100%'})
-                                        ],style = {'height':'250px','width':'250px','display':'inline-block'})
-                                    ], title = 'Main Cell Types'),
-                                dbc.AccordionItem([
-                                    dbc.Tabs([
-                                        dbc.Tab(
-                                            html.Div(
-                                                dcc.Graph(
-                                                    figure = go.Figure(
-                                                        data = [
-                                                            go.Pie(
-                                                                name = '',
-                                                                values = cs_df['Values'],
-                                                                labels = cs_df['States'],
-                                                                hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
-                                                            )
-                                                        ],
-                                                        layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
-                                                                'uniformtext_minsize':12,'uniformtext_mode':'hide'}
-                                                    )
-                                                )
-                                            ), label = cs
-                                        )
-                                        for cs,cs_df in zip(non_zero_list,cs_df_list)
-                                    ])
-                                ], title = 'Cell States'),
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dash_table.DataTable(
-                                            id = 'popup-table',
-                                            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                            data = all_properties_df.to_dict('records'),
-                                            editable=False,                                        sort_mode='multi',
-                                            page_current=0,
-                                            page_size=5,
-                                            style_cell = {
-                                                'overflow':'hidden',
-                                                'textOverflow':'ellipsis',
-                                                'maxWidth':0
-                                            },
-                                            tooltip_data = [
-                                                {
-                                                    column: {'value':str(value),'type':'markdown'}
-                                                    for column, value in row.items()
-                                                } for row in all_properties_df.to_dict('records')
-                                            ],
-                                            tooltip_duration = None
-                                        )
-                                    ])
-                                ],title = 'Other Properties'),
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dbc.Row([
-                                            dbc.Col(html.Div(
-                                                    id={'type':'added-labels-div','index':ftu_idx},
-                                                    children = add_labels_children
-                                                ), md=11
-                                            ),
-                                            dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
-                                        ]),
-                                        dbc.Row([
-                                            dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
-                                            dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
-                                        ])
-                                    ])
-                                ],title = 'Custom Properties')
-                            ]
-                        else:
-                            accordion_children = [
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dbc.Row([
-                                            dbc.Col(
-                                                dcc.Graph(figure = f_pie),
-                                                md='auto')
-                                            ],style={'height':'100%','width':'100%'})
-                                        ],style = {'height':'250px','width':'250px','display':'inline-block'})
-                                    ], title = 'Main Cell Types'),
-                                dbc.AccordionItem([
-                                    dbc.Tabs([
-                                        dbc.Tab(
-                                            html.Div(
-                                                dcc.Graph(
-                                                    figure = go.Figure(
-                                                        data = [
-                                                            go.Pie(
-                                                                name = '',
-                                                                values = cs_df['Values'],
-                                                                labels = cs_df['States'],
-                                                                hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
-                                                            )
-                                                        ],
-                                                        layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
-                                                                'uniformtext_minsize':12,'uniformtext_mode':'hide'}
-                                                    )
-                                                )
-                                            ), label = cs
-                                        )
-                                        for cs,cs_df in zip(non_zero_list,cs_df_list)
-                                    ])
-                                ], title = 'Cell States'),
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dash_table.DataTable(
-                                            id = 'popup-table',
-                                            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                            data = all_properties_df.to_dict('records'),
-                                            editable=False,                                        sort_mode='multi',
-                                            page_current=0,
-                                            page_size=5,
-                                            style_cell = {
-                                                'overflow':'hidden',
-                                                'textOverflow':'ellipsis',
-                                                'maxWidth':0
-                                            },
-                                            tooltip_data = [
-                                                {
-                                                    column: {'value':str(value),'type':'markdown'}
-                                                    for column, value in row.items()
-                                                } for row in all_properties_df.to_dict('records')
-                                            ],
-                                            tooltip_duration = None
-                                        )
-                                    ])
-                                ],title = 'Other Properties')
-                            ]
-                        
-                        popup_div = html.Div([
-                            dbc.Accordion(
-                                children = accordion_children
-                            )
-                        ],style={'height':'300px','width':'300px','display':'inline-block'})
-
-                        return popup_div
-                    else:
-                        return html.Div([html.P('No cell type information')])
-                else:
-                    # Getting other FTU/Spot properties
-                    all_properties = list(ftu_click['properties']['user'].keys())
-                    all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
-                    all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
-                    all_properties_df = pd.DataFrame(all_props_dict)
-
-                    # popup divs
-                    if 'unique_index' in ftu_click['properties']['user']:
-                        add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
-                        accordion_children = [
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dash_table.DataTable(
-                                        id = 'popup-table',
-                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                        data = all_properties_df.to_dict('records'),
-                                        editable=False,                                        
-                                        sort_mode='multi',
-                                        page_current=0,
-                                        page_size=5,
-                                        style_cell = {
-                                            'overflow':'hidden',
-                                            'textOverflow':'ellipsis',
-                                            'maxWidth':0
-                                        },
-                                        tooltip_data = [
-                                            {
-                                                column: {'value':str(value),'type':'markdown'}
-                                                for column, value in row.items()
-                                            } for row in all_properties_df.to_dict('records')
-                                        ],
-                                        tooltip_duration = None
-                                    )
-                                ])
-                            ],title = 'Other Properties'),
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dbc.Row([
-                                        dbc.Col(html.Div(
-                                                id={'type':'added-labels-div','index':ftu_idx},
-                                                children = add_labels_children
-                                            ), md=11
-                                        ),
-                                        dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
-                                        dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
-                                    ])
-                                ])
-                            ],title = 'Custom Properties')
-                        ]
-                    else:
-                        accordion_children = [
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dash_table.DataTable(
-                                        id = 'popup-table',
-                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                        data = all_properties_df.to_dict('records'),
-                                        editable=False,                                        
-                                        sort_mode='multi',
-                                        page_current=0,
-                                        page_size=5,
-                                        style_cell = {
-                                            'overflow':'hidden',
-                                            'textOverflow':'ellipsis',
-                                            'maxWidth':0
-                                        },
-                                        tooltip_data = [
-                                            {
-                                                column: {'value':str(value),'type':'markdown'}
-                                                for column, value in row.items()
-                                            } for row in all_properties_df.to_dict('records')
-                                        ],
-                                        tooltip_duration = None
-                                    )
-                                ])
-                            ],title = 'Other Properties')
-                        ]
-                    
-                    popup_div = html.Div([
-                        dbc.Accordion(
-                            children = accordion_children
-                        )
-                    ],style={'height':'300px','width':'300px','display':'inline-block'})
-
-                    return popup_div
-            else:
-
-                # Getting other FTU/Spot properties
-                all_properties = list(ftu_click['properties']['user'].keys())
-                all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
-                all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
-                all_properties_df = pd.DataFrame(all_props_dict)
-
-                # popup divs
-                if 'unique_index' in ftu_click['properties']['user']:
-                    add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
-                    accordion_children = [
-                        dbc.AccordionItem([
-                            html.Div([
-                                dash_table.DataTable(
-                                    id = 'popup-table',
-                                    columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                    data = all_properties_df.to_dict('records'),
-                                    editable=False,                                        
-                                    sort_mode='multi',
-                                    page_current=0,
-                                    page_size=5,
-                                    style_cell = {
-                                        'overflow':'hidden',
-                                        'textOverflow':'ellipsis',
-                                        'maxWidth':0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value':str(value),'type':'markdown'}
-                                            for column, value in row.items()
-                                        } for row in all_properties_df.to_dict('records')
-                                    ],
-                                    tooltip_duration = None
-                                )
-                            ])
-                        ],title = 'Other Properties'),
-                        dbc.AccordionItem([
-                            html.Div([
-                                dbc.Row([
-                                    dbc.Col(html.Div(
-                                            id={'type':'added-labels-div','index':ftu_idx},
-                                            children = add_labels_children
-                                        ), md=11
-                                    ),
-                                    dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
-                                ]),
-                                dbc.Row([
-                                    dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
-                                    dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
-                                ])
-                            ])
-                        ],title = 'Custom Properties')
-                    ]
-                else:
-                    accordion_children = [
-                        dbc.AccordionItem([
-                            html.Div([
-                                dash_table.DataTable(
-                                    id = 'popup-table',
-                                    columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                    data = all_properties_df.to_dict('records'),
-                                    editable=False,                                        
-                                    sort_mode='multi',
-                                    page_current=0,
-                                    page_size=5,
-                                    style_cell = {
-                                        'overflow':'hidden',
-                                        'textOverflow':'ellipsis',
-                                        'maxWidth':0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value':str(value),'type':'markdown'}
-                                            for column, value in row.items()
-                                        } for row in all_properties_df.to_dict('records')
-                                    ],
-                                    tooltip_duration = None
-                                )
-                            ])
-                        ],title = 'Other Properties')
-                    ]
+            # Nested properties are limited to 3 levels (arbitrarily)
+            # Manual ROIs will have properties like: { ftu_name: { main_column: { sub_column: [] } } }
+            nested_prop_list = []
+            for n_idx, n in enumerate(nested_properties):
+                n_prop_data = ftu_click['properties']['user'][n]
+                sub_n_props = list(n_prop_data.keys())
                 
-                popup_div = html.Div([
-                    dbc.Accordion(
-                        children = accordion_children
-                    )
-                ],style={'height':'300px','width':'300px','display':'inline-block'})
+                if len(sub_n_props)>0:
+                    nested_sub_props = [i for i in n_prop_data if type(n_prop_data[i])==dict]
+                    for s_n_idx, s_n in enumerate(nested_sub_props):
+                        sub_n_data = n_prop_data[s_n]
 
-                return popup_div
+                        if type(sub_n_data)==dict:
+                            sub_sub_n_props = list(sub_n_data.keys())
+
+                            if type(sub_n_data[sub_sub_n_props[0]])==dict:
+                                for s_s_n_idx, s_s_n in enumerate(sub_sub_n_props):
+                                    sub_sub_n_data = sub_n_data[s_s_n]
+
+                                    if type(sub_sub_n_data)==dict:
+
+                                        nested_prop_list.append({
+                                            'name': n,
+                                            'sub_name': s_n,
+                                            'sub_sub_name': s_s_n,
+                                            'table': pd.DataFrame({'Property': list(sub_sub_n_data.keys()),'Value': list(sub_sub_n_data.values())})
+                                        })
+                            else:
+                                nested_prop_list.append({
+                                    'name': n,
+                                    'sub_name': s_n,
+                                    'sub_sub_name': None,
+                                    'table': pd.DataFrame({'Property': list(sub_n_data.keys()), 'Value': list(sub_n_data.values())})
+                                })
+
+                    non_nested_sub_props = [i for i in n_prop_data if not type(n_prop_data[i])==dict]
+                    if len(non_nested_sub_props)>0:
+                        nested_prop_list.append({
+                            'name': n,
+                            'sub_name': None,
+                            'sub_sub_name': None,
+                            'table': pd.DataFrame({'Property': non_nested_sub_props,'Value': [n_prop_data[i] for i in non_nested_sub_props]})
+                        })
+
+
+            # popup divs
+            accordion_children.append(
+                dbc.AccordionItem([
+                    html.Div([
+                        dash_table.DataTable(
+                            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
+                            data = all_properties_df.to_dict('records'),
+                            editable=False,                                        
+                            sort_mode='multi',
+                            page_current=0,
+                            page_size=5,
+                            style_cell = {
+                                'overflow':'hidden',
+                                'textOverflow':'ellipsis',
+                                'maxWidth':0
+                            },
+                            tooltip_data = [
+                                {
+                                    column: {'value':str(value),'type':'markdown'}
+                                    for column, value in row.items()
+                                } for row in all_properties_df.to_dict('records')
+                            ],
+                            tooltip_duration = None
+                        )
+                    ])
+                ],title = 'Other Properties')
+            )
+
+            if len(nested_prop_list)>0:
+
+                nested_main_names = np.unique([i['name'] for i in nested_prop_list]).tolist()
+                double_nested_props = np.unique([i['sub_sub_name'] for i in nested_prop_list]).tolist()
+                for n_m_idx, n_m in enumerate(nested_main_names):
+                    print(f'n_m: {n_m}')
+                    nested_prop_data = [i for i in nested_prop_list if i['name']==n_m]
+                    
+                    if len(nested_prop_data)>1:
+                        # Creating tabs
+                        sub_prop_tabs = []
+                        for s_n in nested_prop_data:
+                            s_n_table = s_n['table']
+                            s_n_name = s_n['sub_name']
+                            print(f's_n_name: {s_n_name}')
+
+                            if n_m in pie_chart_features:
+                                s_n_table = s_n_table[s_n_table['Value']>0]
+                                if not s_n_table.empty:
+                                    tab_child = dcc.Graph(
+                                        figure = go.Figure(
+                                            data = [
+                                                go.Pie(
+                                                    name = '',
+                                                    values = s_n_table['Value'].tolist(),
+                                                    labels = s_n_table['Property'].tolist()
+                                                )
+                                            ],
+                                            layout = {
+                                                'margin': {'t': 0, 'b': 0, 'l': 0,'r': 0},
+                                                'uniformtext_minsize': 12,
+                                                'uniformtext_mode': 'hide',
+                                                'showlegend': False
+                                            }
+                                        )
+                                    )
+                                else:
+                                    print(f's_n_table is empty: {s_n_name}')
+                                    continue
+                            else:
+                                tab_child = dash_table.DataTable(
+                                    columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in s_n_table],
+                                    data = s_n_table.to_dict('records'),
+                                    editable = False,
+                                    sort_mode = 'multi',
+                                    page_current = 0,
+                                    page_size = 5,
+                                    style_cell = {
+                                        'overflow': 'hidden',
+                                        'textOverflow': 'ellipsis',
+                                        'maxWidth': 0
+                                    },
+                                    tooltip_data = [
+                                        {
+                                            column: {'value': str(value),'type': 'markdown'}
+                                            for column,value in row.items()
+                                        } for row in s_n_table.to_dict('records')
+                                    ],
+                                    tooltip_duration = None
+                                )
+
+                            sub_prop_tabs.append(
+                                dbc.Tab(
+                                    html.Div(
+                                        tab_child
+                                    ),
+                                    label = s_n_name
+                                )
+                            )
+
+                        accordion_children.append(
+                            dbc.AccordionItem([
+                                dbc.Tabs(
+                                    sub_prop_tabs
+                                )
+                            ], title = n_m)
+                        )
+
+                    elif len(nested_prop_data)==1:
+                        n_table = nested_prop_data[0]['table']
+                        n_name = nested_prop_data[0]['name']
+
+                        if n_name in pie_chart_features:
+                            n_table = n_table[n_table['Value']>0]
+                            if not n_table.empty:
+                                tab_child = dcc.Graph(
+                                    figure = go.Figure(
+                                        data = [
+                                            go.Pie(
+                                                name = '',
+                                                values = n_table['Value'].tolist(),
+                                                labels = n_table['Property'].tolist()
+                                            )
+                                        ],
+                                        layout = {
+                                            'margin': {'t': 0, 'b': 0, 'l': 0,'r': 0},
+                                            'uniformtext_minsize': 12,
+                                            'uniformtext_mode': 'hide',
+                                            'showlegend': False
+                                        }
+                                    )
+                                )
+                            else:
+                                print(f'n_table is emty: {n_name}')
+                                continue
+                        else:
+                            tab_child = dash_table.DataTable(
+                                columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in n_table],
+                                data = n_table.to_dict('records'),
+                                editable = False,
+                                sort_mode = 'multi',
+                                page_current = 0,
+                                page_size = 5,
+                                style_cell = {
+                                    'overflow': 'hidden',
+                                    'textOverflow': 'ellipsis',
+                                    'maxWidth': 0
+                                },
+                                tooltip_data = [
+                                    {
+                                        column: {'value': str(value),'type': 'markdown'}
+                                        for column,value in row.items()
+                                    } for row in n_table.to_dict('records')
+                                ],
+                                tooltip_duration = None
+                            )
+
+
+                        accordion_children.append(
+                            dbc.AccordionItem([
+                                html.Div(
+                                    tab_child
+                                )
+                            ], title = n_name)
+                        )
+
+            if 'unique_index' in ftu_click['properties']['user']:
+                add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
+
+                accordion_children.append(
+                    dbc.AccordionItem([
+                        html.Div([
+                            dbc.Row([
+                                dbc.Col(html.Div(
+                                        id={'type':'added-labels-div','index':ftu_idx},
+                                        children = add_labels_children
+                                    ), md=11
+                                ),
+                                dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
+                            ]),
+                            dbc.Row([
+                                dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
+                                dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
+                            ])
+                        ])
+                    ],title = 'Custom Properties')
+                )
+            
+            popup_div = html.Div([
+                dbc.Accordion(
+                    children = accordion_children
+                )
+            ],style={'height':'300px','width':'300px','display':'inline-block'})
+
+            return popup_div
 
         else:
-            raise exceptions.PreventUpdate
+            return no_update
         
     def gen_cyto(self,cell_val,table):
         """
@@ -3569,7 +3456,7 @@ class FUSION:
             new_children += [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(url = self.wsi.map_dict['FTUs'][struct]['url'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
+                        dl.GeoJSON(url = self.wsi.map_dict['FTUs'][struct]['url'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle), filter = self.ftu_filter,
                                     hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = filter_vals),
                                     hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                                     zoomToBounds=False,children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
@@ -3583,7 +3470,7 @@ class FUSION:
                 new_children.append(
                     dl.Overlay(
                         dl.LayerGroup(
-                            dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
+                            dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle),filter = self.ftu_filter,
                                         hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
                                         hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')),
                                         children = [dl.Popup(id=man['popup_id'])])
@@ -4635,162 +4522,170 @@ class FUSION:
                 # Used for normal callbacks
                 triggered_id = ctx.triggered_id
 
+            if not ctx.triggered[0]['value']:
+                return no_update, no_update, no_update
+
             if triggered_id == 'edit-control':
                 
                 if not new_geojson_list is None:
                     new_roi = None
                     for new_geo in new_geojson_list:
-                        if len(new_geo['features'])>0:
-                            
-                            # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
-                            self.wsi.manual_rois = []
-                            self.wsi.marked_ftus = []
+                        if not new_geo is None:
+                            if len(new_geo['features'])>0:
+                                
+                                # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
+                                self.wsi.manual_rois = []
+                                self.wsi.marked_ftus = []
 
-                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
+                                self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
 
-                            for geo in new_geo['features']:
+                                for geo in new_geo['features']:
 
-                                if not geo['properties']['type'] == 'marker':
+                                    if not geo['properties']['type'] == 'marker':
 
-                                    new_roi = {'type':'FeatureCollection','features':[geo]}
+                                        new_roi = {'type':'FeatureCollection','features':[geo]}
 
-                                    agg_properties = self.wsi.spatial_aggregation(shape(geo['geometry']))
-                                    new_roi['features'][0]['properties'] = {'user':agg_properties}
+                                        agg_properties = self.wsi.spatial_aggregation(shape(geo['geometry']))
+                                        new_roi['features'][0]['properties'] = {'user':agg_properties | {'name': 'Manual_ROI'}}
+                                        
+                                        new_manual_roi_dict = {
+                                                'geojson':new_roi,
+                                                'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                                'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
+                                                'color':'white',
+                                                'hover_color':'#32a852'
+                                            }
+                                        self.wsi.manual_rois.append(new_manual_roi_dict)
+
+                                        new_child = dl.Overlay(
+                                            dl.LayerGroup(
+                                                dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle), filter = self.ftu_filter,
+                                                        hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = filter_vals),
+                                                        hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
+                                                        children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
+                                                    )
+                                            ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
+                                        )
+
+                                        self.current_overlays.append(new_child)
+
+                                    elif geo['properties']['type']=='marker':
+                                        # Separate procedure for marking regions/FTUs with a marker
+                                        new_marked = {'type':'FeatureCollection','features':[geo]}
+
+                                        overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
+                                        if not overlap_poly is None:
+                                            # Getting the intersecting ROI geojson
+                                            if len(self.wsi.marked_ftus)==0:
+                                                if triggered_id=='edit_control':
+                                                    new_marked_roi = {
+                                                        'type':'FeatureCollection',
+                                                        'features':[
+                                                            {
+                                                                'type':'Feature',
+                                                                'geometry':{
+                                                                    'type':'Polygon',
+                                                                    'coordinates':[list(overlap_poly.exterior.coords)],
+                                                                },
+                                                                'properties': {
+                                                                    'user': overlap_dict
+                                                                }
+                                                            }
+                                                        ]
+                                                    }
+                                                elif triggered_id=='add-marker-cluster':
+                                                    new_marked_roi = {
+                                                        'type':'FeatureCollection',
+                                                        'features':[
+                                                            {
+                                                                'type':'Feature',
+                                                                'geometry':{
+                                                                    'type':'Polygon',
+                                                                    'coordinates':[list(overlap_poly.exterior.coords)]
+                                                                },
+                                                                'properties':{
+                                                                    'user': overlap_dict
+                                                                }
+                                                            },
+                                                        ]
+                                                    }
+
+                                                self.wsi.marked_ftus = [{
+                                                    'geojson':new_marked_roi,
+                                                }]
+
+                                            else:
+                                                self.wsi.marked_ftus[0]['geojson']['features'].append(
+                                                    {
+                                                        'type':'Feature',
+                                                        'geometry':{
+                                                            'type':'Polygon',
+                                                            'coordinates':[list(overlap_poly.exterior.coords)],
+                                                        },
+                                                        'properties':{
+                                                            'user':overlap_dict
+                                                        }
+                                                    }
+                                                )
+
+                                # Adding the marked ftus layer if any were added
+                                if len(self.wsi.marked_ftus)>0:
+                                    print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
                                     
-                                    new_manual_roi_dict = {
-                                            'geojson':new_roi,
-                                            'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                            'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
-                                            'color':'white',
-                                            'hover_color':'#32a852'
-                                        }
-                                    self.wsi.manual_rois.append(new_manual_roi_dict)
+                                    self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
+                                    self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
 
+                                    new_marked_dict = {
+                                        'geojson':self.wsi.marked_ftus[0]['geojson'],
+                                        'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                        'color':'white',
+                                        'hover_color':'#32a852'
+                                    }
                                     new_child = dl.Overlay(
                                         dl.LayerGroup(
-                                            dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle),
-                                                    hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = filter_vals),
-                                                    hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
-                                                    children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
-                                                )
-                                        ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
+                                            dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), filter = self.ftu_filter, pointToLayer = self.render_marker_handle,
+                                                    hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = filter_vals),
+                                                    hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
+                                                    children = []
+                                                    )
+                                        ), name = f'Marked FTUs', checked=True, id = self.wsi.item_id+f'_marked_ftus'
                                     )
-
+                                    
                                     self.current_overlays.append(new_child)
 
-                                elif geo['properties']['type']=='marker':
-                                    # Separate procedure for marking regions/FTUs with a marker
-                                    new_marked = {'type':'FeatureCollection','features':[geo]}
+                                if len(self.wsi.manual_rois)>0:
+                                    data_select_options = self.layout_handler.data_options
+                                    data_select_options[4]['disabled'] = False
+                                else:
+                                    data_select_options = self.layout_handler.data_options
 
-                                    overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
-                                    if not overlap_poly is None:
-                                        # Getting the intersecting ROI geojson
-                                        if len(self.wsi.marked_ftus)==0:
-                                            if triggered_id=='edit_control':
-                                                new_marked_roi = {
-                                                    'type':'FeatureCollection',
-                                                    'features':[
-                                                        {
-                                                            'type':'Feature',
-                                                            'geometry':{
-                                                                'type':'Polygon',
-                                                                'coordinates':[list(overlap_poly.exterior.coords)],
-                                                            },
-                                                            'properties': {
-                                                                'user': overlap_dict
-                                                            }
-                                                        }
-                                                    ]
-                                                }
-                                            elif triggered_id=='add-marker-cluster':
-                                                new_marked_roi = {
-                                                    'type':'FeatureCollection',
-                                                    'features':[
-                                                        {
-                                                            'type':'Feature',
-                                                            'geometry':{
-                                                                'type':'Polygon',
-                                                                'coordinates':[list(overlap_poly.exterior.coords)]
-                                                            },
-                                                            'properties':{
-                                                                'user': overlap_dict
-                                                            }
-                                                        },
-                                                    ]
-                                                }
+                                if len(self.wsi.marked_ftus)>0:
+                                    data_select_options[3]['disabled'] = False
 
-                                            self.wsi.marked_ftus = [{
-                                                'geojson':new_marked_roi,
-                                            }]
-
-                                        else:
-                                            self.wsi.marked_ftus[0]['geojson']['features'].append(
-                                                {
-                                                    'type':'Feature',
-                                                    'geometry':{
-                                                        'type':'Polygon',
-                                                        'coordinates':[list(overlap_poly.exterior.coords)],
-                                                    },
-                                                    'properties':{
-                                                        'user':overlap_dict
-                                                    }
-                                                }
-                                            )
-
-                            # Adding the marked ftus layer if any were added
-                            if len(self.wsi.marked_ftus)>0:
-                                print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
+                                hex_color_key = self.update_hex_color_key(overlay_prop)
                                 
-                                self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
-                                self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
-
-                                new_marked_dict = {
-                                    'geojson':self.wsi.marked_ftus[0]['geojson'],
-                                    'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                    'color':'white',
-                                    'hover_color':'#32a852'
-                                }
-                                new_child = dl.Overlay(
-                                    dl.LayerGroup(
-                                        dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), pointToLayer = self.render_marker_handle,
-                                                hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = filter_vals),
-                                                hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
-                                                children = []
-                                                )
-                                    ), name = f'Marked FTUs', checked=True, id = self.wsi.item_id+f'_marked_ftus'
-                                )
+                                if new_roi:
+                                    user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
+                                else:
+                                    user_ann_tracking = no_update
                                 
-                                self.current_overlays.append(new_child)
-
-                            if len(self.wsi.manual_rois)>0:
-                                data_select_options = self.layout_handler.data_options
-                                data_select_options[4]['disabled'] = False
                             else:
+
+                                # Clearing manual ROIs and reverting overlays
+                                self.wsi.manual_rois = []
+                                self.wsi.marked_ftus = []
+
+                                self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
                                 data_select_options = self.layout_handler.data_options
-
-                            if len(self.wsi.marked_ftus)>0:
-                                data_select_options[3]['disabled'] = False
-
-                            hex_color_key = self.update_hex_color_key(overlay_prop)
-                            
-                            if new_roi:
-                                user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
-                                return self.current_overlays, data_select_options, user_ann_tracking
-                            
-                            return self.current_overlays, data_select_options, no_update
+                                hex_color_key = self.update_hex_color_key(overlay_prop)
+                                user_ann_tracking = no_update
+                                                    
                         else:
-
-                            # Clearing manual ROIs and reverting overlays
-                            self.wsi.manual_rois = []
-                            self.wsi.marked_ftus = []
-
-                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
-
-                            data_select_options = self.layout_handler.data_options
-
-                            hex_color_key = self.update_hex_color_key(overlay_prop)
                             
-                            return self.current_overlays, data_select_options, no_update
+                            dataset_select_options = self.layout_handler.data_options
+                            user_ann_tracking = no_update
+
+                    return self.current_overlays, data_select_options, user_ann_tracking
                 else:
                     raise exceptions.PreventUpdate
             else:
