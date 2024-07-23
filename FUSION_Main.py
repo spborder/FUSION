@@ -2634,8 +2634,61 @@ class FUSION:
         """
 
         pie_chart_features = [
-            'Main_Cell_Types','Cell_States', 'Cell Type', 'Channel_Means'
+            'Main_Cell_Types','Cell_States', 'Cell Type', 'Channel_Means', 'Cell_Subtypes'
         ]
+
+        def make_dash_table(df):
+            """
+            Populate dash_table.DataTable
+            """
+            return_table = dash_table.DataTable(
+                columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in df],
+                data = df.to_dict('records'),
+                editable=False,                                        
+                sort_mode='multi',
+                page_current=0,
+                page_size=5,
+                style_cell = {
+                    'overflow':'hidden',
+                    'textOverflow':'ellipsis',
+                    'maxWidth':0
+                },
+                tooltip_data = [
+                    {
+                        column: {'value':str(value),'type':'markdown'}
+                        for column, value in row.items()
+                    } for row in df.to_dict('records')
+                ],
+                tooltip_duration = None
+            )
+
+            return return_table
+    
+        def make_pie_chart(df):
+            """
+            Simple pie chart with provided dataframe
+            """
+            simple_pie = dcc.Graph(
+                figure = go.Figure(
+                    data = [
+                        go.Pie(
+                            name = '',
+                            values = df['Value'].tolist(),
+                            labels = df['Property'].tolist()
+                        )
+                    ],
+                    layout = {
+                        'margin': {'t': 0, 'b': 0, 'l': 0,'r': 0},
+                        'uniformtext_minsize': 12,
+                        'uniformtext_mode': 'hide',
+                        'showlegend': False
+                    }
+                )
+            )
+
+            return simple_pie
+
+        print(ctx.triggered)
 
         if not ctx.triggered[0]['value']:
             print('raising preventupdate')
@@ -2677,7 +2730,7 @@ class FUSION:
                                     sub_sub_n_data = sub_n_data[s_s_n]
 
                                     if type(sub_sub_n_data)==dict:
-
+                                        # Cell_States and Cell_Subtypes for Manual ROIs
                                         nested_prop_list.append({
                                             'name': n,
                                             'sub_name': s_n,
@@ -2685,6 +2738,7 @@ class FUSION:
                                             'table': pd.DataFrame({'Property': list(sub_sub_n_data.keys()),'Value': list(sub_sub_n_data.values())})
                                         })
                             else:
+                                # Cell_States and Cell_Subtypes or Main_Cell_Types for Manual ROIs
                                 nested_prop_list.append({
                                     'name': n,
                                     'sub_name': s_n,
@@ -2694,6 +2748,7 @@ class FUSION:
 
                     non_nested_sub_props = [i for i in n_prop_data if not type(n_prop_data[i])==dict]
                     if len(non_nested_sub_props)>0:
+                        # Main_Cell_Types 
                         nested_prop_list.append({
                             'name': n,
                             'sub_name': None,
@@ -2701,170 +2756,201 @@ class FUSION:
                             'table': pd.DataFrame({'Property': non_nested_sub_props,'Value': [n_prop_data[i] for i in non_nested_sub_props]})
                         })
 
-
             # popup divs
             accordion_children.append(
                 dbc.AccordionItem([
                     html.Div([
-                        dash_table.DataTable(
-                            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                            data = all_properties_df.to_dict('records'),
-                            editable=False,                                        
-                            sort_mode='multi',
-                            page_current=0,
-                            page_size=5,
-                            style_cell = {
-                                'overflow':'hidden',
-                                'textOverflow':'ellipsis',
-                                'maxWidth':0
-                            },
-                            tooltip_data = [
-                                {
-                                    column: {'value':str(value),'type':'markdown'}
-                                    for column, value in row.items()
-                                } for row in all_properties_df.to_dict('records')
-                            ],
-                            tooltip_duration = None
-                        )
+                        make_dash_table(all_properties_df)
                     ])
                 ],title = 'Other Properties')
             )
 
+            print(f'len of nested_prop_list: {len(nested_prop_list)}')
+            print(nested_prop_list)
             if len(nested_prop_list)>0:
 
-                nested_main_names = np.unique([i['name'] for i in nested_prop_list]).tolist()
-                double_nested_props = np.unique([i['sub_sub_name'] for i in nested_prop_list]).tolist()
-                for n_m_idx, n_m in enumerate(nested_main_names):
-                    print(f'n_m: {n_m}')
-                    nested_prop_data = [i for i in nested_prop_list if i['name']==n_m]
-                    
-                    if len(nested_prop_data)>1:
-                        # Creating tabs
-                        sub_prop_tabs = []
-                        for s_n in nested_prop_data:
-                            s_n_table = s_n['table']
-                            s_n_name = s_n['sub_name']
-                            print(f's_n_name: {s_n_name}')
+                # Start from the bottom and go up as opposed to top-down
+                trunk_props = [i for i in nested_prop_list if not i['sub_sub_name'] is None]
+                print(f'len(trunk_props): {len(trunk_props)}')
+                if len(trunk_props)>0:
+                    unique_names = np.unique([i['name'] for  i in trunk_props]).tolist()
+                    for u_n in unique_names:
+                        print(f'u_n: {u_n}')
+                        shared_name_trunk = [i for i in trunk_props if i['name']==u_n]
 
-                            if n_m in pie_chart_features:
-                                s_n_table = s_n_table[s_n_table['Value']>0]
-                                if not s_n_table.empty:
-                                    tab_child = dcc.Graph(
-                                        figure = go.Figure(
-                                            data = [
-                                                go.Pie(
-                                                    name = '',
-                                                    values = s_n_table['Value'].tolist(),
-                                                    labels = s_n_table['Property'].tolist()
-                                                )
-                                            ],
-                                            layout = {
-                                                'margin': {'t': 0, 'b': 0, 'l': 0,'r': 0},
-                                                'uniformtext_minsize': 12,
-                                                'uniformtext_mode': 'hide',
-                                                'showlegend': False
-                                            }
+                        shared_name_sub = np.unique([i['sub_name'] for i in shared_name_trunk]).tolist()
+                        print(f'shared_name_sub: {shared_name_sub}')
+                        sub_accordion_list = []
+                        for u_sub in shared_name_sub:
+                            print(f'u_sub: {u_sub}')
+
+                            sub_prop_data = [i for i in shared_name_trunk if i['sub_name']==u_sub]
+                            sub_tab_list = []
+                            for sub_tab in sub_prop_data:
+                                sub_tab_data = sub_tab['table']
+                                sub_tab_data = sub_tab_data[sub_tab_data['Value']>0]
+                                if not sub_tab_data.empty:
+                                    sub_tab_list.append(
+                                        dbc.Tab(
+                                            html.Div(
+                                                make_pie_chart(sub_tab_data) if u_sub in pie_chart_features else make_dash_table(sub_tab_data)
+                                            ),
+                                            label = sub_tab['sub_sub_name']
                                         )
                                     )
-                                else:
-                                    print(f's_n_table is empty: {s_n_name}')
-                                    continue
-                            else:
-                                tab_child = dash_table.DataTable(
-                                    columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in s_n_table],
-                                    data = s_n_table.to_dict('records'),
-                                    editable = False,
-                                    sort_mode = 'multi',
-                                    page_current = 0,
-                                    page_size = 5,
-                                    style_cell = {
-                                        'overflow': 'hidden',
-                                        'textOverflow': 'ellipsis',
-                                        'maxWidth': 0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value': str(value),'type': 'markdown'}
-                                            for column,value in row.items()
-                                        } for row in s_n_table.to_dict('records')
-                                    ],
-                                    tooltip_duration = None
-                                )
 
-                            sub_prop_tabs.append(
-                                dbc.Tab(
-                                    html.Div(
-                                        tab_child
-                                    ),
-                                    label = s_n_name
-                                )
-                            )
+                            # Checking if any other features are in this sub_name
+                            other_sub_name_props = [i for i in nested_prop_list if i['sub_name']==u_sub and i['sub_sub_name'] is None]
+                            print(f'other_sub_name_props: {other_sub_name_props}')
+                            for o_sub in other_sub_name_props:
+                                o_sub_data = o_sub['table']
+                                o_sub_data = o_sub_data[o_sub_data['Value']>0]
+                                if not o_sub_data.empty:
 
-                        accordion_children.append(
-                            dbc.AccordionItem([
-                                dbc.Tabs(
-                                    sub_prop_tabs
-                                )
-                            ], title = n_m)
-                        )
+                                    sub_accordion_list.append(
+                                        dbc.AccordionItem(
+                                            html.Div(
+                                                make_pie_chart(o_sub_data) if u_sub in pie_chart_features else make_dash_table(o_sub_data)
+                                            ),
+                                            title = u_sub
+                                        )
+                                    )
 
-                    elif len(nested_prop_data)==1:
-                        n_table = nested_prop_data[0]['table']
-                        n_name = nested_prop_data[0]['name']
-
-                        if n_name in pie_chart_features:
-                            n_table = n_table[n_table['Value']>0]
-                            if not n_table.empty:
-                                tab_child = dcc.Graph(
-                                    figure = go.Figure(
-                                        data = [
-                                            go.Pie(
-                                                name = '',
-                                                values = n_table['Value'].tolist(),
-                                                labels = n_table['Property'].tolist()
-                                            )
-                                        ],
-                                        layout = {
-                                            'margin': {'t': 0, 'b': 0, 'l': 0,'r': 0},
-                                            'uniformtext_minsize': 12,
-                                            'uniformtext_mode': 'hide',
-                                            'showlegend': False
-                                        }
+                            if len(sub_tab_list)>0:
+                                sub_accordion_list.append(
+                                    dbc.AccordionItem(
+                                        dbc.Tabs(
+                                            sub_tab_list
+                                        ),
+                                        title = u_sub
                                     )
                                 )
-                            else:
-                                print(f'n_table is emty: {n_name}')
-                                continue
-                        else:
-                            tab_child = dash_table.DataTable(
-                                columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in n_table],
-                                data = n_table.to_dict('records'),
-                                editable = False,
-                                sort_mode = 'multi',
-                                page_current = 0,
-                                page_size = 5,
-                                style_cell = {
-                                    'overflow': 'hidden',
-                                    'textOverflow': 'ellipsis',
-                                    'maxWidth': 0
-                                },
-                                tooltip_data = [
-                                    {
-                                        column: {'value': str(value),'type': 'markdown'}
-                                        for column,value in row.items()
-                                    } for row in n_table.to_dict('records')
-                                ],
-                                tooltip_duration = None
-                            )
+                        
+                        # Getting shared name props the no sub_sub_name
+                        other_name_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_sub_name'] is None and not i['sub_name'] is None]
+                        print(f'other_name_props: {other_name_props}')
+                        for o_n_prop in other_name_props:
+                            o_prop_data = o_n_prop['table']
+                            o_prop_data = o_prop_data[o_prop_data['Value']>0]
+                            print(o_prop_data)
+                            if not o_prop_data.empty:
+                                print(f'o_sub: {o_n_prop["sub_name"]}')
+
+                                sub_accordion_list.append(
+                                    dbc.AccordionItem(
+                                        html.Div(
+                                            make_pie_chart(o_prop_data) if o_n_prop['sub_name'] in pie_chart_features else make_dash_table(o_prop_data)
+                                        ),
+                                        title = o_n_prop['sub_name']
+                                    )
+                                )
 
 
+                    # Adding main props
+                    l_props = [i for i in nested_prop_list if i['sub_name'] is None]
+                    if len(l_props)>0:
+                        for l in l_props:
+                            print(f'l_name: {l["name"]}')
+                            l_data = l['table']
+                            l_data = l_data[l_data['Value']>0]
+                            if not l_data.empty:
+                                accordion_children.append(
+                                    dbc.AccordionItem([
+                                        html.Div(
+                                            make_pie_chart(l_data) if l['name'] in pie_chart_features else make_dash_table(l_data)
+                                        ),
+                                        html.Div(dbc.Accordion(sub_accordion_list)) if len(sub_accordion_list)>0 else html.Div()
+                                        ],
+                                        title = l['name']
+                                    )
+                                )
+                    else:
                         accordion_children.append(
                             dbc.AccordionItem([
                                 html.Div(
-                                    tab_child
+                                    dbc.Accordion(
+                                        sub_accordion_list
+                                    )
+                                    if len(sub_accordion_list)>0 else []
                                 )
-                            ], title = n_name)
+                            ], title = u_n)
                         )
+
+
+                else:
+                    # Now getting the sub_properties
+                    branch_props = [i for i in nested_prop_list if not i['sub_name'] is None]
+                    if len(branch_props)>0:
+                        unique_names = np.unique([i['name'] for i in branch_props]).tolist()
+                        sub_tab_list = []
+                        for u_n in unique_names:
+                            u_n_list = [i for i in branch_props if i['name']==u_n]
+                            for s_u_n in u_n_list:
+                                s_u_n_data = s_u_n['table']
+                                s_u_n_data = s_u_n_data[s_u_n_data['Value']>0]
+                                if not s_u_n_data.empty:
+                                    sub_tab_list.append(
+                                        dbc.Tab(
+                                            html.Div(
+                                                make_pie_chart(s_u_n_data) if u_n in pie_chart_features else make_dash_table(s_u_n_data),
+                                            ),
+                                            label = s_u_n['sub_name']
+                                        )
+                                    )
+
+                            # Getting other name props
+                            other_name_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_name'] is None]
+                            for o_n in other_name_props:
+                                o_n_data = o_n['table']
+                                o_n_data = o_n_data[o_n_data['Value']>0]
+                                if not o_n_data.empty:
+                                    accordion_children.append(
+                                        dbc.AccordionItem(
+                                            html.Div(make_pie_chart(o_n_data) if o_n['name'] in pie_chart_features else make_dash_table(o_n_data)),
+                                            title = o_n['name']
+                                        )
+                                    )
+
+                        if len(sub_tab_list)>0:
+                            accordion_children.append(
+                                dbc.AccordionItem(
+                                    dbc.Tabs(
+                                        sub_tab_list
+                                    ),
+                                    title = u_n
+                                )
+                            )
+
+                        # Adding main props
+                        l_props = [i for i in nested_prop_list if i['sub_name'] is None and not i['name'] in unique_names]
+                        for l in l_props:
+                            l_data = l['table']
+                            l_data = l_data[l_data['Value']>0]
+                            if not l_data.empty:
+                                accordion_children.append(
+                                    dbc.AccordionItem(
+                                        html.Div(
+                                            make_pie_chart(l_data) if l['name'] in pie_chart_features else make_dash_table(l_data)
+                                        ),
+                                        title = l['name']
+                                    )
+                                )
+
+                    else:
+                        # Only has main props
+                        for l in nested_prop_list:
+                            l_data = l['table']
+                            l_data = l_data[l_data['Value']>0]
+                            if not l_data.empty:
+                                accordion_children.append(
+                                    dbc.AccordionItem(
+                                        html.Div(
+                                            make_pie_chart(l['table']) if l['name'] in pie_chart_features else make_dash_table(l['table'])
+                                        ),
+                                        title = l['name']
+                                    )
+                                )
+
 
             if 'unique_index' in ftu_click['properties']['user']:
                 add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)

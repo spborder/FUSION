@@ -536,11 +536,11 @@ class DSASlide:
             agg_numeric_props = agg_prop_df.select_dtypes(exclude = 'object')
 
             # Scaling numeric props by area
-            for row_idx, area in enumerate(overlap_area):
+            #for row_idx, area in enumerate(overlap_area):
                 #print(f'area: {area}')
-                agg_numeric_props.iloc[row_idx,:] *= area
+            #    agg_numeric_props.iloc[row_idx,:] *= area
 
-            agg_numeric_dict = agg_numeric_props.sum(axis=0).to_dict()
+            agg_numeric_dict = agg_numeric_props.mean(axis=0).to_dict()
             
             aggregated_properties[ftu] = agg_numeric_dict
             aggregated_properties[ftu][f'{ftu} Count'] = len(overlap_area)
@@ -550,8 +550,8 @@ class DSASlide:
                 col_values = agg_object_props[col_name].tolist()
                 col_vals_dict = {col_name: {}}
                 
-                print(col_name)
-                print(col_values)
+                #print(col_name)
+                #print(col_values)
 
                 if type(col_values[0])==dict:
                     
