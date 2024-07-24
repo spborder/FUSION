@@ -104,7 +104,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self, wsi, cli_list = None):
+    def gen_vis_layout(self, wsi, gene_handler, cli_list = None):
 
         #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
@@ -151,7 +151,7 @@ class LayoutHandler:
             tile_size = 240
             slide_properties = []
             combined_colors_dict = {}
-            zoom_levels = 8
+            zoom_levels = 3
             map_bounds = [[0,240],[0,240]]
         
         center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
@@ -161,27 +161,42 @@ class LayoutHandler:
                 id = 'slide-tile-holder',
                 children = [
                     dl.TileLayer(
-                        id = 'slide-tile',
+                        id = f'slide-tile{np.random.randint(0,100)}',
                         url = map_url,
                         tileSize = tile_size,
-                        maxNativeZoom=zoom_levels-1
+                        maxNativeZoom=zoom_levels-2
                     )
                 ]
             ),
             dl.FullScreenControl(position='topleft'),
-            dl.FeatureGroup(id='feature-group',
-                            children = [
-                                dl.EditControl(id = {'type':'edit_control','index':0},
-                                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
-                                                position='topleft')
-                            ]),
+            html.Div(
+                id = 'edit-control-holder',
+                children = [
+                    dl.FeatureGroup(
+                        id='feature-group',
+                        children = [
+                            dl.EditControl(
+                                id = {'type':'edit-control','index':0},
+                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
+                                position='topleft'
+                            )
+                        ]
+                    )
+                ]
+            ),
             html.Div(id='colorbar-div',
                      children = [
                          dl.Colorbar(id='map-colorbar')
                          ]),
-            dl.LayersControl(id='layer-control',
-                             children = self.initial_overlays
-                             ),
+            html.Div(
+                id = 'layer-control-holder',
+                children = [
+                    dl.LayersControl(
+                        id='layer-control',
+                        children = self.initial_overlays
+                        )
+                    ]
+            ),
             #dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
             #html.Div(id='ask-fusey-box',style={'visibility':'hidden','position':'absolute','top':'50px','right':'10px','zIndex':'1000'}),
             html.Div(id='marker-add-div',children = []),
@@ -196,7 +211,7 @@ class LayoutHandler:
         ]
 
         map_layer = dl.Map(
-            center = center_point, zoom = 3, minZoom = 0, crs='Simple',bounds = map_bounds,
+            center = center_point, zoom = 0, minZoom = 0, crs='Simple',
             style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
             preferCanvas=True,
@@ -245,7 +260,7 @@ class LayoutHandler:
                     dcc.Store(
                         id = {'type':'viewport-store-data','index':0},
                         storage_type='memory',
-                        data = []
+                        data = json.dumps({})
                     )
                 )
             ])
@@ -298,7 +313,9 @@ class LayoutHandler:
                         ]
                     )
                 ],align='center',style={'marginBottom':'10px'})
-
+            ]),
+            dbc.CardFooter([
+                html.P('Some of the icons in the cell diagrams are informed and inspired by KPMP.org, Biorender.com and "Advances and prospects for the Human BioMolecular Atlas Program (HuBMAP)"')
             ])
         ])
 
@@ -342,15 +359,56 @@ class LayoutHandler:
                 ]),
                 html.Hr(),
                 dbc.Row([
+                    dbc.Col(dbc.Label('Select Organ: ',html_for = 'organ-hierarchy-select'),md = 2),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [
+                                {'label': i.title(), 'value': i}
+                                for i in gene_handler.asct_b['Organ'].tolist() if not i in ['anatomical systems','bone marrow']
+                            ],
+                            value = 'kidney',
+                            id = 'organ-hierarchy-select'
+                        ),
+                        md = 10
+                    ),
+                    html.Div(
+                        dcc.Store(
+                            id = 'organ-hierarchy-store',
+                            storage_type = 'memory',
+                            data = json.dumps({'organ': None,'table': None,'info': None})
+                        )
+                    )
+                ]),
+                dbc.Row([
                     dbc.Col([
-                        dbc.Row([
+                        html.Div([
+                            dbc.Row([
                             html.H2('Nephron Diagram')
-                        ]),
-                        dbc.Row([
-                            dcc.Graph(id='neph-img',figure=self.neph_figure),
-                            dcc.Tooltip(id='neph-tooltip',loading_text='')
-                        ])
+                            ]),
+                            dbc.Row([
+                                dcc.Graph(id='neph-img',figure=self.neph_figure),
+                                dcc.Tooltip(id='neph-tooltip',loading_text='')
+                            ])
+                        ], id = 'nephron-diagram'),
+                        html.Div(
+                            id = 'organ-hierarchy-cell-select-div',
+                            children = [
+                                html.H2('More Organ Graphics Coming Soon!'),
+                                dbc.Col([
+                                    dbc.Label('Select a cell type: ',html_for='organ-hierarchy-cell-select')
+                                ],md=2),
+                                dbc.Col([
+                                    dcc.Dropdown(
+                                        id = 'organ-hierarchy-cell-select',
+                                        options = '',
+                                        value = ''
+                                    )
+                                ],md=10)
+                            ],
+                            style = {'display': 'none'}
+                        )
                     ],md=5),
+
                     dbc.Col([
                         dbc.Tabs([
                             dbc.Tab(cell_graphic_tab, label = 'Cell Graphic',tab_id = 'cell-graphic-tab'),
@@ -861,6 +919,16 @@ class LayoutHandler:
             ])
         ])
 
+        # Cell annotation tab
+        cell_annotation_tab = dbc.Card([
+            dbc.CardBody([
+                html.Div(
+                    id = 'cell-annotation-div',
+                    children = []
+                )
+            ])
+        ])
+
 
         # List of all tools tabs
         tool_tabs = [
@@ -869,7 +937,8 @@ class LayoutHandler:
             dbc.Tab(cell_card,label = "Cell Graphics",tab_id='cell-graphics-tab'),
             dbc.Tab(cluster_card,label = 'Morphological Clustering',tab_id='clustering-tab'),
             dbc.Tab(extract_card,label = 'Download Data',tab_id='download-tab'),
-            dbc.Tab(annotation_session_tab, label = 'Annotation Station', tab_id = 'annotation-tab')
+            dbc.Tab(annotation_session_tab, label = 'Annotation Station', tab_id = 'annotation-tab'),
+            dbc.Tab(cell_annotation_tab, label = "Cell Annotation", tab_id = 'cell-annotation-tab',disabled = True,id = 'cell-annotation-tab')
             #dbc.Tab(cli_tab,label = 'Run Analyses',disabled = True,tab_id='analyses-tab'),
         ]
         
@@ -956,7 +1025,7 @@ class LayoutHandler:
     def gen_report_child(self,feature_data,child_type):
 
         # Generate new report of feature data        
-        feature_data = pd.DataFrame.from_records(feature_data).copy()
+        feature_data = pd.DataFrame.from_dict(feature_data,orient='index').copy()
         unique_labels = np.unique(feature_data['label'].tolist()).tolist()
 
         if type(unique_labels[0]) in [int,float]:
@@ -1739,7 +1808,7 @@ class LayoutHandler:
                 ])
             ])
 
-        elif wsi.spatial_omics_type=='CODEX':
+        elif wsi.spatial_omics_type in ['CODEX']:
 
             special_overlays_opts.extend([
                 html.H6('Select Additional Channel Overlay(s)'),
@@ -1769,6 +1838,31 @@ class LayoutHandler:
                     disabled = True
                 )
             ])
+        
+        elif wsi.spatial_omics_type in ['Xenium']:
+            # Upload cell anchors/labels
+            special_overlay_opts.extend([
+                html.H6('Upload cell group labels here'),
+                self.gen_info_button('Upload a csv file where one column is "cell_id" and the others are labels you want to apply to the matching cell'),
+                html.Div([
+                    dcc.Upload(
+                        id={'type':'upload-anchors','index':0},
+                        children=html.Div([
+                            'Drag and Drop or ',
+                            html.A('Select Files')
+                        ]),
+                        style={
+                            'width': '100%',
+                            'borderWidth': '1px',
+                            'borderStyle': 'dashed',
+                            'borderRadius': '5px',
+                            'textAlign': 'center',
+                        }
+                    ),
+                    html.Div(id={'type':'uploaded-anchors-output','index':0}),
+                ])
+            ])
+        
         else:
             special_overlay_opts = []
 
@@ -2369,16 +2463,19 @@ class LayoutHandler:
         # Table with metadata for each dataset in dataset_handler
         combined_dataset_dict = []
 
-        # Accessing the folder structure saved in dataset_handler            
-        for f in dataset_handler.slide_datasets:
-            folder_dict = {}
-            folder_dict['Name'] = dataset_handler.slide_datasets[f]['name']
-            
-            folder_meta_keys = list(dataset_handler.slide_datasets[f]['Metadata'])
-            for m in folder_meta_keys:
-                folder_dict[m] = dataset_handler.slide_datasets[f]['Metadata'][m]
+        # Accessing the folder structure saved in dataset_handler     
+        slide_datasets = dataset_handler.update_slide_datasets(user_info)
 
-            combined_dataset_dict.append(folder_dict)
+        for f in slide_datasets:
+            folder_dict = {}
+            if 'name' in f:
+                folder_dict['Name'] = f['name']
+                
+                folder_meta_keys = list(f['Aggregated_Metadata'])
+                for m in folder_meta_keys:
+                    folder_dict[m] = f['Aggregated_Metadata'][m]
+
+                combined_dataset_dict.append(folder_dict)
 
         dataset_df = pd.DataFrame.from_records(combined_dataset_dict)
 
@@ -2420,6 +2517,15 @@ class LayoutHandler:
                     html.H3('Select a Dataset to add slides to current session'),
                     html.Hr(),
                     self.gen_info_button('Click on one of the circles in the far left of the table to load metadata for that dataset. You can also filter/sort the rows using the arrow icons in the column names and the text input in the first row'),
+                    html.Div(
+                        children = [
+                            dcc.Store(
+                                id = 'available-datasets-store',
+                                data = json.dumps(slide_datasets),
+                                storage_type='memory'
+                            )
+                        ]
+                    ),
                     table_layout,
                     html.B(),
                     html.H3('Select Slides to include in current session'),
@@ -2580,7 +2686,7 @@ class LayoutHandler:
                 dbc.Col(feat_extract_card,md=6)
             ])
 
-        elif upload_type == 'CODEX':
+        elif upload_type in ['CODEX','Xenium']:
 
             sub_comp_methods_list = [
                 {'label':'Manual','value':'Manual','disabled':False},
@@ -2735,6 +2841,7 @@ class LayoutHandler:
             {'label':'Regular Histology','value':'Regular','disabled':False},
             {'label':'10x Visium','value':'Visium','disabled':False},
             {'label':'Co-Detection by Indexing (CODEX)','value':'CODEX','disabled':False},
+            {'label':'10x Xenium','value':'Xenium','disabled':False},
             {'label':'CosMx','value':'CosMx','disabled':True},
             {'label':'GeoMx','value':'GeoMx','disabled':True}
         ]
@@ -3151,7 +3258,14 @@ class LayoutHandler:
                         style={'marginLeft':'5px','display':'none'},
                         disabled=False
                     ),
-                    html.Div(id='logged-in-user',children = [f'Welcome, {initial_user["login"]}!']),
+                    html.Div(id='logged-in-user',children = [
+                        f'Welcome, {initial_user["login"]}!',
+                        dbc.Badge(
+                            html.A('Jobs'),
+                            color = 'secondary',
+                            id = 'long-plugin-butt'
+                        )
+                        ]),
                     html.Div(
                         id = 'user-store-div',
                         children = [
@@ -3172,6 +3286,16 @@ class LayoutHandler:
                                 )
                             )
                         ),id={'type':'collapse-content','index':0},is_open=False
+                    )
+                ]),
+                dbc.CardFooter([
+                    dbc.Collapse(
+                        html.Div(
+                            id = 'long-plugin-div',
+                            children = []
+                        ),
+                        id = 'plugin-collapse',
+                        is_open = False
                     )
                 ])
             ],style={'marginBottom':'20px'}
@@ -3215,7 +3339,7 @@ class LayoutHandler:
                         ),
                         dcc.Store(
                             id = 'slide-info-store',
-                            data = [],
+                            data = json.dumps({'overlay_prop': None,'cell_vis_val': 0.5,'current_channels': None, 'filter_vals': None}),
                             storage_type='memory'
                         ),
                         dcc.Store(
@@ -3607,6 +3731,94 @@ class GirderHandler:
 
         return cli
 
+    def update_slide_datasets(self,user_info):
+        """
+        Grabbing available collections as well as user public folders
+        outputs list of accessible folders' info (folders that are immediate parents of slides)
+        """
+
+        slide_datasets = []
+        
+        # This is all collections in the DSA instance
+        all_collections = self.gc.get('/collection',parameters={'limit': 1000})
+
+        # Checking user access (only include public collections)
+        all_collections = [i for i in all_collections if i['public']]
+
+        # Adding in user public folders
+        user_folder_path = f'/user/{user_info["login"]}/Public'
+        user_public_folder = self.gc.get('/resource/lookup',parameters={'path':user_folder_path})
+
+        all_collections += [user_public_folder]         
+
+        for c in all_collections:
+
+            # Get all large image objects in each collection that are not in histoqc outputs
+            if not c["_id"]==user_public_folder["_id"]:
+                collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'collection'})
+            else:
+                collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'folder'})
+
+            image_items = [i for i in collection_items if 'largeImage' in i and not 'png' in i['name']]
+
+            folder_ids = np.unique([i['folderId'] for i in image_items]).tolist()
+            folder_info = [self.gc.get(f'/folder/{i}') for i in folder_ids]
+            # Don't want to see histoqc outputs (which should all be pngs) or anything in the annotation sessions (Masks are tiff, Images are pngs)
+            folder_info = [i for i in folder_info if not i['name'] in ['histoqc_outputs','Masks','Images']]
+
+            # Aggregating slide metadata in each folder
+            for f in folder_info:
+
+                folder_slides = [i for i in image_items if i['folderId']==f["_id"]]
+                f['Aggregated_Metadata'] = {}
+                
+                folder_slides_meta = [i['meta'] for i in folder_slides]
+
+                meta_keys = []
+                for f_s_m in folder_slides_meta:
+                    meta_keys.extend(list(f_s_m.keys()))
+
+                for m in meta_keys:
+                    items_meta = [i['meta'][m] for i in folder_slides if m in i['meta']]
+                    
+                    if all([type(i)==str for i in items_meta]):
+                        f['Aggregated_Metadata'][m] = ', '.join(list(set(items_meta)))
+                    elif all([type(i)==int or type(i)==float for i in items_meta]):
+                        f['Aggregated_Metadata'][m] = sum(items_meta)
+                
+                slide_datasets.append(f)
+
+
+        return slide_datasets
+
+    def get_folder_slides(self,folder_id):
+        """
+        Get all the slides in a given folder id        
+        """
+
+        # Get all large image objects in each collection that are not in histoqc outputs
+        try:
+            collection_items = self.gc.get(f'/resource/{folder_id}/items',parameters={'limit': 1000,'type':'collection'})
+        except girder_client.HttpError:
+            collection_items = self.gc.get(f'/resource/{folder_id}/items',parameters={'limit': 1000,'type':'folder'})
+        
+        image_items = [i for i in collection_items if 'largeImage' in i and not 'png' in i['name']]
+
+        return image_items
+    
+    def get_folder_name(self,folder_id):
+        """
+        Return the name for a folder_id (checks if it's either a "collection" or a "folder")
+        """
+
+        try:
+            folder_info = self.gc.get(f'/folder/{folder_id}')
+        except girder_client.HttpError:
+            folder_info = self.gc.get(f'/collection/{folder_id}')
+        
+        return folder_info['name']
+
+    """
     def update_folder_structure(self,username):
 
         # Adding Public folders if any "FUSION_Upload" are in there
@@ -3650,7 +3862,6 @@ class GirderHandler:
             path = self.base_path
             path_type = self.base_path_type
 
-
         self.current_collection = {
             'path':[],
             'id':[]
@@ -3679,6 +3890,7 @@ class GirderHandler:
                 self.slide_datasets[f] = {}
                 folder_info = self.gc.get(f'/folder/{f}')
                 folder_name = folder_info['name']
+
                 if not folder_name=='histoqc_outputs' and folder_info['parentId'] in self.current_collection['id']:
                     self.slide_datasets[f]['name'] = folder_name
                 
@@ -3707,7 +3919,7 @@ class GirderHandler:
                             self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
                         elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
-    
+
         # Adding Public folders if any "FUSION_Upload" are in there
         user_folder_path = f'/user/{username}/Public'
         folder_id = self.gc.get('/resource/lookup',parameters={'path':user_folder_path})['_id']
@@ -3737,6 +3949,7 @@ class GirderHandler:
                             self.slide_datasets[f]['Metadata'][m] = ','.join(list(set(item_metadata)))
                         elif type(item_metadata[0])==int or type(item_metadata[0])==float:
                             self.slide_datasets[f]['Metadata'][m] = sum(item_metadata)
+    """
 
     def clean_old_annotations(self, days = 1):
         """
@@ -3759,6 +3972,8 @@ class GirderHandler:
 
         if len(default_slide_list)>0:
             self.default_slides = default_slide_list
+        else:
+            self.default_slides = []
         
     def get_collection_annotation_meta(self,select_ids:list):
 
@@ -3885,6 +4100,19 @@ class GirderHandler:
         else:
             return None
 
+    def get_user_jobs(self, user_id):
+        """
+        Returns list of job ids for a user. 
+        """
+
+        user_job_list = self.gc.get('/job',
+                                    parameters = {
+                                        'userId': user_id,
+                                        'limit': 10
+                                    })
+
+        return user_job_list
+
     def get_job_status(self,job_id: Union[str,None]):
         """
         Returns status of job (3=complete, 2 = started/in-progress), and most recent log (if applicable)
@@ -3929,17 +4157,13 @@ class GirderHandler:
         self.usability_users = self.update_usability()
 
         # Downloading JSON resource
-        #cell_graphics_resource = self.gc.get('resource/lookup',parameters={'path':assets_path+'cell_graphics/graphic_reference.json'})
         with open('./assets/graphic_reference.json','r') as f:
             self.cell_graphics_key = json.load(f)
-        #self.cell_graphics_key = self.gc.get(f'/item/{cell_graphics_resource["_id"]}/download')
 
         self.cell_names = []
         for ct in self.cell_graphics_key:
             self.cell_names.append(self.cell_graphics_key[ct]['full'])
 
-        #morpho_item = self.gc.get('resource/lookup',parameters={'path':assets_path+'morphometrics/morphometrics_reference.json'})
-        #self.morphometrics_reference = self.gc.get(f'/item/{morpho_item["_id"]}/download')
         with open('./assets/morphometrics_reference.json','r') as f:
             self.morphometrics_reference = json.load(f)
         
@@ -3957,8 +4181,6 @@ class GirderHandler:
                         self.morpho_names.append(mo_name.replace('{}',sc))
 
         # Getting asct+b table
-        #asct_b_table_id = self.gc.get('resource/lookup',parameters={'path':assets_path+'asct_b/Kidney_v1.2 - Kidney_v1.2.csv'})['_id']
-        #self.asct_b_table = pd.read_csv(self.apiUrl+f'item/{asct_b_table_id}/download?token={self.user_token}',skiprows=list(range(10)))
         self.asct_b_table = pd.read_csv('./assets/Kidney_v1.2 - Kidney_v1.2.csv',skiprows=list(range(10)))
 
         # Generating plot feature selection dictionary
@@ -3968,30 +4190,32 @@ class GirderHandler:
         
         # Checking usability study usernames in FUSION Assets folder
         # Running at startup and then when pages change so we can update this file without restarting FUSION
+        try:
+            usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
+            if updated_info is None:
+                usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
+                self.usability_users = usability_info
+                return usability_info
+            else:
+                
+                item_files = self.gc.get(f'/item/{usability_usernames_id["_id"]}/files',parameters={'limit':1000})
+                put_response = self.gc.put(f'/file/{item_files[0]["_id"]}/contents',
+                    parameters={'size':len(json.dumps(updated_info).encode('utf-8'))},
+                    data = json.dumps(updated_info)
+                )
 
-        usability_usernames_id = self.gc.get('resource/lookup',parameters={'path':self.fusion_assets+'usability_study_information/usability_study_usernames.json'})
-        if updated_info is None:
-            usability_info = self.gc.get(f'/item/{usability_usernames_id["_id"]}/download')
-            self.usability_users = usability_info
-            return usability_info
-        else:
-            
-            item_files = self.gc.get(f'/item/{usability_usernames_id["_id"]}/files',parameters={'limit':1000})
-            put_response = self.gc.put(f'/file/{item_files[0]["_id"]}/contents',
-                parameters={'size':len(json.dumps(updated_info).encode('utf-8'))},
-                data = json.dumps(updated_info)
-            )
+                post_response = self.gc.post(f'/file/chunk',
+                    parameters={
+                        'size':len(json.dumps(updated_info).encode('utf-8')),
+                        'offset':0,
+                        'uploadId':put_response['_id']
+                        },
+                    data = json.dumps(updated_info)
+                )
 
-            post_response = self.gc.post(f'/file/chunk',
-                parameters={
-                    'size':len(json.dumps(updated_info).encode('utf-8')),
-                    'offset':0,
-                    'uploadId':put_response['_id']
-                    },
-                data = json.dumps(updated_info)
-            )
-
-            self.usability_users = updated_info
+                self.usability_users = updated_info
+        except girder_client.HttpError:
+            self.usability_users = {}
 
     def check_usability(self,username):
 
@@ -4010,6 +4234,8 @@ class GirderHandler:
         
         # Given a list of slides (output of GET /item/{item_id}), generate label options, feature options, and filter options
         slide_folders = np.unique([i['folderId'] for i in slide_list]).tolist()
+
+        folder_names = [self.gc.get(f'/folder/{i}')['name'] for i in slide_folders]
         slide_names = [i['name'] for i in slide_list]
 
         # Default labels are FTU, Slide Name, Cell Type, and Morphometric
@@ -4020,11 +4246,18 @@ class GirderHandler:
             {'label':'Cell Type','value':'Cell Type','disabled':True},
             {'label':'Morphometric','value':'Morphometric','disabled':True}
         ]
-
+        
+        # Change this if you ever want to filter slides based on metadata values (Spatial Omics Type might be one)
+        self.filter_keys = []
+        l_i = -1
+        label_filter_children = []
+        """
         # Adding labels according to current slide-dataset metadata
         meta_labels = []
         for f in slide_folders:
-            meta_labels.extend(list(self.slide_datasets[f]['Metadata'].keys()))
+            slides_in_f = [i for i in slide_list if i['folderId']==f]
+            for s in slides_in_f:
+                meta_labels.extend(list(s['meta'].keys()))
         # Adding only unique labels
         meta_labels = np.unique(meta_labels).tolist()
         for m in meta_labels:
@@ -4070,6 +4303,7 @@ class GirderHandler:
                 if len(l_vals)>0:
                     label_filter_children.append(l_dict)
                     self.filter_keys.append({'title':l['label'],'key':f'0-{l_i}'})
+        """
 
         # Adding slide names to label_filter_children
         slide_names_children = {
@@ -4095,14 +4329,14 @@ class GirderHandler:
             'key':f'0-{l_i+2}',
             'children':[]
         }
-        for f_i, f in enumerate(slide_folders):
+        for f_i, f in enumerate(folder_names):
             folder_names_children['children'].append(
                 {
-                    'title':self.slide_datasets[f]['name'],
+                    'title':f,
                     'key':f'0-{l_i+2}-{f_i}'
                 }
             )
-            self.filter_keys.append({'title':self.slide_datasets[f]['name'],'key':f'0-{l_i+2}-{f_i}'})
+            self.filter_keys.append({'title':f,'key':f'0-{l_i+2}-{f_i}'})
 
         self.filter_keys.append({'title':'Folder Names','key':f'0-{l_i+2}'})
         label_filter_children.append(folder_names_children)
@@ -4982,6 +5216,9 @@ class GeneHandler:
         self.info_url = 'https://mygene.info/v3/'
         self.hra_url = 'https://grlc.io/api-git/hubmapconsortium/ccf-grlc/subdir/fusion//?endpoint=https://lod.humanatlas.io/sparql'
 
+        self.asct_b = pd.read_csv('./assets/asctb_release7.csv')
+
+
     def get_layout(self, gene_id:str):
         """
         Returns list of layout components (buttons and divs) when someone selects an overlay that contains "Gene Counts"
@@ -5071,7 +5308,10 @@ class GeneHandler:
         # Have to add on the whole iri here:
         # HGNC id is a number but should be interpreted as a string
         id = f'http://identifiers.org/hgnc/{id}'
-        request_response = requests.get(f'{self.hra_url.replace("fusion//","fusion//asct_by_biomarker")}&biomarker={id}',headers={'Accept':'application/json','Content-Type':'application/json'})
+        request_response = requests.get(
+            f'{self.hra_url.replace("fusion//","fusion//asct_by_biomarker")}&biomarker={id}',
+            headers={'Accept':'application/json','Content-Type':'application/json'}
+        )
         if request_response.ok:
             return pd.json_normalize(request_response.json()['results']['bindings'],max_level=1)
         else:
@@ -5087,7 +5327,10 @@ class GeneHandler:
 
         # Modifiying input id
         id = f'http://purl.odolibrary.org/obo/{id}'
-        request_response = requests.get(f'{self.hra_url.replace("fusion//","fusion//cell_by_location")}&location={id}',headers={'Accept':'application/json','Content-type':'application/json'})
+        request_response = requests.get(
+            f'{self.hra_url.replace("fusion//","fusion//cell_by_location")}&location={id}',
+            headers={'Accept':'application/json','Content-type':'application/json'}
+        )
 
         print(request_response)
         if request_response.ok:
@@ -5095,6 +5338,50 @@ class GeneHandler:
             return pd.DataFrame(request_response.content)
         else:
             return None
+
+    def get_table(self,organ_selection: str):
+        """
+        Getting csv table containing asct+b info for a given organ
+        """
+
+        if organ_selection in self.asct_b['Organ'].tolist():
+
+            csv_location = self.asct_b['csv'].tolist()[self.asct_b['Organ'].tolist().index(organ_selection)]
+
+            new_table_req = requests.get(
+                csv_location
+            )
+
+            if new_table_req.ok:
+                new_table = pd.read_csv(BytesIO(new_table_req.content))
+                new_table_content = pd.read_csv(BytesIO(new_table_req.content),skiprows=list(range(10)))
+                new_table_info = new_table.iloc[1:9,:1]
+
+            else:
+                new_table_content = None
+                new_table_info = None
+        else:
+            new_table_content = None
+            new_table_info = None
+
+        return new_table_content, new_table_info
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

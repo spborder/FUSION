@@ -50,9 +50,9 @@ import dash_treeview_antd as dta
 from timeit import default_timer as timer
 import time
 
-from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide
+from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide, XeniumSlide
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler, GeneHandler
-from FUSION_Prep import CODEXPrep, VisiumPrep, Prepper
+from FUSION_Prep import XeniumPrep, CODEXPrep, VisiumPrep, Prepper
 from FUSION_Utils import (
     get_pattern_matching_value, extract_overlay_value, 
     gen_umap,
@@ -146,9 +146,6 @@ class FUSION:
         # Load clustering data
         self.filter_labels = []
         self.reports_generated = {}
-        
-        # Initializing fusey_data as empty
-        self.fusey_data = None
 
         # Number of main cell types to include in pie-charts (currently set to all cell types)
         self.plot_cell_types_n = len(list(self.cell_names_key.keys()))
@@ -174,14 +171,6 @@ class FUSION:
             self.ftus = []
             self.current_ftu_layers = []
 
-        # Specifying available properties with visualizations implemented
-        self.visualization_properties = [
-            'Cluster','Main_Cell_Types','Max Cell Type','Gene Counts','Morphometrics','Cell_Subtypes'
-        ]
-
-        # Initializing some parameters
-        self.overlay_prop = None
-
         # Cell Hierarchy related properties
         self.node_cols = {
             'Anatomical Structure':{'abbrev':'AS','x_start':50,'y_start':75,
@@ -194,11 +183,6 @@ class FUSION:
 
         # Colormap settings (customize later)
         self.color_map = colormaps['jet']
-        self.cell_vis_val = 0.5
-        self.filter_vals = None
-        self.overlap_prop = None
-        self.hex_color_key = {}
-        self.current_channels = {}
 
         # JavaScript functions for controlling annotation properties
         self.ftu_style_handle = assign("""function(feature,context){
@@ -424,8 +408,8 @@ class FUSION:
                     container_content = self.layout_handler.layout_dict[self.current_page]
                 else:
                     # Checking if there was any new slides added via uploader (or just added externally)
-                    self.dataset_handler.update_folder_structure(user_data['login'])
-                    self.layout_handler.gen_builder_layout(self.dataset_handler,user_data['login'])
+                    #self.dataset_handler.update_folder_structure(user_data['login'])
+                    self.layout_handler.gen_builder_layout(self.dataset_handler,user_data)
 
                     container_content = self.layout_handler.layout_dict[self.current_page]
 
@@ -435,7 +419,8 @@ class FUSION:
                 self.wsi = None
                 self.filter_vals = None
                 self.layout_handler.gen_vis_layout(
-                    self.wsi
+                    self.wsi,
+                    self.gene_handler
                 )
 
                 # Checking vis_sess_store for any slides, if there aren't any 'included'==True then revert to default set
@@ -464,6 +449,46 @@ class FUSION:
         if n:
             return not is_open
         return is_open
+
+    def open_plugin_collapse(self,n,is_open):
+        """
+        Opening the running plugins collapse to see all the user's current jobs
+        """
+        if n:
+            return not is_open
+        return is_open
+
+    def open_job_collapse(self,n,is_open,user_store_data):
+        """
+        Opening a specific job's collapse and updating with logs
+        """
+        if n:
+            user_store_data = json.loads(user_store_data)
+
+            # Getting the clicked job index:
+            user_jobs = self.dataset_handler.get_user_jobs(user_store_data['_id'])
+
+            job_id = user_jobs[ctx.triggered_id['index']]['_id']
+
+            job_status, job_logs = self.dataset_handler.get_job_status(job_id)
+            job_logs = job_logs.split('\n')
+
+            if job_status==3:
+                badge_children = html.A('Complete')
+                badge_color = 'success'
+            elif job_status==2:
+                badge_children = html.A('Running')
+                badge_color = 'warning'
+            elif job_status==4:
+                badge_children = html.A('Failed')
+                badge_color = 'danger'
+            else:
+                badge_children = html.A(f'Unknown: ({job_status})')
+                badge_color = 'info'
+
+            return not is_open, badge_children, badge_color, [html.P(i) for i in job_logs]
+
+        return is_open, no_update, no_update, []
 
     def ga_callbacks(self):
 
@@ -550,7 +575,8 @@ class FUSION:
                 Output('user-id-div', 'children'),
                 Output({'type':'usability-sign-up','index':ALL},'style'),
                 Output({'type':'usability-butt','index':ALL},'style'),
-                Output('user-store','data')
+                Output('user-store','data'),
+                Output('long-plugin-div','children')
             ],
             [
                 Input('login-submit','n_clicks'),
@@ -566,6 +592,30 @@ class FUSION:
             prevent_initial_call=True
         )(self.girder_login)
 
+        # Open up job status collapse
+        self.app.callback(
+            Output('plugin-collapse','is_open'),
+            Input('long-plugin-butt','n_clicks'),
+            State('plugin-collapse','is_open'),
+            prevent_initial_call = True
+        )(self.open_plugin_collapse)
+
+        # Update job status and view logs
+        self.app.callback(
+            [
+                Output({'type':'checked-job-collapse','index': MATCH},'is_open'),
+                Output({'type': 'job-status-badge','index': MATCH},'children'),
+                Output({'type': 'job-status-badge','index':MATCH},'color'),
+                Output({'type': 'checked-job-logs','index': MATCH},'children')
+            ],
+            Input({'type':'job-status-button','index': MATCH},'n_clicks'),
+            [
+                State({'type':'checked-job-collapse','index': MATCH},'is_open'),
+                State('user-store','data')
+            ],
+        prevent_initial_call = True
+        )(self.open_job_collapse)
+
         # Loading new tutorial slides
         self.app.callback(
             Input({'type':'tutorial-tabs','index':ALL},'active_tab'),
@@ -575,7 +625,7 @@ class FUSION:
         # Updating questions in question tab
         self.app.callback(
             Input({'type':'questions-tabs','index':ALL},'active_tab'),
-            State('logged-in-user','children'),
+            State('user-store','data'),
             Output({'type':'question-div','index':ALL},'children'),
         )(self.update_question_div)
 
@@ -610,14 +660,16 @@ class FUSION:
             [Output({'type':'ftu-bounds','index':ALL},'hideout'),Output('colorbar-div','children'),
              Output('filter-slider','min'),Output('filter-slider','max'),Output('filter-slider','disabled'),
              Output('cell-sub-select-div','children'),Output({'type':'gene-info-div','index':ALL},'style'),
-             Output({'type':'gene-info-div','index':ALL},'children')],
+             Output({'type':'gene-info-div','index':ALL},'children'),
+             Output('slide-info-store','data')],
             [Input('cell-drop','value'),Input('vis-slider','value'),
              Input('filter-slider','value'), Input({'type':'added-filter-slider','index':ALL},'value'),
              Input({'type':'added-filter-drop','index':ALL},'value'),
              Input({'type':'ftu-bound-color-butt','index':ALL},'n_clicks'),
              Input({'type':'cell-sub-drop','index':ALL},'value')],
             [State({'type':'ftu-bound-color','index':ALL},'value'),
-             State({'type':'added-filter-slider-div','index':ALL},'style')],
+             State({'type':'added-filter-slider-div','index':ALL},'style'),
+             State('slide-info-store','data')],
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -638,6 +690,7 @@ class FUSION:
                 Input('add-filter-button','n_clicks'),
                 Input({'type':'delete-filter','index':ALL},'n_clicks')
             ],
+            State('slide-info-store','data'),
             prevent_initial_call = True
         )(self.add_filter)
 
@@ -656,21 +709,18 @@ class FUSION:
         self.app.callback(
             [Output('roi-pie-holder','children'),
              Output('annotation-session-div','children'),
-             Output({'type':'frame-label-drop','index':ALL},'disabled'),
+             Output('cell-annotation-div','children'),
              Output({'type':'viewport-store-data','index':ALL},'data'),
              Output('user-store','data')
              ],
             [Input('slide-map','bounds'),
              Input({'type':'roi-view-data','index':ALL},'value'),
              Input({'type':'frame-data-butt','index':ALL},'n_clicks'),
-             Input({'type':'cell-label-cluster','index':ALL},'n_clicks')
              ],
             [State('tools-tabs','active_tab'),
              State('viewport-data-update','checked'),
              State({'type':'frame-histogram-drop','index':ALL},'value'),
              State({'type':'frame-label-drop','index':ALL},'value'),
-             State({'type':'cell-label-eps','index':ALL},'value'),
-             State({'type':'cell-label-min-samples','index':ALL},'value'),
              State({'type':'viewport-store-data','index':ALL},'data'),
              State('user-store','data')
              ],
@@ -682,8 +732,16 @@ class FUSION:
             [Output('cell-graphic','src'),
              Output('cell-hierarchy','elements'),
              Output('cell-vis-drop','options'),
-             Output('cell-graphic-name','children')],
-            Input('neph-img','clickData'),
+             Output('cell-graphic-name','children'),
+             Output('organ-hierarchy-store','data'),
+             Output('organ-hierarchy-cell-select','options'),
+             Output('organ-hierarchy-cell-select','value'),
+             Output('organ-hierarchy-cell-select-div','style'),
+             Output('nephron-diagram','style')],
+            [Input('neph-img','clickData'),
+             Input('organ-hierarchy-select','value'),
+             Input('organ-hierarchy-cell-select','value')],
+            State('organ-hierarchy-store','data')
         )(self.update_cell_hierarchy)
 
         # Getting nephron hover (cell type label)
@@ -698,6 +756,7 @@ class FUSION:
         self.app.callback(
             Output({'type':'ftu-state-bar','index':MATCH},'figure'),
             Input({'type':'ftu-cell-pie','index':MATCH},'clickData'),
+            State({'type': 'viewport-store-data','index': ALL},'data'),
             prevent_initial_call = True
         )(self.update_state_bar)
 
@@ -711,13 +770,14 @@ class FUSION:
         # Loading new WSI from dropdown selection
         self.app.callback(
             [Output('slide-tile-holder','children'),
-             Output('layer-control','children'),
-             Output({'type':'edit_control','index':ALL},'editToolbar'),
+             Output('layer-control-holder','children'),
+             Output({'type':'edit-control','index':ALL},'editToolbar'),
              Output('slide-map','center'),
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children'),
-             Output('ftu-structure-hierarchy','children')],
+             Output('ftu-structure-hierarchy','children'),
+             Output('cell-annotation-tab','disabled')],
             Input('slide-load-interval','disabled'),
             prevent_initial_call=True,
             suppress_callback_exceptions=True
@@ -749,6 +809,7 @@ class FUSION:
             Output('id-p','children'),
             Output('notes-p','children')],
             Input('cell-hierarchy','tapNodeData'),
+            State('organ-hierarchy-store','data'),
             prevent_initial_call=True
         )(self.get_cyto_data)
 
@@ -795,10 +856,11 @@ class FUSION:
 
         # Adding manual ROIs using EditControl
         self.app.callback(
-            Input({'type':'edit_control','index':ALL},'geojson'),
+            Input({'type':'edit-control','index':ALL},'geojson'),
             [Output('layer-control','children'),
              Output('data-select','options'),
              Output('user-annotations-div', 'children')],
+            State('slide-info-store','data'),
             prevent_initial_call=True
         )(self.add_manual_roi)
 
@@ -920,18 +982,22 @@ class FUSION:
         # Special overlay populating
         self.app.callback(
             [Output({'type':'channel-overlay-select-div','index': ALL},'children'),
-             Output({'type':'channel-overlay-butt','index':ALL},'disabled')],
+             Output({'type':'channel-overlay-butt','index':ALL},'disabled'),
+             Output('slide-info-store','data')],
             Input({'type':'channel-overlay-drop','index': ALL},'value'),
+            State('slide-info-store','data'),
             prevent_initial_call = True,
         )(self.add_channel_color_select)
 
         # Adding CODEX channel overlay
         self.app.callback(
             [Output({'type':'codex-tile-layer','index':ALL},'url'),
-             Output({'type':'overlay-channel-tab','index':ALL},'label_style')],
+             Output({'type':'overlay-channel-tab','index':ALL},'label_style'),
+             Output('slide-info-store','data')],
             Input({'type':'channel-overlay-butt','index':ALL},'n_clicks'),
             [State({'type':'overlay-channel-color','index':ALL},'value'),
-            State({'type':'overlay-channel-tab','index':ALL},'label')],
+            State({'type':'overlay-channel-tab','index':ALL},'label'),
+            State('slide-info-store','data')],
             prevent_initial_call = True
         )(self.add_channel_overlay)
 
@@ -948,8 +1014,6 @@ class FUSION:
         # Grabbing points from current viewport umap (CODEX) and plotting other properties
         self.app.callback(
             [
-                Output({'type':'extracted-cell-labeling','index':ALL},'children'),
-                Output({'type':'cell-labeling-criteria','index':ALL},'children'),
                 Output('marker-add-div','children')
             ],
             [
@@ -1052,7 +1116,8 @@ class FUSION:
                 State({'type':'annotation-image-label','index':ALL},'value'),
                 State({'type':'annotation-station-ftu','index':ALL},'children'),
                 State({'type':'annotation-station-ftu-idx','index':ALL},'children'),
-                State('user-store','data')
+                State('user-store','data'),
+                State({'type':'viewport-store-data','index': ALL},'data')
             ],
             prevent_initial_call = True
         )(self.update_current_annotation)
@@ -1064,7 +1129,8 @@ class FUSION:
                 Output({'type':'cell-subtype-drop','index':ALL},'value')
             ],
             [
-                Input({'type':'cell-subtype-butt','index':ALL},'n_clicks')
+                Input({'type':'cell-subtype-butt','index':ALL},'n_clicks'),
+                Input({'type':'upload-anchors','index':ALL},'contents')
             ],
             [
                 State({'type':'cell-subtype-drop','index':ALL},'value')
@@ -1096,7 +1162,8 @@ class FUSION:
         # Initializing plot after selecting dataset(s)
         self.app.callback(
             Input('dataset-table','selected_rows'),
-            State('visualization-session-store','data'),
+            [State('visualization-session-store','data'),
+             State('available-datasets-store','data')],
             [Output('selected-dataset-slides','children'),
              Output('slide-metadata-plots','children'),
              Output('slide-select','options'),
@@ -1110,7 +1177,8 @@ class FUSION:
              Input({'type':'cell-meta-drop','index':ALL},'value'),
              Input({'type':'agg-meta-drop','index':ALL},'value'),
              Input({'type':'slide-dataset-table','index':ALL},'selected_rows')],
-             State('visualization-session-store','data'),
+            [State('visualization-session-store','data'),
+             State('available-datasets-store','data')],
              [Output('slide-select','options'),
              Output({'type':'meta-plot','index':ALL},'figure'),
              Output({'type':'cell-meta-drop','index':ALL},'options'),
@@ -1150,14 +1218,14 @@ class FUSION:
         # Uploading data to DSA collection
         self.app.callback(
             [Input({'type':'wsi-upload','index':ALL},'uploadComplete'),
-             Input({'type':'omics-upload','index':ALL},'uploadComplete'),
+             Input({'type':'wsi-files-upload','index':ALL},'uploadComplete'),
              Input({'type':'wsi-upload','index':ALL},'fileTypeFlag'),
-             Input({'type':'omics-upload','index':ALL},'fileTypeFlag')],
+             Input({'type':'wsi-files-upload','index':ALL},'fileTypeFlag')],
              State('user-store','data'),
             [Output('slide-qc-results','children'),
              Output('slide-thumbnail-holder','children'),
              Output({'type':'wsi-upload-div','index':ALL},'children'),
-             Output({'type':'omics-upload-div','index':ALL},'children'),
+             Output({'type':'wsi-files-upload-div','index':ALL},'children'),
              Output('structure-type','disabled'),
              Output('post-upload-row','style'),
              Output('upload-type','disabled'),
@@ -1265,34 +1333,6 @@ class FUSION:
             prevent_initial_call = True
         )(self.update_sub_compartment)
 
-        # Grabbing new frame slide thumbnail for nucleus segmentation
-        self.app.callback(
-            [
-                Input({'type':'frame-thumbnail','index':ALL},'clickData'),
-                Input({'type':'frame-select','index':ALL},'value')
-            ],
-            [
-                Output({'type':'frame-thumbnail','index':ALL},'figure'),
-                Output({'type':'ex-nuc-img','index':ALL},'figure')
-            ],
-            prevent_initial_call = True
-        )(self.grab_nuc_region)
-
-        # Updating nucleus segmentation parameters for CODEX prep
-        self.app.callback(
-            [
-                Input({'type':'nuc-seg-method','index':ALL},'value'),
-                Input({'type':'nuc-thresh-slider','index':ALL},'value'),
-                Input({'type':'ex-nuc-view','index':ALL},'value'),
-                Input({'type':'go-to-feat','index':ALL},'n_clicks')
-            ],
-            [
-                Output({'type':'ex-nuc-img','index':ALL},'figure'),
-                Output({'type':'nuc-thresh-slider','index':ALL},'marks')
-            ],
-            prevent_initial_call = True
-        )(self.update_nuc_segmentation)
-
         # Running feature extraction plugin
         self.app.callback(
             [Input({'type':'start-feat','index':ALL},'n_clicks'),
@@ -1399,15 +1439,15 @@ class FUSION:
 
         return new_slides, tutorial_name, slide_active_index, style_list, sub_parts, sub_parts_style
 
-    def initialize_metadata_plots(self,selected_dataset_list,vis_sess_store):
+    def initialize_metadata_plots(self,selected_dataset_list,vis_sess_store,dataset_store):
         """
         Creating plot and slide select divs in dataset-builder
         """
         vis_sess_store = json.loads(vis_sess_store)
+        dataset_store = json.loads(dataset_store)
 
         # Extracting metadata from selected datasets and plotting
         all_metadata_labels = []
-        all_metadata = []
         slide_dataset_dict = []
         full_slides_list = []
 
@@ -1415,22 +1455,17 @@ class FUSION:
 
             # Pulling dataset metadata
             # Dataset name in this case is associated with a folder or collection
-            dataset_ids = list(self.dataset_handler.slide_datasets.keys())
-            d_name = [self.dataset_handler.slide_datasets[i]['name'] for i in dataset_ids][d]
-            d_id = dataset_ids[d]
-            metadata_available = self.dataset_handler.slide_datasets[d_id]['Metadata']
+            metadata_available = list(dataset_store[d]['Aggregated_Metadata'].keys())
             # This will store metadata, id, name, etc. for every slide in that dataset
-            slides_list = [i for i in self.dataset_handler.slide_datasets[d_id]['Slides']]
+            slides_list = self.dataset_handler.get_folder_slides(dataset_store[d]["_id"])
             full_slides_list.extend(slides_list)
 
-            slide_dataset_dict.extend([{'Slide Names':s['name'],'Dataset':d_name} for s in slides_list])
+            slide_dataset_dict.extend([{'Slide Names':s['name'],'Dataset':d} for s in slides_list])
 
             # Grabbing dataset-level metadata
-            metadata_available['FTU Expression Statistics'] = []
-            metadata_available['FTU Morphometrics'] = []
+            metadata_available += ['FTU Expression Statistics', 'FTU Morphometrics']
 
-            all_metadata.append(metadata_available)
-            all_metadata_labels.extend(list(metadata_available.keys()))
+            all_metadata_labels.extend(metadata_available)
 
         #self.metadata = all_metadata
         all_metadata_labels = np.unique(all_metadata_labels)
@@ -1448,7 +1483,7 @@ class FUSION:
             dbc.Col(dcc.Dropdown(list(self.cell_names_key.keys()),list(self.cell_names_key.keys())[0],id={'type':'cell-meta-drop','index':2},disabled=True),md=2)
         ]
 
-        if not all_metadata==[]:
+        if not len(all_metadata_labels)==0:
             drop_div = html.Div([
                 dash_table.DataTable(
                     id = {'type':'slide-dataset-table','index':0},
@@ -1499,8 +1534,6 @@ class FUSION:
                 )
             ])
 
-            self.selected_meta_df = pd.DataFrame.from_records(all_metadata)
-
             plot_div = html.Div([
                 dcc.Graph(id = {'type':'meta-plot','index':0},figure = go.Figure())
             ])
@@ -1514,12 +1547,13 @@ class FUSION:
 
         return drop_div, plot_div, slide_select_options, json.dumps(vis_sess_store)
 
-    def update_metadata_plot(self,new_meta,sub_meta,group_type,slide_rows,vis_sess_store):
+    def update_metadata_plot(self,new_meta,sub_meta,group_type,slide_rows,vis_sess_store,dataset_store):
         """
         Plotting slide/dataset-level metadata in dataset-builder
         """
 
         vis_sess_store = json.loads(vis_sess_store)
+        dataset_store = json.loads(dataset_store)
 
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
@@ -1539,7 +1573,6 @@ class FUSION:
             if not ctx.triggered_id['type']=='meta-drop':
                 cell_types_options = (no_update,no_update,no_update)
             else:
-                print(new_meta)
                 if new_meta==['FTU Expression Statistics']:
                     # These are the options for expression statistics
                     cell_types_options = (
@@ -1584,9 +1617,9 @@ class FUSION:
                 included_slides = [t for t in present_slides if vis_sess_store]                    
 
                 dataset_metadata = []
-                for d_id in self.dataset_handler.slide_datasets:
-                    slide_data = self.dataset_handler.slide_datasets[d_id]['Slides']
-                    dataset_name = self.dataset_handler.slide_datasets[d_id]['name']
+                for dataset in dataset_store:
+                    slide_data = self.dataset_handler.get_folder_slides(dataset["_id"])
+                    dataset_name = self.dataset_handler.get_folder_name(dataset["_id"])
                     d_include = [s for s in slide_data if s['name'] in included_slides]
 
                     if len(d_include)>0:
@@ -1768,7 +1801,7 @@ class FUSION:
             for f in unique_folders:
 
                 # Adding all the slides in the same folder under the same disabled folder label option (not selectable)
-                folder_name = self.dataset_handler.slide_datasets[f]['name']
+                folder_name = self.dataset_handler.get_folder_name(f)
 
                 slide_options.append({
                     'label': html.Span([
@@ -1794,7 +1827,7 @@ class FUSION:
             for f in unique_folders:
                 
                 # Getting the folder names for the slides
-                folder_name = self.dataset_handler.slide_datasets[f]['name']
+                folder_name = self.dataset_handler.get_folder_name(f)
 
                 slide_options.append(
                     {
@@ -1819,18 +1852,21 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options, current_session
 
-    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,cluster_click,current_tab,update_data,frame_list,frame_label, cluster_eps, cluster_min_samples,current_data, user_data_store):
+    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,current_tab,update_data,frame_list,frame_label,current_data, user_data_store):
         """
         Updating data used for current viewport visualizations
         """
-
         user_data_store = json.loads(user_data_store)
         
-        frame_label_disable = [no_update]*len(ctx.outputs_list[2])
-        viewport_store_data = ['']
+        if not len(get_pattern_matching_value(current_data))==0:
+            viewport_store_data = json.loads(get_pattern_matching_value(current_data))
+        else:
+            viewport_store_data = {}
         cell_view_type = get_pattern_matching_value(cell_view_type)
-        if cell_view_type is None:
-            cell_view_type = 'channel_hist'
+
+        viewport_data_components = no_update
+        annotation_session_components = no_update
+        cell_annotation_components = no_update
         
         if update_data or ctx.triggered_id=='roi-view-data':
             if not self.wsi is None:
@@ -1841,11 +1877,11 @@ class FUSION:
                         bounds_box = shapely.geometry.box(*bounds)
 
                     # Storing current slide boundaries
-                    self.current_slide_bounds = bounds_box
+                    viewport_store_data['current_slide_bounds'] = list(bounds_box.bounds)
                 else:
-                    self.current_slide_bounds = self.wsi.map_bounds
+                    viewport_store_data['current_slide_bounds'] = self.wsi.map_bounds
             else:
-                self.current_slide_bounds = None
+                viewport_store_data['current_slide_bounds'] = None
 
                 raise exceptions.PreventUpdate
         
@@ -1854,508 +1890,42 @@ class FUSION:
             if not self.wsi is None:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
                 if self.wsi.spatial_omics_type=='CODEX':
-                    frame_label = get_pattern_matching_value(frame_label)
-                    if len(frame_list)<2:
-                        frame_label = None
+                    if frame_list is None or len(frame_list)==0:
+                        frame_list = [[self.wsi.channel_names[0]]]
                     
-                    frame_list = get_pattern_matching_value(frame_list)
-                    print(f'frame_list: {frame_list}')
-                    if frame_list is None:
-                        frame_list = [self.wsi.channel_names[0]]
+                    if frame_label is None or len(frame_list)==0:
+                        frame_label = [None]
 
-                if update_data:
-                    if self.wsi.spatial_omics_type=='Visium':
-                        # Getting intersecting FTU information
-                        intersecting_ftus, intersecting_ftu_polys = self.wsi.update_viewport_data(self.current_slide_bounds)
-
-                    elif self.wsi.spatial_omics_type=='CODEX':
-                        # Returns dictionary of intersecting tissue frame intensities
-                        print(cell_view_type)
-                        intersecting_ftus, intersecting_ftu_polys = self.wsi.update_viewport_data(bounds_box,cell_view_type,frame_list)
-                    
-                    self.current_ftus = intersecting_ftus
-
-                    viewport_store_data = {}
-
-                    if len(list(intersecting_ftus.keys()))>0:
-                        for f_idx,f in enumerate(list(intersecting_ftus.keys())):
-
-                            viewport_store_data[f] = {}
-
-                            if self.wsi.spatial_omics_type=='Visium':
-                                counts_dict_list = [i['Main_Cell_Types'] for i in intersecting_ftus[f] if 'Main_Cell_Types' in i]
-
-                                if len(counts_dict_list)>0:
-                                    counts_data = pd.DataFrame.from_records(counts_dict_list).sum(axis=0).to_frame()
-                                    counts_data.columns = [f]
-
-                                    counts_data = (counts_data[f]/counts_data[f].sum()).to_frame()
-                                    counts_data.columns = [f]
-                                    counts_data = counts_data.sort_values(by=f,ascending=False).iloc[0:self.plot_cell_types_n,:]
-                                    counts_data = counts_data.reset_index()
-
-                                    viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                    viewport_store_data[f]['count'] = len(counts_dict_list)
-
-                                    # Getting cell state information
-                                    viewport_store_data[f]['states'] = {}
-                                    for m in counts_data['index'].tolist():
-                                        cell_states_data = [i['Cell_States'][m] for i in intersecting_ftus[f] if 'Cell_States' in i]
-
-                                        cell_states_data = pd.DataFrame.from_records(cell_states_data).sum(axis=0).to_frame()
-                                        cell_states_data = cell_states_data.reset_index()
-                                        cell_states_data.columns = ['Cell State','Proportion']
-                                        cell_states_data['Proportion'] = cell_states_data['Proportion']/cell_states_data['Proportion'].sum()
-
-                                        viewport_store_data[f]['states'][m] = cell_states_data.to_dict('records')
-
-                                else:
-                                    viewport_store_data[f]['data'] = []
-                                    viewport_store_data[f]['count'] = 0
-                                    viewport_store_data[f]['states'] = {}
-
-                            elif self.wsi.spatial_omics_type == 'CODEX':
-
-                                if cell_view_type == 'channel_hist':
-                                    for f in list(intersecting_ftus.keys()):
-
-                                        viewport_store_data[f] = {}
-                                        counts_dict_list = [i for i in intersecting_ftus]
-                                        counts_data = pd.DataFrame()
-                                        if type(intersecting_ftus[f])==dict:
-
-                                            for frame_name in intersecting_ftus[f]:
-                                                frame_data = intersecting_ftus[f][frame_name]
-
-                                                frame_data_df = pd.DataFrame({'Frequency':[0]+frame_data['hist'],'Intensity':frame_data['bin_edges'],'Channel':[frame_name]*len(frame_data['bin_edges'])})
-
-                                                if counts_data.empty:
-                                                    counts_data = frame_data_df
-                                                else:
-                                                    counts_data = pd.concat([counts_data,frame_data_df],axis=0,ignore_index=True)
-
-                                        viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                        viewport_store_data[f]['count'] = len(counts_dict_list)
-                                        viewport_store_data[f]['view_type'] = cell_view_type
-                                
-                                elif cell_view_type == 'features':
-                                    
-                                    for f in list(intersecting_ftus.keys()):
-                                        viewport_store_data[f] = {}
-                                        counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
-
-                                        counts_data_list = []
-                                        counts_data = pd.DataFrame()
-                                        if type(intersecting_ftus[f])==list:
-                                            for ftu_idx,ind_ftu in enumerate(intersecting_ftus[f]):
-
-                                                cell_features = {}
-                                                
-                                                if 'Channel Means' in ind_ftu:
-                                                    for frame in frame_list:
-                                                        cell_features[f'Channel {self.wsi.channel_names.index(frame)}'] = ind_ftu['Channel Means'][self.wsi.channel_names.index(frame)]
-                                                
-                                                if 'Cell Type' in ind_ftu:
-                                                    cell_features['Cell Type'] = ind_ftu['Cell Type']
-                                                else:
-                                                    cell_features['Cell Type'] = 'Unlabeled'
-
-                                                if 'Cluster' in ind_ftu:
-                                                    cell_features['Cluster'] = ind_ftu['Cluster']
-                                                else:
-                                                    cell_features['Cluster'] = 'Unclustered'
-
-                                                if not frame_label is None and frame_label in self.wsi.channel_names:
-                                                    cell_features[frame_label] = ind_ftu['Channel Means'][self.wsi.channel_names.index(frame_label)]
-                                                
-                                                cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
-
-                                                counts_data_list.append(cell_features)
-
-                                        if len(counts_data_list)>0:
-                                            counts_data = pd.DataFrame.from_records(counts_data_list)
-
-                                            viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                        else:
-                                            viewport_store_data[f]['data'] = []
-
-                                        viewport_store_data[f]['count'] = len(counts_data_list)
-                                        viewport_store_data[f]['view_type'] = cell_view_type
-
-                                elif cell_view_type == 'cell':
-                                    counts_dict_list = [i for i in intersecting_ftus if len(intersecting_ftus[i])>0]
-                                    
-                                    viewport_store_data[f] = {}
-
-                                    counts_data_list = []
-                                    counts_data = pd.DataFrame()
-                                    if type(intersecting_ftus[f])==list:
-                                        for ind_ftu in intersecting_ftus[f]:
-
-                                            if 'Cell' in ind_ftu:
-                                                counts_data_list.append({
-                                                    'Cell': ind_ftu['Cell'],
-                                                    'Cluster': ind_ftu['Cluster']
-                                                })
-                                            elif 'Cluster' in ind_ftu:
-                                                counts_data_list.append({
-                                                    'Cluster':ind_ftu['Cluster'],
-                                                    'Cell': 'Unlabeled'
-                                                })
-                                            else:
-                                                counts_data_list.append({
-                                                    'Cluster': 'No Cluster',
-                                                    'Cell': 'Unlabeled'
-                                                })
-
-                                    if len(counts_data_list)>0:
-                                        counts_data = pd.DataFrame.from_records(counts_data_list)
-
-                                        viewport_store_data[f]['data'] = counts_data.to_dict('records')
-                                    else:
-                                        viewport_store_data[f]['data'] = []
-
-                                    viewport_store_data[f]['count'] = len(counts_data_list)
-                                    viewport_store_data[f]['view_type'] = cell_view_type
-
+                    view_type_dict = {
+                        'name': cell_view_type,
+                        'frame_list': frame_list if type(frame_list[0])==list else [frame_list],
+                        'frame_label': frame_label
+                    }
                 else:
-                    current_data = get_pattern_matching_value(current_data)
-                    viewport_store_data = json.loads(current_data)
+                    view_type_dict = {
+                        'name': cell_view_type
+                    }
 
-                included_ftus = list(viewport_store_data.keys())
-                if len(included_ftus)>0:
+                viewport_store_data['view_type_dict'] = view_type_dict
 
-                    tab_list = []
-                    self.fusey_data = {}
-                    for f_idx,f in enumerate(included_ftus):
-                        counts_data = viewport_store_data[f]['data']
+                if update_data or not update_data and not ctx.triggered_id=='slide-map':
+                    # Generalized get_viewport_data method for self.wsi which should return a list of all the stuff needed for that tab
+                    viewport_data_components, viewport_data = self.wsi.update_viewport_data(
+                        bounds_box = viewport_store_data['current_slide_bounds'],
+                        view_type = view_type_dict
+                    )
 
-                        if self.wsi.spatial_omics_type=='Visium':
-                            
-                            counts_data = pd.DataFrame.from_records(counts_data)
-                            first_chart_label = f'{f} Cell Type Proportions'
+                    viewport_store_data['data'] = viewport_data
 
-                        elif self.wsi.spatial_omics_type=='CODEX':
-                            
-                            counts_data = pd.DataFrame.from_records(counts_data)
+                    viewport_data_return = json.dumps(viewport_store_data)
+                    user_data_return = json.dumps(user_data_store)
 
-                            if cell_view_type == 'channel_hist':
-                                first_chart_label = 'Channel Intensity Histogram'
-
-                            elif cell_view_type == 'features':
-                                first_chart_label = 'Nucleus Features'
-
-                            elif cell_view_type == 'cell':
-                                first_chart_label = 'Cell Compositions'
-
-                        if not counts_data.empty:
-                            
-                            if self.wsi.spatial_omics_type=='Visium':
-                                f_pie = px.pie(counts_data,values=f,names='index')
-                                f_pie.update_traces(textposition='inside')
-                                f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
-
-                            elif self.wsi.spatial_omics_type=='CODEX':
-                                # For CODEX images, have the tissue tab be one histogram                                    
-                                # Getting one of the channels. Maybe just the first one
-                                #print(f'counts_data shape: {counts_data.shape}')
-                                cluster_disable = True
-                                eps = 0.3
-                                min_samples = 10
-
-                                if cell_view_type=='channel_hist':
-                                    cluster_disable = True
-                                    f_pie = px.bar(
-                                        data_frame = counts_data,
-                                        x = 'Intensity',
-                                        y = 'Frequency',
-                                        color = 'Channel'
-                                    )
-                                elif cell_view_type=='features':
-
-                                    if len(frame_list)==1:
-                                        f_pie = gen_violin_plot(
-                                            feature_data = counts_data,
-                                            label_col = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
-                                            label_name = 'Cell Type' if 'Cell Type' in counts_data.columns else 'Cluster',
-                                            feature_col = f'{frame_list[0]}',
-                                            custom_col = 'Hidden'
-                                        )
-
-                                    elif len(frame_list)==2:
-                                        f_names = [i for i in counts_data.columns.tolist() if 'Channel' in i]
-                                        f_pie = px.scatter(
-                                            data_frame = counts_data,
-                                            x = f_names[0],
-                                            y = f_names[1],
-                                            color = 'Cell Type' if frame_label is None else frame_label,
-                                            custom_data = 'Hidden'
-                                        )
-                                        f_pie.update_layout({
-                                            'xaxis': {
-                                                'title': {
-                                                    'text': f'{self.wsi.channel_names[int(float(f_names[0].split(" ")[-1]))]}'
-                                                }
-                                            },
-                                            'yaxis': {
-                                                'title': {
-                                                    'text': f'{self.wsi.channel_names[int(float(f_names[1].split(" ")[-1]))]}'
-                                                }
-                                            }
-                                        })
-                                        
-                                    elif len(frame_list)>2:
-                                        # Generate UMAP dimensional reduction for channel mean data
-                                        if update_data:
-                                            f_umap_data = gen_umap(
-                                                feature_data = counts_data,
-                                                feature_cols = [i for i in counts_data.columns.tolist() if 'Channel' in i],
-                                                label_and_custom_cols=[i for i in counts_data.columns.tolist() if not 'Channel' in i]
-                                            )
-
-                                            viewport_store_data[f]['UMAP'] = f_umap_data.to_dict('records')
-                                        else:
-                                            f_umap_data = pd.DataFrame.from_records(viewport_store_data[f]['UMAP'])
-
-                                        cluster_disable = False
-
-                                        if not ctx.triggered_id=='slide-map':
-                                            if ctx.triggered_id['type']=='cell-label-cluster':
-                                                # Get clustering labels:
-                                                eps = get_pattern_matching_value(cluster_eps)
-                                                min_samples = get_pattern_matching_value(cluster_min_samples)
-                                                cluster_labels = gen_clusters(f_umap_data,['UMAP1','UMAP2'],eps=eps, min_samples=min_samples)
-
-                                                f_umap_data['Cluster'] = cluster_labels
-
-                                                frame_label = 'Cluster'
-
-
-                                        f_pie = px.scatter(
-                                            data_frame = f_umap_data,
-                                            x = 'UMAP1',
-                                            y = 'UMAP2',
-                                            color = 'Cell Type' if frame_label is None else frame_label,
-                                            custom_data = 'Hidden'
-                                        )
-
-                                elif cell_view_type=='cell':
-
-                                    cluster_disable = True
-                                    counts_data = counts_data['Cluster'].value_counts().to_dict()
-                                    pie_chart_data = []
-                                    for key,val in counts_data.items():
-                                        pie_chart_data.append(
-                                            {'Cluster': key, 'Count': val}
-                                        )
-                                    pie_chart_df = pd.DataFrame.from_records(pie_chart_data)
-                                    f_pie = px.pie(
-                                        data_frame = pie_chart_df,
-                                        values = 'Count',
-                                        names = 'Cluster'
-                                    )
-                                    f_pie.update_traces(textposition='inside')
-                                    f_pie.update_layout(uniformtext_minsize=12,uniformtext_mode='hide')
-                                    
-                            if self.wsi.spatial_omics_type=='Visium':
-                                
-                                # Finding cell state proportions per main cell type in the current region
-                                second_plot_label = f'{f} Cell State Proportions'
-
-                                top_cell = counts_data['index'].tolist()[0]
-
-                                pct_states = pd.DataFrame.from_records(viewport_store_data[f]['states'][top_cell])
-                                # Fusey data
-                                self.fusey_data[f] = {
-                                    'normalized_counts':counts_data,
-                                    'pct_states':pct_states,
-                                    'top_cell':top_cell
-                                }
-                                state_bar = px.bar(pct_states,x='Cell State',y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[top_cell]["full"]} in:</sup><br><sup>{f}</sup>')
-
-                                f_tab = dbc.Tab(
-                                    dbc.Row([
-                                        dbc.Col([
-                                            dbc.Label(first_chart_label),
-                                            dcc.Graph(
-                                                id = {'type':'ftu-cell-pie','index':f_idx},
-                                                figure = go.Figure(f_pie)
-                                            )
-                                        ],md=6),
-                                        dbc.Col([
-                                            dbc.Label(second_plot_label),
-                                            dcc.Graph(
-                                                id = {'type':'ftu-state-bar','index':f_idx},
-                                                figure = go.Figure(state_bar)
-                                            )
-                                        ],md=6)
-                                    ]),label = f+f' ({viewport_store_data[f]["count"]})',tab_id = f'tab_{f_idx}'
-                                )
-
-                            elif self.wsi.spatial_omics_type=='CODEX':
-
-                                # Returning blank for now
-                                state_bar = []
-                                second_plot_label = 'This is CODEX'
-
-                                self.fusey_data['Tissue'] = {}
-
-                                f_tab = dbc.Tab([
-                                    dbc.Row([
-                                        dbc.Col(
-                                            dbc.Label('Select a Channel Name:',html_for={'type':'frame-histogram-drop','index':0}),
-                                            md = 3, align = 'center',
-                                        ),
-                                        dbc.Col(
-                                            dcc.Dropdown(
-                                                options = [i for i in self.wsi.channel_names if not i=='Histology (H&E)'],
-                                                value = frame_list,
-                                                multi = True,
-                                                id = {'type':'frame-histogram-drop','index':0}
-                                            ),
-                                            md = 6, align = 'center'
-                                        ),
-                                        dbc.Col(
-                                            dbc.Button(
-                                                'Plot it!',
-                                                className = 'd-grid col-12 mx-auto',
-                                                n_clicks = 0,
-                                                style = {'width':'100%'},
-                                                id = {'type':'frame-data-butt','index':0}
-                                            ),
-                                            md = 3
-                                        )
-                                    ], style = {'display':'none'} if not cell_view_type in ['channel_hist','features'] else {}),
-                                    dbc.Row([
-                                        dbc.Col(
-                                            dbc.Label('Select a label: ',html_for = {'type':'frame-label-drop','index':0}),
-                                            md = 3
-                                        ),
-                                        dbc.Col(
-                                            dcc.Dropdown(
-                                                options = [
-                                                    {
-                                                        'label': i,
-                                                        'value': i
-                                                    }
-                                                    if not i=='Cluster' else {'label':i, 'value': i, 'disabled': True if 'Cluster' in counts_data.columns else False}
-                                                    for i in self.wsi.channel_names+['Cluster']
-                                                ],
-                                                value = frame_label,
-                                                id = {'type':'frame-label-drop','index':0},
-                                                disabled = True if len(frame_list)<2 else False
-                                            )
-                                        )
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Col([
-                                            dbc.Label(first_chart_label),
-                                            dcc.Graph(
-                                                id = {'type':'ftu-cell-pie','index':f_idx},
-                                                figure = go.Figure(f_pie)
-                                            )
-                                        ],md=12)
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Col(
-                                            dbc.Label('Clustering parameters',html_for={'type':'cell-label-cluster','index':len(tab_list)}),
-                                            md = 3
-                                        ),
-                                        dbc.Col(
-                                            dcc.Input(
-                                                id = {'type':'cell-label-eps','index':len(tab_list)},
-                                                placeholder = 'Epsilon (0.01-1.0)',
-                                                type = 'number',
-                                                value = eps,
-                                                min = 0.0,
-                                                step = 0.001,
-                                                max = 10000000
-                                            ),
-                                            md = 2,
-                                            style = {'marginLeft':'1px'}
-                                        ),
-                                        dbc.Col(
-                                            dcc.Input(
-                                                id = {'type':'cell-label-min-samples','index':len(tab_list)},
-                                                placeholder = 'Minimum number per cluster',
-                                                type = 'number',
-                                                value = min_samples,
-                                                step = 1,
-                                                min = 1,
-                                                max = counts_data.shape[0]
-                                            ),
-                                            md = 2,
-                                            style = {'marginLeft':'1px'}
-                                        ),
-                                        dbc.Col(
-                                            dbc.Button(
-                                                'Cluster it!',
-                                                id = {'type':'cell-label-cluster','index':len(tab_list)},
-                                                className = 'd-grid col-12 mx-auto',
-                                                n_clicks = 0,
-                                                disabled = cluster_disable
-                                            ),
-                                            style = {'marginLeft':'1px'}
-                                        )
-                                    ],
-                                    style = {'marginTop':'10px'})
-                                    ],
-                                    label = f+f' ({viewport_store_data[f]["count"]})',tab_id = f'tab_{len(tab_list)}'
-                                )
-
-                            tab_list.append(f_tab)
-
-                    if self.wsi.spatial_omics_type=='Visium' or self.wsi.spatial_omics_type=='Regular':
-                        return dbc.Tabs(tab_list,active_tab = 'tab_0'), no_update, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
-                    elif self.wsi.spatial_omics_type=='CODEX':
-
-                        return_div = html.Div([
-                            dbc.Row([
-                                dbc.Col(
-                                    children = [
-                                        dbc.Label('Select View Type: '),
-                                        self.layout_handler.gen_info_button('Select different options here to vary how to view information in the current viewport')
-                                    ],
-                                    md = 4
-                                ),
-                                dbc.Col(
-                                    dcc.Dropdown(
-                                        options = [
-                                            {'label':'Channel Intensity Histograms','value':'channel_hist'},
-                                            {'label':'Nucleus Features','value':'features'},
-                                            {'label':'Cell Type Composition','value':'cell'}
-                                        ],
-                                        value = cell_view_type,
-                                        multi = False,
-                                        id = {'type':'roi-view-data','index':0}
-                                    )
-                                )
-                            ]),
-                            html.Hr(),
-                            dbc.Row(
-                                dbc.Tabs(tab_list,active_tab=f'tab_0')
-                            ),
-                            html.Hr(),
-                            dbc.Row([
-                                html.Div(
-                                    id = {'type':'extracted-cell-labeling','index':0},
-                                    children = ['Select points to start labeling!']
-                                )
-                            ]),
-                            dbc.Row([
-                                html.Div(
-                                    id = {'type':'cell-labeling-criteria','index':0},
-                                    children = []
-                                )
-                            ])
-                        ])
-
-                        return return_div, no_update, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
-
+                    return viewport_data_components, annotation_session_components, cell_annotation_components, [viewport_data_return], user_data_return
                 else:
-                    return html.P('No FTUs in current view'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                    raise exceptions.PreventUpdate
+
             else:
-                return html.P('Select a slide to get started!'), [no_update], frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return [html.P('Select a slide to get started!')], [no_update], [no_update], [viewport_data_return], json.dumps(user_data_store)
     
         elif current_tab=='annotation-tab':
             if user_data_store["login"]=='fusionguest':
@@ -2366,7 +1936,10 @@ class FUSION:
                 intersecting_ftus = {}
                 for ftu in self.current_ftu_layers:
                     if not ftu=='Spots':
-                        intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(bounds_box,ftu)
+                        intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(
+                            viewport_store_data['current_slide_bounds'],
+                            ftu
+                        )
 
                 for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
                     intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
@@ -2374,8 +1947,6 @@ class FUSION:
                 for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
                     intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
                 
-                self.current_ftus = intersecting_ftus
-
                 #TODO: Check for current annotation session in user's public folder
                 annotation_tabs, first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler,self.current_ftus, user_data_store)
                 user_data_store["current_ann_session"] = first_session
@@ -2394,34 +1965,52 @@ class FUSION:
                         )
                 ])
 
-                return html.Div(), annotation_tab_group, frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return viewport_data_components, annotation_tab_group, cell_annotation_components, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
         
+        elif current_tab == 'cell-annotation-tab':
+
+            # Getting cell annotation components from CODEXSlide
+            current_cell_annotation_data = {
+                'current_ontology': None,
+                'n_labeled': 0,
+                'current_rules': []
+            }
+            cell_annotation_components = self.wsi.populate_cell_annotation(
+                viewport_store_data['current_slide_bounds'], 
+                current_cell_annotation_data
+            )
+
+            return viewport_data_components, annotation_session_components,cell_annotation_components, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
         else:
             raise exceptions.PreventUpdate
 
-    def update_state_bar(self,cell_click):
+    def update_state_bar(self,cell_click, viewport_data_store):
         """
         View cell state proportions for clicked main cell type
         
         """
 
         if not cell_click is None:
-            self.pie_cell = cell_click['points'][0]['label']
+            pie_cell = cell_click['points'][0]['label']
+            viewport_data_store = json.loads(get_pattern_matching_value(viewport_data_store))
 
-            self.pie_ftu = list(self.current_ftus.keys())[ctx.triggered_id['index']]
+            current_ftu_data = viewport_data_store['data']
+            pie_ftu = list(current_ftu_data.keys())[ctx.triggered_id['index']]
 
-            pct_states = pd.DataFrame.from_records([i['Cell_States'][self.pie_cell] for i in self.current_ftus[self.pie_ftu] if 'Cell_States' in i]).sum(axis=0).to_frame()
-            pct_states = pct_states.reset_index()
-            pct_states.columns = ['Cell State', 'Proportion']
-            pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
+            pct_states = pd.DataFrame.from_records(current_ftu_data[pie_ftu]['states'][pie_cell])
 
-            state_bar = go.Figure(px.bar(pct_states,x='Cell State', y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{self.cell_graphics_key[self.pie_cell]["full"]} in:</sup><br><sup>{self.pie_ftu}</sup>'))
+            if pie_cell in self.cell_graphics_key:
+                cell_title = self.cell_graphics_key[pie_cell]["full"]
+            else:
+                cell_title = pie_cell
+
+            state_bar = go.Figure(px.bar(pct_states,x='Cell State', y = 'Proportion', title = f'Cell State Proportions for:<br><sup>{cell_title} in:</sup><br><sup>{pie_ftu}</sup>'))
 
             return state_bar
         else:
             return go.Figure()
     
-    def update_hex_color_key(self):
+    def update_hex_color_key(self, overlay_prop):
         
         # Iterate through all structures (and spots) in current wsi,
         # concatenate all of their proportions of specific cell types together
@@ -2432,35 +2021,54 @@ class FUSION:
 
         #TODO: Add a scaling/range thing for values used as overlays
         raw_values_list = []
-        if not self.overlay_prop is None:
-            if not self.overlay_prop['name'] is None:
-                raw_values_list.extend(self.wsi.get_overlay_value_list(self.overlay_prop))
+        if not overlay_prop is None:
+            if not overlay_prop['name'] is None:
+                raw_values_list.extend(self.wsi.get_overlay_value_list(overlay_prop))
 
         # Converting to RGB
         if len(raw_values_list)>0:
-            if max(raw_values_list)>0:
-                scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
+            raw_values_list = np.unique(raw_values_list).tolist()
+            if all([not type(i)==str for i in raw_values_list]):
+                if max(raw_values_list)>0:
+                    scaled_values = [(i-min(raw_values_list))/max(raw_values_list) for i in raw_values_list]
+                else:
+                    scaled_values = raw_values_list
+                
+                rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
             else:
-                scaled_values = raw_values_list
-            rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
+                scaled_values = [i/len(raw_values_list) for i in range(len(raw_values_list))]
+                rgb_values = np.uint8(255*self.color_map(scaled_values))[:,0:3]
 
             hex_list = []
             for row in range(rgb_values.shape[0]):
                 hex_list.append('#'+"%02x%02x%02x" % (rgb_values[row,0],rgb_values[row,1],rgb_values[row,2]))
 
-            self.hex_color_key = {i:j for i,j in zip(raw_values_list,hex_list)}
+            hex_color_key = {i:j for i,j in zip(raw_values_list,hex_list)}
         else:
-            self.hex_color_key = {}
+            hex_color_key = {}
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style):
+        return hex_color_key
+
+    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style, slide_info_store):
         """
         Updating overlay hideout property in GeoJSON layer used in self.ftu_style_handle        
         """
 
-        print(f'Updating overlays for current slide: {self.wsi.slide_name}, {cell_val}')
-
+        if cell_val is None:
+            raise exceptions.PreventUpdate     
         m_prop = None
         cell_sub_select_children = no_update
+        slide_info_store = json.loads(slide_info_store)
+        
+        if 'overlay_prop' in slide_info_store:
+            overlay_prop = slide_info_store['overlay_prop']
+        else:
+            overlay_prop = None
+
+        if 'filter_vals' in slide_info_store:
+            ftu_filter_vals = slide_info_store['filter_vals']
+        else:
+            ftu_filter_vals = None
 
         if self.wsi.spatial_omics_type=='Visium':
             gene_info_style = [{'display':'none'}]
@@ -2476,8 +2084,7 @@ class FUSION:
             'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
             'border-radius':'10px',
             'width':'',
-            'padding':'0px 0px 0px 25px',
-
+            'padding':'0px 0px 0px 25px'
         }
 
         cell_sub_val = get_pattern_matching_value(cell_sub_val)
@@ -2519,7 +2126,7 @@ class FUSION:
                 if ctx.triggered_id == 'cell-drop':
                     
                     cell_sub_val= None
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value': cell_name,
                         'sub_value': cell_sub_val
@@ -2551,7 +2158,7 @@ class FUSION:
                     }
                 
                 elif cell_sub_val=='All':
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value': cell_name,
                         'sub_value': None
@@ -2559,23 +2166,28 @@ class FUSION:
                 
                 else:
                     # Visualizing a sub-property of a main cell type
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': 'Cell_States',
                         'value': cell_name,
                         'sub_value': cell_sub_val
                     }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
                 color_bar_style['width'] = '350px'
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=300,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
-                filter_min_val = np.min(list(self.hex_color_key.keys()))
-                filter_max_val = np.max(list(self.hex_color_key.keys()))
-                filter_disable = False
+                if len(list(hex_color_key.keys()))>0:
+                    filter_min_val = np.min(list(hex_color_key.keys()))
+                    filter_max_val = np.max(list(hex_color_key.keys()))
+                    filter_disable = False
+                else:
+                    filter_min_val = 0
+                    filter_max_val = 1
+                    filter_disable = True
             
             elif m_prop == 'Cell_Subtypes':
 
@@ -2604,74 +2216,74 @@ class FUSION:
                     cell_sub_select_children = []
 
                 if cell_sub_val == 'All':
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': 'Main_Cell_Types',
                         'value':cell_name,
                         'sub_value':None
                     }
 
                 elif not cell_sub_val is None:
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value':cell_name,
                         'sub_value': cell_sub_val
                     }
 
                 else:
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': 'Main_Cell_Types',
                         'value': cell_name,
                         'sub_value': None
                     }
                 
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
                 color_bar_style['width'] = '350px'
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width = 300,height = 10,position = 'bottomleft',
                     id = f'colorbar{random.randint(0,100)}',
                     style = color_bar_style
                 )
 
-                if len(list(self.hex_color_key.keys()))==0:
+                if len(list(hex_color_key.keys()))==0:
                     filter_min_val = 0.0
                     filter_max_val = 1.0
                     filter_disable = True
                 else:
-                    filter_min_val = np.min(list(self.hex_color_key.keys()))
-                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                    filter_min_val = np.min(list(hex_color_key.keys()))
+                    filter_max_val = np.max(list(hex_color_key.keys()))
                     filter_disable = False
 
             elif m_prop == 'Cell_States':
                 # Selecting a specific cell state value for overlays
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': m_prop,
                     'value': cell_val,
                     'sub_value': None
                 }
 
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
                 color_bar_style['width'] = '350px'
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=300,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
                 
-                filter_min_val = np.min(list(self.hex_color_key.keys()))
-                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_min_val = np.min(list(hex_color_key.keys()))
+                filter_max_val = np.max(list(hex_color_key.keys()))
                 filter_disable = False
 
             elif m_prop == 'Max Cell Type':
                 # Getting the maximum cell type present for each structure
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': 'Main_Cell_Types',
                     'value':'max',
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
                 color_bar_style['width'] = '650px'
 
                 cell_sub_select_children = []
@@ -2679,7 +2291,7 @@ class FUSION:
                 cell_types = sorted(list(self.cell_graphics_key.keys()))
                 color_bar = dlx.categorical_colorbar(
                     categories = cell_types,
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=600,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
@@ -2690,17 +2302,17 @@ class FUSION:
 
             elif m_prop == 'Cluster':
                 # Getting cluster value associated with each structure
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': 'Cluster',
                     'value': None,
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
-                cluster_labels = sorted(list(self.hex_color_key.keys()))
+                cluster_labels = sorted(list(hex_color_key.keys()))
                 color_bar = dlx.categorical_colorbar(
                     categories = cluster_labels,
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width = 600, height = 10, position = 'bottomleft',
                     id = f'colorbar{random.randint(0,100)}',
                     style = color_bar_style
@@ -2712,19 +2324,19 @@ class FUSION:
                 filter_disable = True
                 
             elif m_prop == 'FTU Label':
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': 'Structure',
                     'value': None,
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
                 cell_sub_select_children = []
 
-                ftu_types = list(self.hex_color_key.keys())
+                ftu_types = list(hex_color_key.keys())
                 color_bar = dlx.categorical_colorbar(
                     categories = ftu_types,
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width = 600, height = 10, position = 'bottom left',
                     id = f'colorbar{random.randint(0,100)}',
                     style = color_bar_style
@@ -2736,12 +2348,12 @@ class FUSION:
             
             elif m_prop == 'Gene Counts':
 
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': 'Gene Counts',
                     'value': cell_val,
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
                 # Now displaying gene info
                 if triggered_id=='cell-drop':
@@ -2755,14 +2367,14 @@ class FUSION:
                 cell_sub_select_children = []
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=300,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
-                if len(list(self.hex_color_key.keys()))>0:
-                    filter_min_val = np.min(list(self.hex_color_key.keys()))
-                    filter_max_val = np.max(list(self.hex_color_key.keys()))
+                if len(list(hex_color_key.keys()))>0:
+                    filter_min_val = np.min(list(hex_color_key.keys()))
+                    filter_max_val = np.max(list(hex_color_key.keys()))
                 else:
                     filter_min_val = 0.0
                     filter_max_val = 1.0
@@ -2770,64 +2382,79 @@ class FUSION:
             
             elif m_prop == 'Morphometrics':
 
-                self.overlay_prop = {
+                overlay_prop = {
                     'name': m_prop,
                     'value': cell_val,
                     'sub_value': None
                 }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
                 cell_sub_select_children = []
 
                 color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
+                    colorscale = list(hex_color_key.values()),
                     width=300,height=10,position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style)
 
-                filter_min_val = np.min(list(self.hex_color_key.keys()))
-                filter_max_val = np.max(list(self.hex_color_key.keys()))
+                filter_min_val = np.min(list(hex_color_key.keys()))
+                filter_max_val = np.max(list(hex_color_key.keys()))
                 filter_disable = False
             
             else:
                 if m_prop==cell_val:
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value': None,
                         'sub_value': None
                     }
                 else:
-                    self.overlay_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value': cell_val,
                         'sub_value': None
                     }
-                self.update_hex_color_key()
+                hex_color_key = self.update_hex_color_key(overlay_prop)
 
                 cell_sub_select_children = []
 
-                color_bar = dl.Colorbar(
-                    colorscale = list(self.hex_color_key.values()),
-                    width=300,height=10,position='bottomleft',
-                    id=f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style)
 
-                if not len(list(self.hex_color_key.keys()))==0:
-                    filter_min_val = np.min(list(self.hex_color_key.keys()))
-                    filter_max_val = np.max(list(self.hex_color_key.keys()))
-                    filter_disable = False
+                if all([not type(i)==str for i in list(hex_color_key.keys())]):
+                    color_bar = dl.Colorbar(
+                        colorscale = list(hex_color_key.values()),
+                        width=300,height=10,position='bottomleft',
+                        id=f'colorbar{random.randint(0,100)}',
+                        style = color_bar_style)
+                else:
+                    color_bar = dlx.categorical_colorbar(
+                        categories = sorted(list(hex_color_key.keys())),
+                        colorscale = list(hex_color_key.values()),
+                        width = 600, height = 10, position = 'bottomleft',
+                        id = f'colorbar{random.randint(0,100)}',
+                        style = color_bar_style
+                    )
+
+                if not len(list(hex_color_key.keys()))==0:
+                    if all([not type(i)==str for i in list(hex_color_key.keys())]):
+                        filter_min_val = np.min(list(hex_color_key.keys()))
+                        filter_max_val = np.max(list(hex_color_key.keys()))
+                        filter_disable = False
+                    else:
+                        filter_min_val = 0.0
+                        filter_max_val = 1.0
+                        filter_disable = True
                 else:
                     filter_min_val = 0
                     filter_max_val = 1.0
                     filter_disable = True
 
         else:
-            self.overlay_prop = {
+            overlay_prop = {
                 'name': None,
                 'value': None,
                 'sub_value': None
             }
-            self.update_hex_color_key()
+            hex_color_key = self.update_hex_color_key(overlay_prop)
 
             cell_sub_select_children = []
 
@@ -2837,11 +2464,11 @@ class FUSION:
             filter_max_val = 1
 
         if not filter_disable:
-            self.filter_vals = [
+            ftu_filter_vals = [
                 {
-                    'name': self.overlay_prop['name'],
-                    'value': self.overlay_prop['value'],
-                    'sub_value': self.overlay_prop['sub_value'],
+                    'name': overlay_prop['name'],
+                    'value': overlay_prop['value'],
+                    'sub_value': overlay_prop['sub_value'],
                     'range': filter_vals
                 }
             ]
@@ -2849,30 +2476,64 @@ class FUSION:
             # Processing the add-on filters:
             processed_filters = process_filters(added_filter_keys, added_filter_slider,added_slide_style, self.cell_names_key)
 
-            self.filter_vals.extend(processed_filters)
+            ftu_filter_vals.extend(processed_filters)
 
         else:
-            self.filter_vals = None
+            ftu_filter_vals = None
 
-        self.cell_vis_val = vis_val/100
+        cell_vis_val = vis_val/100
         n_layers = len(callback_context.outputs_list[0])
+
         geojson_hideout = [
             {
-                'color_key':self.hex_color_key,
-                'overlay_prop':self.overlay_prop,
-                'fillOpacity': self.cell_vis_val,
-                'ftu_colors':self.ftu_colors,
-                'filter_vals':self.filter_vals
+                'color_key':hex_color_key,
+                'overlay_prop':overlay_prop,
+                'fillOpacity': cell_vis_val,
+                'ftu_colors': self.ftu_colors,
+                'filter_vals': ftu_filter_vals
             }
             for i in range(0,n_layers)
         ]
 
-        return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children, gene_info_style, gene_info_components
+        slide_info_store['overlay_prop'] = overlay_prop
+        slide_info_store['filter_vals'] = ftu_filter_vals
+        slide_info_store = json.dumps(slide_info_store)
 
-    def update_cell_hierarchy(self,cell_clickData):
+        return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children, gene_info_style, gene_info_components, slide_info_store
+
+    def update_cell_hierarchy(self,cell_clickData,organ_select,organ_cell_select,organ_store):
         """
         Updating cell cytoscape visualization        
         """
+        organ_store = json.loads(organ_store)
+
+        if not organ_store['organ'] is None:
+            if not organ_store['organ']==organ_select:
+                new_table, new_table_info = self.gene_handler.get_table(organ_select.lower())
+
+                organ_store['organ'] = organ_select
+                organ_store['table'] = new_table.to_dict('records')
+                organ_store['info'] = new_table_info.to_dict('records')
+
+                if 'CT/1/LABEL' in new_table.columns.tolist():
+                    organ_cell_options = new_table['CT/1/LABEL'].dropna().unique().tolist()
+                else:
+                    organ_cell_options = new_table['CT/1'].dropna().unique().tolist()
+
+            else:
+                organ_cell_options = no_update
+        else:
+            new_table, new_table_info = self.gene_handler.get_table(organ_select.lower())
+
+            organ_store['organ'] = organ_select
+            organ_store['table'] = new_table.to_dict('records')
+            organ_store['info'] = new_table_info.to_dict('records')
+        
+            if 'CT/1/LABEL' in new_table.columns.tolist():
+                organ_cell_options = new_table['CT/1/LABEL'].dropna().unique().tolist()
+            else:
+                organ_cell_options = new_table['CT/1'].dropna().unique().tolist()
+
 
         # Loading the cell-graphic and hierarchy image
         cell_graphic = './assets/cell_graphics/default_cell_graphic.png'
@@ -2885,25 +2546,55 @@ class FUSION:
         cell_name = html.H3('Default Cell')
 
         # Getting cell_val from the clicked location in the nephron diagram
-        if not cell_clickData is None:
-            pt = cell_clickData['points'][0]
-            color = cell_clickData['points'][0]['color']
+        if organ_select == 'kidney':
 
-            color_code = [str(color[i]) for i in color]
+            nephron_diagram_style = {'display':'inline-block'}
+            organ_cell_style = {'display': 'none'}
+            organ_cell_value = no_update
+            if not cell_clickData is None:
+                pt = cell_clickData['points'][0]
+                color = cell_clickData['points'][0]['color']
 
-            if not color_code[-1]=='0':
-                color_code = ','.join(color_code[0:-1])
+                color_code = [str(color[i]) for i in color]
 
-                if color_code in list(self.cell_colors_key.keys()):
+                if not color_code[-1]=='0':
+                    color_code = ','.join(color_code[0:-1])
 
-                    cell_val = self.cell_graphics_key[self.cell_colors_key[color_code]]['full']                    
-                    cell_name = html.H3(cell_val)
-                    if self.cell_names_key[cell_val] in self.cell_graphics_key:
-                        cell_graphic = self.cell_graphics_key[self.cell_names_key[cell_val]]['graphic']
-                        cell_hierarchy = self.gen_cyto(self.cell_names_key[cell_val])
-                        cell_state_droptions = np.unique(self.cell_graphics_key[self.cell_names_key[cell_val]]['states'])
+                    if color_code in list(self.cell_colors_key.keys()):
 
-        return cell_graphic, cell_hierarchy, cell_state_droptions, cell_name
+                        cell_val = self.cell_graphics_key[self.cell_colors_key[color_code]]['full']                    
+                        cell_name = html.H3(cell_val)
+                        if self.cell_names_key[cell_val] in self.cell_graphics_key:
+                            cell_graphic = self.cell_graphics_key[self.cell_names_key[cell_val]]['graphic']
+                            cell_hierarchy = self.gen_cyto(cell_val,organ_store['table'])
+                            cell_state_droptions = np.unique(self.cell_graphics_key[self.cell_names_key[cell_val]]['states'])
+
+        else:
+            # This is just because no graphics are available for other organs
+            if not ctx.triggered_id=='organ-hierarchy-cell-select':
+                organ_df = pd.DataFrame.from_records(organ_store['table'])
+                if 'CT/1/LABEL' in organ_df.columns.tolist():
+                    organ_cell_value = organ_df['CT/1/LABEL'].dropna().tolist()[0]
+                else:
+                    organ_cell_value = organ_df['CT/1'].dropna().tolist()[0]
+                organ_cell_select = organ_cell_value
+            else:
+                organ_cell_value = no_update
+                if organ_cell_select=='':
+                    organ_df = pd.DataFrame.from_records(organ_store['table'])
+                    if 'CT/1/LABEL' in organ_df.columns.tolist():
+                        organ_cell_select = organ_df['CT/1/LABEL'].dropna().tolist()[0]
+                    else:
+                        organ_cell_select = organ_df['CT/1'].dropna().tolist()[0]
+
+            cell_hierarchy = self.gen_cyto(organ_cell_select,organ_store['table'])
+            nephron_diagram_style = {'display':'none'}
+            organ_cell_style = {'display': 'inline-block'}
+
+
+        organ_store = json.dumps(organ_store)
+
+        return cell_graphic, cell_hierarchy, cell_state_droptions, cell_name, organ_store, organ_cell_options, organ_cell_value, organ_cell_style, nephron_diagram_style
 
     def get_neph_hover(self,neph_hover):
         """
@@ -2942,434 +2633,516 @@ class FUSION:
         """
         Controlling popup components when clicking on FTU in GeoJSON layer        
         """
+
+        pie_chart_features = [
+            'Main_Cell_Types','Cell_States', 'Cell Type', 'Channel Means', 'Channel Stds','Cell_Subtypes'
+        ]
+
+        def make_dash_table(df):
+            """
+            Populate dash_table.DataTable
+            """
+            return_table = dash_table.DataTable(
+                columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in df],
+                data = df.to_dict('records'),
+                editable=False,                                        
+                sort_mode='multi',
+                page_current=0,
+                page_size=5,
+                style_cell = {
+                    'overflow':'hidden',
+                    'textOverflow':'ellipsis',
+                    'maxWidth':0
+                },
+                tooltip_data = [
+                    {
+                        column: {'value':str(value),'type':'markdown'}
+                        for column, value in row.items()
+                    } for row in df.to_dict('records')
+                ],
+                tooltip_duration = None
+            )
+
+            return return_table
+    
+        def make_pie_chart(df):
+            """
+            Simple pie chart with provided dataframe
+            """
+            simple_pie = dcc.Graph(
+                figure = go.Figure(
+                    data = [
+                        go.Pie(
+                            name = '',
+                            values = df['Value'].tolist(),
+                            labels = df['Property'].tolist()
+                        )
+                    ],
+                    layout = {
+                        'margin': {'t': 0, 'b': 0, 'l': 0,'r': 0},
+                        'uniformtext_minsize': 12,
+                        'uniformtext_mode': 'hide',
+                        'showlegend': False
+                    }
+                )
+            )
+
+            return simple_pie
+
+        print(ctx.triggered)
+
+        if not ctx.triggered[0]['value']:
+            print('raising preventupdate')
+            return no_update
+
         if not ftu_click is None:
             self.clicked_ftu = ftu_click
             if 'unique_index' in ftu_click['properties']:
                 ftu_idx = ftu_click['properties']['unique_index']
 
-            if self.wsi.spatial_omics_type=='Visium':
-                if 'Main_Cell_Types' in ftu_click['properties']['user']:
+            accordion_children = []
+            # Getting other FTU/Spot properties
+            all_properties = list(ftu_click['properties']['user'].keys())
+            all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
+            all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
+            all_properties_df = pd.DataFrame(all_props_dict)
 
-                    # Getting the main cell type data (only using top-n)
-                    main_cell_types = ftu_click['properties']['user']['Main_Cell_Types']
-                    chart_data = [main_cell_types[i] for i in main_cell_types]
+            # Getting nested properties
+            nested_properties = list(ftu_click['properties']['user'].keys())
+            nested_properties = [i for i in nested_properties if type(ftu_click['properties']['user'][i])==dict]
 
-                    if not len(chart_data)==0:
-
-                        # Only keeping the first self.plot_cell_n
-                        top_idx = np.argsort(chart_data)[::-1][0:self.plot_cell_types_n]
-                        chart_data = [chart_data[i] for i in top_idx]
-                        chart_labels = [list(main_cell_types.keys())[i] for i in top_idx]
-                        chart_full_labels = [self.cell_graphics_key[i]['full'] for i in chart_labels]
-
-                        # Getting the cell state info for one of the cells and getting the names of the cells for a dropdown menu
-                        cell_states = ftu_click['properties']['user']['Cell_States']
-                        cells_for_cell_states = list(cell_states.keys())
-
-                        # Checking for non-zero cell states
-                        non_zero_list = []
-                        for cs in cells_for_cell_states:
-                            if sum(list(cell_states[cs].values()))>0:
-                                non_zero_list.append(cs)
-
-                        cs_df_list = []
-                        for nz_cs in non_zero_list:
-                            cell_state_info = cell_states[nz_cs]
-                            cell_state_df = pd.DataFrame({'States':list(cell_state_info.keys()),'Values':list(cell_state_info.values())})
-                            cs_df_list.append(cell_state_df)
-
-                        # Getting other FTU/Spot properties
-                        all_properties = list(ftu_click['properties']['user'].keys())
-                        all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
-                        all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
-                        all_properties_df = pd.DataFrame(all_props_dict)
-
-                        main_cells_df = pd.DataFrame.from_dict({'Values':chart_data,'Labels':chart_labels,'Full':chart_full_labels})
-                        f_pie = go.Figure(
-                            data = [
-                                go.Pie(
-                                    name = '',
-                                    values = main_cells_df['Values'],
-                                    labels = main_cells_df['Labels'],
-                                    customdata = main_cells_df['Full'],
-                                    hovertemplate = "Cell: %{customdata}: <br>Proportion: %{value}</br>"
-                                )],
-                            layout = {'autosize':True, 'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,'uniformtext_minsize':12,'uniformtext_mode':'hide'}
-                        )
-                        f_pie.update_traces(textposition='inside')
-
-                        # popup divs
-                        if 'unique_index' in ftu_click['properties']['user']:
-                            add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
-                            accordion_children = [
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dbc.Row([
-                                            dbc.Col(-
-                                                dcc.Graph(figure = f_pie),
-                                                md='auto')
-                                            ],style={'height':'100%','width':'100%'})
-                                        ],style = {'height':'250px','width':'250px','display':'inline-block'})
-                                    ], title = 'Main Cell Types'),
-                                dbc.AccordionItem([
-                                    dbc.Tabs([
-                                        dbc.Tab(
-                                            html.Div(
-                                                dcc.Graph(
-                                                    figure = go.Figure(
-                                                        data = [
-                                                            go.Pie(
-                                                                name = '',
-                                                                values = cs_df['Values'],
-                                                                labels = cs_df['States'],
-                                                                hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
-                                                            )
-                                                        ],
-                                                        layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
-                                                                'uniformtext_minsize':12,'uniformtext_mode':'hide'}
-                                                    )
-                                                )
-                                            ), label = cs
-                                        )
-                                        for cs,cs_df in zip(non_zero_list,cs_df_list)
-                                    ])
-                                ], title = 'Cell States'),
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dash_table.DataTable(
-                                            id = 'popup-table',
-                                            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                            data = all_properties_df.to_dict('records'),
-                                            editable=False,                                        sort_mode='multi',
-                                            page_current=0,
-                                            page_size=5,
-                                            style_cell = {
-                                                'overflow':'hidden',
-                                                'textOverflow':'ellipsis',
-                                                'maxWidth':0
-                                            },
-                                            tooltip_data = [
-                                                {
-                                                    column: {'value':str(value),'type':'markdown'}
-                                                    for column, value in row.items()
-                                                } for row in all_properties_df.to_dict('records')
-                                            ],
-                                            tooltip_duration = None
-                                        )
-                                    ])
-                                ],title = 'Other Properties'),
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dbc.Row([
-                                            dbc.Col(html.Div(
-                                                    id={'type':'added-labels-div','index':ftu_idx},
-                                                    children = add_labels_children
-                                                ), md=11
-                                            ),
-                                            dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
-                                        ]),
-                                        dbc.Row([
-                                            dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
-                                            dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
-                                        ])
-                                    ])
-                                ],title = 'Custom Properties')
-                            ]
-                        else:
-                            accordion_children = [
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dbc.Row([
-                                            dbc.Col(
-                                                dcc.Graph(figure = f_pie),
-                                                md='auto')
-                                            ],style={'height':'100%','width':'100%'})
-                                        ],style = {'height':'250px','width':'250px','display':'inline-block'})
-                                    ], title = 'Main Cell Types'),
-                                dbc.AccordionItem([
-                                    dbc.Tabs([
-                                        dbc.Tab(
-                                            html.Div(
-                                                dcc.Graph(
-                                                    figure = go.Figure(
-                                                        data = [
-                                                            go.Pie(
-                                                                name = '',
-                                                                values = cs_df['Values'],
-                                                                labels = cs_df['States'],
-                                                                hovertemplate = "State: %{label} <br>Proportion: %{value}</br>"
-                                                            )
-                                                        ],
-                                                        layout = {'autosize':True,'margin':{'t':0,'b':0,'l':0,'r':0},'showlegend':False,
-                                                                'uniformtext_minsize':12,'uniformtext_mode':'hide'}
-                                                    )
-                                                )
-                                            ), label = cs
-                                        )
-                                        for cs,cs_df in zip(non_zero_list,cs_df_list)
-                                    ])
-                                ], title = 'Cell States'),
-                                dbc.AccordionItem([
-                                    html.Div([
-                                        dash_table.DataTable(
-                                            id = 'popup-table',
-                                            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                            data = all_properties_df.to_dict('records'),
-                                            editable=False,                                        sort_mode='multi',
-                                            page_current=0,
-                                            page_size=5,
-                                            style_cell = {
-                                                'overflow':'hidden',
-                                                'textOverflow':'ellipsis',
-                                                'maxWidth':0
-                                            },
-                                            tooltip_data = [
-                                                {
-                                                    column: {'value':str(value),'type':'markdown'}
-                                                    for column, value in row.items()
-                                                } for row in all_properties_df.to_dict('records')
-                                            ],
-                                            tooltip_duration = None
-                                        )
-                                    ])
-                                ],title = 'Other Properties')
-                            ]
-                        
-                        popup_div = html.Div([
-                            dbc.Accordion(
-                                children = accordion_children
-                            )
-                        ],style={'height':'300px','width':'300px','display':'inline-block'})
-
-                        return popup_div
-                    else:
-                        return html.Div([html.P('No cell type information')])
-                else:
-                    # Getting other FTU/Spot properties
-                    all_properties = list(ftu_click['properties']['user'].keys())
-                    all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
-                    all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
-                    all_properties_df = pd.DataFrame(all_props_dict)
-
-                    # popup divs
-                    if 'unique_index' in ftu_click['properties']['user']:
-                        add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
-                        accordion_children = [
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dash_table.DataTable(
-                                        id = 'popup-table',
-                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                        data = all_properties_df.to_dict('records'),
-                                        editable=False,                                        
-                                        sort_mode='multi',
-                                        page_current=0,
-                                        page_size=5,
-                                        style_cell = {
-                                            'overflow':'hidden',
-                                            'textOverflow':'ellipsis',
-                                            'maxWidth':0
-                                        },
-                                        tooltip_data = [
-                                            {
-                                                column: {'value':str(value),'type':'markdown'}
-                                                for column, value in row.items()
-                                            } for row in all_properties_df.to_dict('records')
-                                        ],
-                                        tooltip_duration = None
-                                    )
-                                ])
-                            ],title = 'Other Properties'),
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dbc.Row([
-                                        dbc.Col(html.Div(
-                                                id={'type':'added-labels-div','index':ftu_idx},
-                                                children = add_labels_children
-                                            ), md=11
-                                        ),
-                                        dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
-                                        dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
-                                    ])
-                                ])
-                            ],title = 'Custom Properties')
-                        ]
-                    else:
-                        accordion_children = [
-                            dbc.AccordionItem([
-                                html.Div([
-                                    dash_table.DataTable(
-                                        id = 'popup-table',
-                                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                        data = all_properties_df.to_dict('records'),
-                                        editable=False,                                        
-                                        sort_mode='multi',
-                                        page_current=0,
-                                        page_size=5,
-                                        style_cell = {
-                                            'overflow':'hidden',
-                                            'textOverflow':'ellipsis',
-                                            'maxWidth':0
-                                        },
-                                        tooltip_data = [
-                                            {
-                                                column: {'value':str(value),'type':'markdown'}
-                                                for column, value in row.items()
-                                            } for row in all_properties_df.to_dict('records')
-                                        ],
-                                        tooltip_duration = None
-                                    )
-                                ])
-                            ],title = 'Other Properties')
-                        ]
-                    
-                    popup_div = html.Div([
-                        dbc.Accordion(
-                            children = accordion_children
-                        )
-                    ],style={'height':'300px','width':'300px','display':'inline-block'})
-
-                    return popup_div
-            else:
-
-                # Getting other FTU/Spot properties
-                all_properties = list(ftu_click['properties']['user'].keys())
-                all_properties = [i for i in all_properties if not type(ftu_click['properties']['user'][i])==dict]
-                all_props_dict = {'Property':all_properties,'Value':[ftu_click['properties']['user'][i] for i in all_properties]}
-                all_properties_df = pd.DataFrame(all_props_dict)
-
-                # popup divs
-                if 'unique_index' in ftu_click['properties']['user']:
-                    add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
-                    accordion_children = [
-                        dbc.AccordionItem([
-                            html.Div([
-                                dash_table.DataTable(
-                                    id = 'popup-table',
-                                    columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                    data = all_properties_df.to_dict('records'),
-                                    editable=False,                                        
-                                    sort_mode='multi',
-                                    page_current=0,
-                                    page_size=5,
-                                    style_cell = {
-                                        'overflow':'hidden',
-                                        'textOverflow':'ellipsis',
-                                        'maxWidth':0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value':str(value),'type':'markdown'}
-                                            for column, value in row.items()
-                                        } for row in all_properties_df.to_dict('records')
-                                    ],
-                                    tooltip_duration = None
-                                )
-                            ])
-                        ],title = 'Other Properties'),
-                        dbc.AccordionItem([
-                            html.Div([
-                                dbc.Row([
-                                    dbc.Col(html.Div(
-                                            id={'type':'added-labels-div','index':ftu_idx},
-                                            children = add_labels_children
-                                        ), md=11
-                                    ),
-                                    dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
-                                ]),
-                                dbc.Row([
-                                    dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
-                                    dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
-                                ])
-                            ])
-                        ],title = 'Custom Properties')
-                    ]
-                else:
-                    accordion_children = [
-                        dbc.AccordionItem([
-                            html.Div([
-                                dash_table.DataTable(
-                                    id = 'popup-table',
-                                    columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in all_properties_df],
-                                    data = all_properties_df.to_dict('records'),
-                                    editable=False,                                        
-                                    sort_mode='multi',
-                                    page_current=0,
-                                    page_size=5,
-                                    style_cell = {
-                                        'overflow':'hidden',
-                                        'textOverflow':'ellipsis',
-                                        'maxWidth':0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value':str(value),'type':'markdown'}
-                                            for column, value in row.items()
-                                        } for row in all_properties_df.to_dict('records')
-                                    ],
-                                    tooltip_duration = None
-                                )
-                            ])
-                        ],title = 'Other Properties')
-                    ]
+            # Nested properties are limited to 3 levels (arbitrarily)
+            # Manual ROIs will have properties like: { ftu_name: { main_column: { sub_column: [] } } }
+            nested_prop_list = []
+            for n_idx, n in enumerate(nested_properties):
+                n_prop_data = ftu_click['properties']['user'][n]
+                sub_n_props = list(n_prop_data.keys())
                 
-                popup_div = html.Div([
-                    dbc.Accordion(
-                        children = accordion_children
-                    )
-                ],style={'height':'300px','width':'300px','display':'inline-block'})
+                if len(sub_n_props)>0:
+                    nested_sub_props = [i for i in n_prop_data if type(n_prop_data[i])==dict]
+                    for s_n_idx, s_n in enumerate(nested_sub_props):
+                        sub_n_data = n_prop_data[s_n]
 
-                return popup_div
+                        if type(sub_n_data)==dict:
+                            sub_sub_n_props = list(sub_n_data.keys())
+                            if len(sub_sub_n_props)>0:
+                                if type(sub_n_data[sub_sub_n_props[0]])==dict:
+                                    for s_s_n_idx, s_s_n in enumerate(sub_sub_n_props):
+                                        sub_sub_n_data = sub_n_data[s_s_n]
+
+                                        if type(sub_sub_n_data)==dict:
+                                            # Cell_States and Cell_Subtypes for Manual ROIs
+                                            nested_prop_list.append({
+                                                'name': n,
+                                                'sub_name': s_n,
+                                                'sub_sub_name': s_s_n,
+                                                'table': pd.DataFrame({'Property': list(sub_sub_n_data.keys()),'Value': list(sub_sub_n_data.values())})
+                                            })
+
+                                else:
+                                    nested_prop_list.append({
+                                        'name': n,
+                                        'sub_name': s_n,
+                                        'sub_sub_name': None,
+                                        'table': pd.DataFrame({'Property': list(sub_n_data.keys()),'Value': list(sub_n_data.values())})
+                                    })
+
+                            else:
+                                # Cell_States and Cell_Subtypes or Main_Cell_Types for Manual ROIs
+                                nested_prop_list.append({
+                                    'name': n,
+                                    'sub_name': s_n,
+                                    'sub_sub_name': None,
+                                    'table': pd.DataFrame({'Property': list(sub_n_data.keys()), 'Value': list(sub_n_data.values())})
+                                })
+
+                    non_nested_sub_props = [i for i in n_prop_data if not type(n_prop_data[i])==dict]
+                    if len(non_nested_sub_props)>0:
+                        # Main_Cell_Types 
+                        nested_prop_list.append({
+                            'name': n,
+                            'sub_name': None,
+                            'sub_sub_name': None,
+                            'table': pd.DataFrame({'Property': non_nested_sub_props,'Value': [n_prop_data[i] for i in non_nested_sub_props]})
+                        })
+
+            # popup divs
+            accordion_children.append(
+                dbc.AccordionItem([
+                    html.Div([
+                        make_dash_table(all_properties_df)
+                    ])
+                ],title = 'Other Properties')
+            )
+
+            print(f'len of nested_prop_list: {len(nested_prop_list)}')
+            print(nested_prop_list)
+            if len(nested_prop_list)>0:
+
+                # Start from the bottom and go up as opposed to top-down
+                trunk_props = [i for i in nested_prop_list if not i['sub_sub_name'] is None]
+                print(f'len(trunk_props): {len(trunk_props)}')
+                if len(trunk_props)>0:
+                    unique_names = np.unique([i['name'] for  i in trunk_props]).tolist()
+                    for u_n in unique_names:
+                        print(f'u_n: {u_n}')
+                        shared_name_trunk = [i for i in trunk_props if i['name']==u_n]
+
+                        shared_name_sub = np.unique([i['sub_name'] for i in shared_name_trunk]).tolist()
+                        print(f'shared_name_sub: {shared_name_sub}')
+                        sub_accordion_list = []
+                        for u_sub in shared_name_sub:
+                            print(f'u_sub: {u_sub}')
+
+                            sub_prop_data = [i for i in shared_name_trunk if i['sub_name']==u_sub]
+                            sub_tab_list = []
+                            for sub_tab in sub_prop_data:
+                                sub_tab_data = sub_tab['table']
+                                sub_tab_data = sub_tab_data[sub_tab_data['Value']>0]
+                                if not sub_tab_data.empty:
+                                    sub_tab_list.append(
+                                        dbc.Tab(
+                                            html.Div(
+                                                make_pie_chart(sub_tab_data) if u_sub in pie_chart_features else make_dash_table(sub_tab_data)
+                                            ),
+                                            label = sub_tab['sub_sub_name']
+                                        )
+                                    )
+
+                            # Checking if any other features are in this sub_name
+                            other_sub_name_props = [i for i in nested_prop_list if i['sub_name']==u_sub and i['sub_sub_name'] is None]
+                            print(f'other_sub_name_props: {other_sub_name_props}')
+                            for o_sub in other_sub_name_props:
+                                o_sub_data = o_sub['table']
+                                o_sub_data = o_sub_data[o_sub_data['Value']>0]
+                                if not o_sub_data.empty:
+
+                                    sub_accordion_list.append(
+                                        dbc.AccordionItem(
+                                            html.Div(
+                                                make_pie_chart(o_sub_data) if u_sub in pie_chart_features else make_dash_table(o_sub_data)
+                                            ),
+                                            title = u_sub
+                                        )
+                                    )
+
+                            if len(sub_tab_list)>0:
+                                sub_accordion_list.append(
+                                    dbc.AccordionItem(
+                                        dbc.Tabs(
+                                            sub_tab_list
+                                        ),
+                                        title = u_sub
+                                    )
+                                )
+                        
+                        # Getting shared name props the no sub_sub_name
+                        other_name_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_sub_name'] is None and not i['sub_name'] is None]
+                        print(f'other_name_props: {other_name_props}')
+                        for o_n_prop in other_name_props:
+                            o_prop_data = o_n_prop['table']
+                            o_prop_data = o_prop_data[o_prop_data['Value']>0]
+                            print(o_prop_data)
+                            if not o_prop_data.empty:
+                                print(f'o_sub: {o_n_prop["sub_name"]}')
+
+                                sub_accordion_list.append(
+                                    dbc.AccordionItem(
+                                        html.Div(
+                                            make_pie_chart(o_prop_data) if o_n_prop['sub_name'] in pie_chart_features else make_dash_table(o_prop_data)
+                                        ),
+                                        title = o_n_prop['sub_name']
+                                    )
+                                )
+
+                        # Adding remainder props and adding the AccordionItem to the main list
+                        l_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_name'] is None]
+                        if len(l_props)>0:
+                            other_data_tab_list = []
+                            for l_idx,l in enumerate(l_props):
+                                # Not sure which properties will actually fall under here but need to make sure everything is gotten prior to adding to the accordion_children list
+                                l_data = l['table']
+                                l_data = l_data[l_data['Value']>0]
+                                if not l_data.empty:
+                                    other_data_tab_list.append(
+                                        dbc.Tab(
+                                            html.Div(
+                                                make_pie_chart(l_data) if l['name'] in pie_chart_features else make_dash_table(l_data)
+                                            ),
+                                            label = f'{u_n} Data {l_idx}'
+                                        )
+                                    )
+                            
+                            accordion_children.append(
+                                dbc.AccordionItem([
+                                    html.Div(
+                                        dbc.Tabs(other_data_tab_list) if len(other_data_tab_list)>0 else html.Div()
+                                    ),
+                                    html.Div(
+                                        dbc.Accordion(sub_accordion_list) if len(sub_accordion_list)>0 else html.Div()
+                                    )
+                                ], title = u_n)
+                            )
+                        else:
+
+                            accordion_children.append(
+                                dbc.AccordionItem([
+                                    html.Div(
+                                        dbc.Accordion(sub_accordion_list) if len(sub_accordion_list)>0 else html.Div()
+                                    )
+                                ], title = u_n)
+                            )
+
+                    # Getting the leftover properties
+                    remainder_props = [i for i in nested_prop_list if i['name'] not in unique_names]
+                    if len(remainder_props)>0:
+                        for r in remainder_props:
+                            r_data = r['table']
+                            r_data = r_data[r_data['Value']>0]
+                            if not r_data.empty:
+                                accordion_children.append(
+                                    dbc.AccordionItem([
+                                        html.Div(
+                                            make_pie_chart(r_data) if r['name'] in pie_chart_features else make_dash_table(r_data)
+                                        )
+                                    ], title = r['name'])
+                                )
+
+                else:
+                    # Now getting the sub_properties
+                    branch_props = [i for i in nested_prop_list if not i['sub_name'] is None]
+                    if len(branch_props)>0:
+                        unique_names = np.unique([i['name'] for i in branch_props]).tolist()
+
+                        for u_n in unique_names:
+                            u_n_list = [i for i in branch_props if i['name']==u_n]
+                            sub_tab_list = []
+                            for s_u_n in u_n_list:
+                                s_u_n_data = s_u_n['table']
+                                s_u_n_data = s_u_n_data[s_u_n_data['Value']>0]
+                                if not s_u_n_data.empty:
+                                    sub_tab_list.append(
+                                        dbc.Tab(
+                                            html.Div(
+                                                make_pie_chart(s_u_n_data) if u_n in pie_chart_features or s_u_n['sub_name'] in pie_chart_features else make_dash_table(s_u_n_data),
+                                            ),
+                                            label = s_u_n['sub_name']
+                                        )
+                                    )
+
+                            # Adding main props
+                            l_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_name'] is None]
+                            if len(l_props)>0:
+                                other_data_tab_list = []
+                                for l_idx,l in enumerate(l_props):
+                                    l_data = l['table']
+                                    l_data = l_data[l_data['Value']>0]
+                                    if not l_data.empty:
+                                        other_data_tab_list.append(
+                                            dbc.Tab(
+                                                html.Div(
+                                                    make_pie_chart(l_data) if l['name'] in pie_chart_features else make_dash_table(l_data)
+                                                ),
+                                                label = f'{u_n} Data {l_idx}'
+                                            )
+                                        )
+
+                                accordion_children.append(
+                                    dbc.AccordionItem([
+                                        html.Div(
+                                            dbc.Tabs(other_data_tab_list) if len(other_data_tab_list)>0 else html.Div()
+                                        ),
+                                        html.Div(
+                                            dbc.Tabs(sub_tab_list) if len(sub_tab_list)>0 else html.Div()
+                                        )
+                                    ], title = u_n)
+                                )
+
+                            else:
+                                accordion_children.append(
+                                    dbc.AccordionItem([
+                                        html.Div(
+                                            dbc.Tabs(
+                                                sub_tab_list
+                                            )
+                                            if len(sub_tab_list)>0 else []
+                                        )
+                                    ], title = u_n)
+                                )
+
+                        # All other "name" props
+                        remainder_props = [i for i in nested_prop_list if i['name'] not in unique_names]
+                        if len(remainder_props)>0:
+                            for r in remainder_props:
+                                r_data = r['table']
+                                r_data = r_data[r_data['Value']>0]
+                                if not r_data.empty:
+                                    accordion_children.append(
+                                        dbc.AccordionItem([
+                                            html.Div(
+                                                make_pie_chart(r_data) if r['name'] in pie_chart_features else make_dash_table(r_data)
+                                            )
+                                        ], title = r['name'])
+                                    )
+                        
+
+                    else:
+                        # Only has main props
+                        for l in nested_prop_list:
+                            l_data = l['table']
+                            l_data = l_data[l_data['Value']>0]
+                            if not l_data.empty:
+                                accordion_children.append(
+                                    dbc.AccordionItem(
+                                        html.Div(
+                                            make_pie_chart(l['table']) if l['name'] in pie_chart_features else make_dash_table(l['table'])
+                                        ),
+                                        title = l['name']
+                                    )
+                                )
+
+
+            if 'unique_index' in ftu_click['properties']['user']:
+                add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
+
+                accordion_children.append(
+                    dbc.AccordionItem([
+                        html.Div([
+                            dbc.Row([
+                                dbc.Col(html.Div(
+                                        id={'type':'added-labels-div','index':ftu_idx},
+                                        children = add_labels_children
+                                    ), md=11
+                                ),
+                                dbc.Col(self.layout_handler.gen_info_button('Add your own labels for each structure by typing your label in the "Notes" field and clicking the green check mark'),md=1)
+                            ]),
+                            dbc.Row([
+                                dbc.Col(dcc.Input(placeholder='Notes',id={'type':'popup-notes','index':ftu_idx}),md=8),
+                                dbc.Col(html.I(className='bi bi-check-circle-fill me-2',style = {'color':'rgb(0,255,0)'},id={'type':'add-popup-note','index':ftu_idx}),md=4)
+                            ])
+                        ])
+                    ],title = 'Custom Properties')
+                )
+            
+            popup_div = html.Div([
+                dbc.Accordion(
+                    children = accordion_children
+                )
+            ],style={'height':'300px','width':'300px','display':'inline-block'})
+
+            return popup_div
 
         else:
-            raise exceptions.PreventUpdate
+            return no_update
         
-    def gen_cyto(self,cell_val):
+    def gen_cyto(self,cell_val,table):
         """
         Generating cytoscape for selected cell type (referenced in self.update_cell_hierarchy)
         """
         cyto_elements = []
-
-        # Getting cell sub-types under that main cell
-        cell_subtypes = self.cell_graphics_key[cell_val]['subtypes']
-
+        
+        table = pd.DataFrame.from_records(table)
         # Getting all the rows that contain these sub-types
-        table_data = self.table_df.dropna(subset = ['CT/1/ABBR'])
-        cell_data = table_data[table_data['CT/1/ABBR'].isin(cell_subtypes)]
+        if not cell_val in self.cell_names_key:
+            if 'CT/1/LABEL' in table.columns.tolist():
+                table_data = table.dropna(subset=['CT/1/LABEL'])
+                cell_data = table_data[table_data['CT/1/LABEL'].isin([cell_val])]
+            else:
+                table_data = table.dropna(subset=['CT/1'])
+                cell_data = table_data[table_data['CT/1'].isin([cell_val])]
+            cell_types_table = cell_data.filter(regex=self.node_cols['Cell Types']['abbrev']).dropna(axis=1)
+            cell_subtypes = []
+            unique_subtypes = []
+            if any(['LABEL' in i for i in cell_types_table.columns.tolist()]):
+                for c in [i for i in cell_types_table.columns.tolist() if 'LABEL' in i]:
+                    unique_subtype_col = cell_types_table[c].unique().tolist()
+                    for u_s in unique_subtype_col:
+                        if not u_s in unique_subtypes:
+                            cell_subtypes.append(
+                                {
+                                    'col': c.replace('/LABEL',''),
+                                    'val': u_s
+                                }
+                            )
+                            unique_subtypes.append(u_s)
+                
+            else:
+                for c in [i for i in cell_types_table.columns.tolist() if len(i.split('/'))==2]:
+                    unique_subtypes_col = cell_types_table[c].unique().tolist()
+                    for u_s in unique_subtypes_col:
+                        if not u_s in unique_subtypes:
+                            cell_subtypes.append(
+                                {
+                                    'col': c,
+                                    'val': u_s
+                                }
+                            )
+                            unique_subtypes.append(u_s)
+            
+            main_cell_col = cell_subtypes[unique_subtypes.index(cell_val)]['col']
 
-        # cell type
+        else:
+            table_data = table.dropna(subset=['CT/1/ABBR'])
+            main_cell_col = 'CT/1'
+
+            cell_subtypes = []
+            for u_s in self.cell_graphics_key[self.cell_names_key[cell_val]]['subtypes']:
+                cell_subtypes.append(
+                    {
+                        'col': 'CT/1',
+                        'val': u_s
+                    }
+                )
+            cell_data = table_data[table_data['CT/1/ABBR'].isin([i['val'] for i in cell_subtypes])]
+        
+        # Getting the anatomical structures for this cell type
+        as_data = cell_data.filter(regex=self.node_cols['Anatomical Structure']['abbrev']).dropna(axis=1)
+        an_start_y = self.node_cols['Anatomical Structure']['y_start']
+        as_col_vals = as_data.columns.values.tolist()
+
+        if any(['LABEL' in i for i in as_col_vals]):
+            as_col_vals = [i for i in as_col_vals if 'LABEL' in i]
+        else:
+            as_col_vals = [i for i in as_col_vals if len(i.split('/'))==2]
+
+        # Adding main cell node to connect edges to
         cyto_elements.append(
-            {'data':{'id':'Main_Cell',
-                     'label':cell_val,
-                     'url':'./assets/cell.png'},
+            {
+                'data':{
+                    'id':'Main_Cell',
+                    'label':cell_val,
+                    'url':'./assets/cell.png',
+                    'col': main_cell_col
+                },
             'classes': 'CT',
-            'position':{'x':self.node_cols['Cell Types']['x_start'],'y':self.node_cols['Cell Types']['y_start']},
-                     }
+            'position':{
+                'x':self.node_cols['Cell Types']['x_start'],
+                'y':self.node_cols['Cell Types']['y_start']
+            },
+        }
         )
 
-        # Getting the anatomical structures for this cell type
-        an_structs = cell_data.filter(regex=self.node_cols['Anatomical Structure']['abbrev']).dropna(axis=1)
-
-        an_start_y = self.node_cols['Anatomical Structure']['y_start']
-        col_vals = an_structs.columns.values.tolist()
-        col_vals = [i for i in col_vals if 'LABEL' in i]
-
-        for idx,col in enumerate(col_vals):
+        for idx,col in enumerate(as_col_vals):
+            as_value = as_data[col].tolist()[0]
             cyto_elements.append(
-                {'data':{'id':col,
-                         'label':an_structs[col].tolist()[0],
-                         'url':'./assets/kidney.png'},
+                {
+                'data':{
+                        'id':col,
+                        'label':as_value,
+                        'url':'./assets/kidney.png',
+                        'col': col.replace('/LABEL','')
+                    },
                 'classes':'AS',
-                'position':{'x':self.node_cols['Anatomical Structure']['x_start'],'y':an_start_y}
-                         }
+                'position':{
+                    'x':self.node_cols['Anatomical Structure']['x_start'],
+                    'y':an_start_y
+                    }
+                }
             )
             
             if idx>0:
                 cyto_elements.append(
-                    {'data':{'source':col_vals[idx-1],'target':col}}
+                    {'data':{'source':as_col_vals[idx-1],'target':col}}
                 )
             an_start_y+=75
         
@@ -3380,106 +3153,153 @@ class FUSION:
         
         cell_start_y = self.node_cols['Cell Types']['y_start']
         gene_start_y = self.node_cols['Genes']['y_start']
+
+        # Iterating through cell subtypes
+        unique_genes = []
         for idx_1,c in enumerate(cell_subtypes):
 
-            matching_rows = table_data[table_data['CT/1/ABBR'].str.match(c)]
+            # Finding row which matches this cell subtype
+            if cell_val in self.cell_names_key:
+                matching_rows = table_data.dropna(subset=['CT/1/ABBR'])
+                matching_rows = matching_rows[matching_rows['CT/1/ABBR'].astype(str).str.match(c['val'])]
+            else:
+                matching_rows = table_data.dropna(subset=[c["col"]])
+                matching_rows = matching_rows[matching_rows[c['col']].str.match(c['val'])]
 
             if not matching_rows.empty:
-                cell_start_y+=75
-
+                cell_start_y += 75
+                # Adding subtype node to cytoscape
                 cyto_elements.append(
-                    {'data':{'id':f'ST_{idx_1}',
-                             'label':c,
-                             'url':'./assets/cell.png'},
-                    'classes':'CT',
-                    'position':{'x':self.node_cols['Cell Types']['x_start'],'y':cell_start_y}}
-                )
-                cyto_elements.append(
-                    {'data':{'source':'Main_Cell','target':f'ST_{idx_1}'}}
+                    {
+                        'data': {
+                            'id': f'ST_{idx_1}',
+                            'label': c['val'],
+                            'url': './assets/cell.png',
+                            'col': c['col'].replace('/LABEL','')
+                        },
+                        'classes': 'CT',
+                        'position': {
+                            'x': self.node_cols['Cell Types']['x_start'],
+                            'y': cell_start_y
+                        }
+                    }
                 )
 
-                # Getting genes
+                # Adding edge from main cell to subtype node
+                cyto_elements.append(
+                    {
+                        'data': {
+                            'source': 'Main_Cell',
+                            'target': f'ST_{idx_1}'
+                        }
+                    }
+                )
+
+
                 genes = matching_rows.filter(regex=self.node_cols['Genes']['abbrev']).dropna(axis=1)
-                col_vals = genes.columns.values.tolist()
-                col_vals = [i for i in col_vals if 'LABEL' in i]
+                gene_col_vals = genes.columns.values.tolist()
+                if any(['LABEL' in i for i in gene_col_vals]):
+                    gene_col_vals = [i for i in gene_col_vals if 'LABEL' in i]
+                else:
+                    gene_col_vals = [i for i in gene_col_vals if len(i.split('/'))==2]
 
-                for idx,col in enumerate(col_vals):
-                    cyto_elements.append(
-                        {'data':{'id':col,
-                                 'label':genes[col].tolist()[0],
-                                 'url':'./assets/gene.png'},
-                        'classes':'G',
-                        'position':{'x':self.node_cols['Genes']['x_start'],'y':gene_start_y}}
-                    )
+                gene_col_vals = np.unique(gene_col_vals).tolist()
+                if len(gene_col_vals)>0:
+                    for g_idx,g_col in enumerate(gene_col_vals):
+                        gene_label = genes[g_col].tolist()[0]
+                        if not gene_label in unique_genes:
+                            print(gene_label)
+                            unique_genes.append(gene_label)
 
-                    cyto_elements.append(
-                        {'data':{'source':col,'target':f'ST_{idx_1}'}}
-                    )
-                    gene_start_y+=75
+                            # Adding new gene node to cytoscape
+                            cyto_elements.append(
+                                {
+                                    'data':{
+                                        'id':f'G_{unique_genes.index(gene_label)}',
+                                        'label':gene_label,
+                                        'url':'./assets/gene.png',
+                                        'col': g_col.replace('/LABEL','')
+                                    },
+                                    'classes':'G',
+                                    'position':{'x':self.node_cols['Genes']['x_start'],'y':gene_start_y}
+                                }
+                            )
+                            gene_start_y+=75
+
+                        # Adding edge between gene node and cell subtype node
+                        cyto_elements.append(
+                            {
+                                'data': {
+                                    'source': f'ST_{idx_1}',
+                                    'target': f'G_{unique_genes.index(gene_label)}'
+                                }
+                            }
+                        )
+
 
         return cyto_elements
 
-    def get_cyto_data(self,clicked):
+    def get_cyto_data(self,clicked, organ_store):
         """
         Getting information for clicked node in cell hierarchy cytoscape vis.
         """
         if not clicked is None:
-            if 'ST' in clicked['id']:
-                table_data = self.table_df.dropna(subset=['CT/1/ABBR'])
-                table_data = table_data[table_data['CT/1/ABBR'].str.match(clicked['label'])]
+            
+            print(clicked)
+            organ_store = json.loads(organ_store)
 
-                label = clicked['label']
-                try:
-                    try:
-                        id = table_data['CT/1/ID'].tolist()[0]
-                        # Modifying base url to make this link to UBERON
-                        base_url = self.node_cols['Cell Types']['base_url']
-                        new_url = base_url+id.replace('CL:','')
-                    except AttributeError:
-                        # for float objects
-                        print(id)
-                        base_url = self.node_cols['Cell Types']['base_url']
-                        new_url = base_url+str(id).replace('CL:','')
+            table = pd.DataFrame.from_records(organ_store['table'])
 
-                except IndexError:
-                    print(table_data['CT/1/ID'].tolist())
-                    id = ''
-                
-                try:
-                    notes = table_data['CT/1/NOTES'].tolist()[0]
-                except:
-                    print(table_data['CT/1/NOTES'])
-                    notes = ''
-
-            elif 'Main_Cell' not in clicked['id']:
-                
-                table_data = self.table_df.dropna(subset=[clicked['id']])
-                table_data = table_data[table_data[clicked['id']].str.match(clicked['label'])]
-
-                base_label = '/'.join(clicked['id'].split('/')[0:-1])
-                label = table_data[base_label+'/LABEL'].tolist()[0]
-
-                id = table_data[base_label+'/ID'].tolist()[0]
-                
-                if self.node_cols['Anatomical Structure']['abbrev'] in clicked['id']:
-                    base_url = self.node_cols['Anatomical Structure']['base_url']
-
-                    new_url = base_url+id.replace('UBERON:','')
+            if organ_store['organ']=='kidney':
+                if 'CT' in clicked['col']:
+                    if not clicked['id']=='Main_Cell':
+                        table_data = table.dropna(subset=['CT/1/ABBR'])
+                        table_data = table_data[table_data['CT/1/ABBR'].str.match(clicked['label'])]
+                    else:
+                        table_data = pd.DataFrame()
                 else:
-                    base_url = self.node_cols['Genes']['base_url']
-
-                    new_url = base_url+id.replace('HGNC:','')
-
-                try:
-                    notes = table_data[base_label+'/NOTES'].tolist()[0]
-                except KeyError:
-                    notes = ''
-
+                    if clicked['col']+'/LABEL' in table.columns.tolist():
+                        table_data = table.dropna(subset=[clicked['col']+'/LABEL'])
+                        table_data = table_data[table_data[clicked['col']+'/LABEL'].str.match(clicked['label'])]
+                    else:
+                        table_data = table.dropna(subset=[clicked['col']])
+                        table_data = table_data[table_data[clicked['col']].str.match(clicked['label'])]
             else:
-                label = ''
-                id = ''
-                notes = ''
-                new_url = ''
+                if clicked['col']+'/LABEL' in table.columns.tolist():
+                    table_data = table.dropna(subset=[clicked['col']+'/LABEL'])
+                    table_data = table_data[table_data[clicked['col']+'/LABEL'].str.match(clicked['label'])]
+                else:
+                    table_data = table.dropna(subset=[clicked['col']])
+                    table_data = table_data[table_data[clicked['col']].str.match(clicked['label'])]
+
+            label = clicked['label']
+            print(table_data)
+
+            if not table_data.empty:
+                id = table_data[f'{clicked["col"]}/ID'].tolist()[0]
+
+                if 'CT' in clicked['col']:
+                    base_url = self.node_cols['Cell Types']['base_url']
+                    new_url = base_url+str(id).replace('CL:','')
+                elif 'AS' in clicked['col']:
+                    base_url = self.node_cols['Anatomical Structure']['base_url']
+                    new_url = base_url+str(id).replace('UBERON:','')
+                elif 'BGene' in clicked['col']:
+                    base_url = self.node_cols['Genes']['base_url']
+                    new_url = base_url+str(id).replace('HGNC:','')
+                else:
+                    new_url = ''
+
+                if f'{clicked["col"]}/NOTES' in table_data.columns.tolist():
+                    notes = table_data[f'{clicked["col"]}/NOTES'].tolist()[0]
+                else:
+                    notes = 'No notes.'
+            else:
+                print(table[clicked["col"]].tolist())
+                if clicked['col']+'/LABEL' in table.columns.tolist():
+                    print(table[clicked['col']+'/LABEL'].tolist())
+                raise exceptions.PreventUpdate
+
         else:
             label = ''
             id = ''
@@ -3488,15 +3308,15 @@ class FUSION:
 
         return f'Label: {label}', dcc.Link(f'ID: {id}', href = new_url), f'Notes: {notes}'
     
-    def load_new_slide(self,slide_id,new_interval,modal_is_open,slide_info_store, user_data_store):
+    def load_new_slide(self,slide_id,new_interval,modal_is_open,slide_info_store_data, user_data_store):
         """
         Progress indicator for loading a new WSI and annotations
         """
         modal_open = True
         modal_children = []
-        slide_info_store_data = [no_update]
         disable_slide_load = False
 
+        slide_info_store_data = json.loads(slide_info_store_data)
         user_data_store = json.loads(user_data_store)
 
         if ctx.triggered_id=='slide-select':
@@ -3538,6 +3358,16 @@ class FUSION:
                         manual_rois = [],
                         marked_ftus = []
                     )
+
+                elif slide_type == 'Xenium':
+                    self.wsi = XeniumSlide(
+                        item_id = slide_info['_id'],
+                        user_details = user_data_store,
+                        girder_handler = self.dataset_handler,
+                        ftu_colors = self.ftu_colors,
+                        manual_rois = [],
+                        marked_ftus = []
+                    )
                 else:
                     self.wsi = DSASlide(
                         item_id = slide_info['_id'],
@@ -3560,7 +3390,11 @@ class FUSION:
             # Storing some info in a data store component (erases upon refresh)
             slide_annotation_info = {
                 'slide_info': slide_info,
-                'annotations': annotation_info
+                'annotations': annotation_info,
+                'overlay_prop': None,
+                'cell_vis_val': 0.5,
+                'filter_vals': None,
+                'current_channels': None
             }
 
             n_annotations = len(annotation_info)
@@ -3568,9 +3402,8 @@ class FUSION:
                 first_annotation = annotation_info[0]['annotation']['name']
                 slide_annotation_info['loading_annotation'] = annotation_info[0]['_id']
 
-                slide_info_store_data = [
-                    json.dumps(slide_annotation_info)
-                ]
+                slide_info_store_data = json.dumps(slide_annotation_info)
+                
 
                 # Starting the get_annotation_geojson function on a new thread
                 new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = first_annotation, args = [0])
@@ -3594,9 +3427,8 @@ class FUSION:
                 ]
             else:
 
-                slide_info_store_data = [
-                    json.dumps(slide_annotation_info)
-                ]         
+                slide_info_store_data = json.dumps(slide_annotation_info)
+                         
                 modal_children = [
                     html.Div(
                         dbc.ModalHeader(html.H4(f'Loading Slide: {slide_info["name"]}'))
@@ -3605,19 +3437,17 @@ class FUSION:
         
         elif ctx.triggered_id=='slide-load-interval':
             
-            if not new_interval:
+            if not new_interval or self.wsi is None:
                 raise exceptions.PreventUpdate
             
-            slide_info_store = json.loads(slide_info_store[0])
-
-            if len(slide_info_store['annotations'])>0:
+            if len(slide_info_store_data['annotations'])>0:
 
                 # Checking if previous annotation is complete
-                all_annotation_ids = [i['_id'] for i in slide_info_store['annotations']]
-                previous_annotation_id = slide_info_store['loading_annotation']
+                all_annotation_ids = [i['_id'] for i in slide_info_store_data['annotations']]
+                previous_annotation_id = slide_info_store_data['loading_annotation']
                 
                 if not previous_annotation_id == 'done':
-                    previous_annotation_name = slide_info_store['annotations'][all_annotation_ids.index(previous_annotation_id)]['annotation']['name']
+                    previous_annotation_name = slide_info_store_data['annotations'][all_annotation_ids.index(previous_annotation_id)]['annotation']['name']
 
                     # Getting names of current threads to see if that one is still active
                     thread_names = [i.name for i in threading.enumerate()]
@@ -3627,12 +3457,12 @@ class FUSION:
                         next_ann_idx = all_annotation_ids.index(previous_annotation_id) + 1
 
                         n_annotations = len(all_annotation_ids)
-                        slide_name = slide_info_store['slide_info']['name']
+                        slide_name = slide_info_store_data['slide_info']['name']
 
                         if next_ann_idx<len(all_annotation_ids):
 
-                            next_annotation = slide_info_store['annotations'][next_ann_idx]['annotation']['name']
-                            slide_info_store['loading_annotation'] = slide_info_store['annotations'][next_ann_idx]['_id']
+                            next_annotation = slide_info_store_data['annotations'][next_ann_idx]['annotation']['name']
+                            slide_info_store_data['loading_annotation'] = slide_info_store_data['annotations'][next_ann_idx]['_id']
                             
                             # Starting the get_annotation_geojson function on a new thread
                             new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = next_annotation, args = [next_ann_idx])
@@ -3655,7 +3485,7 @@ class FUSION:
                                 ])
                             ]
                         else:
-                            slide_info_store['loading_annotation'] = 'done'
+                            slide_info_store_data['loading_annotation'] = 'done'
 
                             modal_children = [
                                 html.Div([
@@ -3672,9 +3502,9 @@ class FUSION:
 
                     else:
                         old_ann_idx = all_annotation_ids.index(previous_annotation_id)
-                        old_ann_name = slide_info_store['annotations'][old_ann_idx]['annotation']['name']
+                        old_ann_name = slide_info_store_data['annotations'][old_ann_idx]['annotation']['name']
                         n_annotations = len(all_annotation_ids)
-                        slide_name = slide_info_store['slide_info']['name']
+                        slide_name = slide_info_store_data['slide_info']['name']
 
                         modal_children = [
                             html.Div([
@@ -3697,9 +3527,7 @@ class FUSION:
                     disable_slide_load = True
                     modal_open = False
 
-                slide_info_store_data = [
-                    json.dumps(slide_info_store)
-                ]
+                slide_info_store_data = json.dumps(slide_info_store_data)
 
             else:
                 disable_slide_load = True
@@ -3711,26 +3539,35 @@ class FUSION:
         """
         Populating slide visualization components after loading annotation and tile information
         """
+
         load_slide_done = get_pattern_matching_value(load_slide_done)
         if load_slide_done:
             # Updating in the case that an FTU isn't in the previous set of ftu_colors
             self.ftu_colors = self.wsi.ftu_colors
 
             # Updating overlays colors according to the current cell
-            self.update_hex_color_key()
+            overlay_prop = None
+            cell_vis_val = 0.5
+            filter_vals = None
+            hex_color_key = self.update_hex_color_key(overlay_prop)
 
             special_overlays_opts = self.layout_handler.gen_special_overlay_opts(self.wsi)
 
             new_children = []
             if self.wsi.spatial_omics_type=='CODEX':
+
+                # Enabling cell annotation tab
+                cell_annotation_tab_disable = False
+
                 # Adding the different frames to the layers control object
                 new_children+=[
                     dl.BaseLayer(
                         dl.TileLayer(
                             url = self.wsi.channel_tile_url[c_idx],
-                            tileSize = 240,
+                            tileSize = self.wsi.tile_dims[0],
                             maxNativeZoom = self.wsi.zoom_levels-1,
-                            id = {'type':'codex-tile-layer','index':c_idx}
+                            #id = f'codex-tile-layer{random.randint(0,100)}',
+                            id = {'type': 'codex-tile-layer','index': c_idx}
                         ),
                         name = c_name,
                         checked = c_name== self.wsi.channel_names[0]
@@ -3742,9 +3579,10 @@ class FUSION:
 
             else:
                 
+                cell_annotation_tab_disable = True
                 slide_tile_layer = [
                     dl.TileLayer(
-                        id = 'slide-tile',
+                        id = f'slide-tile{np.random.randint(0,100)}',
                         url = self.wsi.tile_url,
                         tileSize = self.wsi.tile_dims[0],
                         maxNativeZoom = self.wsi.zoom_levels-1
@@ -3754,8 +3592,8 @@ class FUSION:
             new_children += [
                 dl.Overlay(
                     dl.LayerGroup(
-                        dl.GeoJSON(url = self.wsi.map_dict['FTUs'][struct]['url'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle, filter = self.ftu_filter),
-                                    hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
+                        dl.GeoJSON(url = self.wsi.map_dict['FTUs'][struct]['url'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle), filter = self.ftu_filter,
+                                    hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = filter_vals),
                                     hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
                                     zoomToBounds=False,children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
                     ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
@@ -3768,8 +3606,8 @@ class FUSION:
                 new_children.append(
                     dl.Overlay(
                         dl.LayerGroup(
-                            dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle,filter = self.ftu_filter),
-                                        hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
+                            dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle),filter = self.ftu_filter,
+                                        hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
                                         hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')),
                                         children = [dl.Popup(id=man['popup_id'])])
                         ),
@@ -3856,7 +3694,12 @@ class FUSION:
                 for idx,struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-            return slide_tile_layer, new_children, remove_old_edits, map_center, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs
+            new_layer_control = dl.LayersControl(
+                id = f'layer-control',
+                children = new_children
+            )
+
+            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs, cell_annotation_tab_disable
         else:
             raise exceptions.PreventUpdate
 
@@ -3973,17 +3816,17 @@ class FUSION:
         user_data_store = json.loads(user_data_store)
 
         if not cluster_data_store['feature_data'] is None:
-            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+            feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
         else:
             feature_data = None
         
         if not cluster_data_store['umap_df'] is None:
-            umap_df = pd.DataFrame.from_records(cluster_data_store['umap_df'])
+            umap_df = pd.DataFrame.from_dict(cluster_data_store['umap_df'],orient='index')
         else:
             umap_df = None
 
         if not cluster_data_store['clustering_data'] is None:   
-            clustering_data = pd.DataFrame.from_records(cluster_data_store['clustering_data'])
+            clustering_data = pd.DataFrame.from_dict(cluster_data_store['clustering_data'],orient='index')
         else:
             clustering_data = None
 
@@ -3998,7 +3841,7 @@ class FUSION:
             if clustering_data.empty:
                 print(f'Getting new clustering data')
                 clustering_data = self.dataset_handler.load_clustering_data(user_data_store)
-                cluster_data_store['clustering_data'] = clustering_data.to_dict('records')
+                cluster_data_store['clustering_data'] = clustering_data.to_dict('index')
 
             feature_names = [i['title'] for i in self.dataset_handler.feature_keys if i['key'] in checked_feature]
             cell_features = [i for i in feature_names if i in self.cell_names_key]
@@ -4118,7 +3961,7 @@ class FUSION:
                         item_data = self.dataset_handler.gc.get(f'/item/{u}')
                         folderId = item_data['folderId']
 
-                        folder_names.append(self.dataset_handler.slide_datasets[folderId]['name'])
+                        folder_names.append(self.dataset_handler.get_folder_name(folderId))
                     
                     label_data = [folder_names[unique_ids.index(i)] for i in sample_ids]
 
@@ -4155,7 +3998,7 @@ class FUSION:
                         item_data = self.dataset_handler.gc.get(f'/item/{u_id}')
                         item_meta = item_data['meta']
                         item_name = item_data['name']
-                        item_folder = self.dataset_handler.slide_datasets[item_data['folderId']]['name']
+                        item_folder = self.dataset_handler.get_folder_name(item_data['folderId'])
                         
                         # If this slide is filtered out then we don't need to check if it's filtered out for any other reason
                         if item_name in filter_label_names or item_folder in filter_label_names:
@@ -4207,7 +4050,7 @@ class FUSION:
                 else:
                     figure = go.Figure()
                 
-                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+                cluster_data_store['feature_data'] = feature_data.to_dict('index')
 
             elif len(feature_names)==2:
                 print(f'Generating a scatter plot')
@@ -4237,7 +4080,7 @@ class FUSION:
                 labels_left = feature_data['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
-                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+                cluster_data_store['feature_data'] = feature_data.to_dict('index')
 
                 figure = go.Figure(data = px.scatter(
                     data_frame=feature_data,
@@ -4289,12 +4132,12 @@ class FUSION:
 
                 feature_data['Hidden'] = hidden_col
 
-                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+                cluster_data_store['feature_data'] = feature_data.to_dict('index')
 
                 umap_df = gen_umap(feature_data, feature_names, ['Hidden','label','Main_Cell_Types','Cell_States'])
                 # Saving this so we can update the label separately without re-running scaling or reduction
 
-                cluster_data_store['umap_df'] = umap_df.to_dict('records')
+                cluster_data_store['umap_df'] = umap_df.to_dict('index')
 
                 # Generating labels_info_children and filter_info_children
                 labels_left = umap_df['label'].tolist()
@@ -4395,9 +4238,9 @@ class FUSION:
                         label_data = clustering_data[label].tolist()
                     else:
                         # This has to have an index portion just so they line up consistently
-                        label_data = [0]*(max(list(feature_data.index))+1)
+                        label_data = [0]*(max([int(i) for i in list(feature_data.index)])+1)
                         for idx in list(feature_data.index):
-                            label_data[idx] = float(feature_data.loc[idx,label])
+                            label_data[int(idx)] = float(feature_data.loc[idx,label])
                 else:
                     sample_ids = [i['Slide_Id'] for i in clustering_data['Hidden'].tolist()]
                     unique_ids = np.unique(sample_ids).tolist()
@@ -4419,7 +4262,7 @@ class FUSION:
                             item_data = self.dataset_handler.gc.get(f'/item/{u}')
                             folderId = item_data['folderId']
 
-                            folder_names.append(self.dataset_handler.slide_datasets[folderId]['name'])
+                            folder_names.append(self.dataset_handler.get_folder_name(folderId))
                         
                         label_data = [folder_names[unique_ids.index(i)] for i in sample_ids]
 
@@ -4442,7 +4285,7 @@ class FUSION:
                 if type(label_data[0]) in [int,float]:
                     feature_data['label'] = feature_data['label'].astype(float)
 
-                cluster_data_store['feature_data'] = feature_data.to_dict('records')
+                cluster_data_store['feature_data'] = feature_data.to_dict('index')
 
                 # Generating labels_info_children
                 labels_left = feature_data['label'].tolist()
@@ -4488,7 +4331,7 @@ class FUSION:
 
                     umap_df.loc[:,'label'] = label_data
 
-                    cluster_data_store['umap_df'] = umap_df.to_dict('records')
+                    cluster_data_store['umap_df'] = umap_df.to_dict('index')
                     
                     if not type(label_data[0]) in [int,float]:
 
@@ -4593,7 +4436,7 @@ class FUSION:
 
         cluster_data_store = json.loads(cluster_data_store)
         user_store_data = json.loads(user_store_data)
-        feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+        feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient = 'index')
 
         if click is not None:
             if 'cluster-graph.selectedData' in list(ctx.triggered_prop_ids.keys()):
@@ -4759,7 +4602,7 @@ class FUSION:
         Getting cell state distribution plot for clicked main cell type
         """
         cluster_data_store = json.loads(cluster_data_store)
-        feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+        feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
         current_selected_samples = cluster_data_store['current_selected_samples']
 
         if not selected_cell_click is None:
@@ -4782,12 +4625,31 @@ class FUSION:
         else:
             return go.Figure()
 
-    def add_manual_roi(self,new_geojson):
+    def add_manual_roi(self,new_geojson_list, slide_info_store):
         """
         Adding a rectangle, polygon, or marker annotation to the current image
         """
-        
         if not self.wsi is None:
+            slide_info_store = json.loads(slide_info_store)
+            if 'overlay_prop' in slide_info_store:
+                overlay_prop = slide_info_store['overlay_prop']
+            else:
+                overlay_prop = None
+            if 'cell_vis_val' in slide_info_store:
+                cell_vis_val = slide_info_store['cell_vis_val']
+            else:
+                cell_vis_val = 0.5
+            
+            if 'hex_color_key' in slide_info_store:
+                hex_color_key = slide_info_store['hex_color_key']
+            else:
+                hex_color_key = {}
+
+            if 'filter_vals' in slide_info_store:
+                filter_vals = slide_info_store['filter_vals']
+            else:
+                filter_vals = []
+
             try:
                 # Used for pattern-matching callbacks
                 triggered_id = ctx.triggered_id['type']
@@ -4795,219 +4657,170 @@ class FUSION:
                 # Used for normal callbacks
                 triggered_id = ctx.triggered_id
 
-            if triggered_id == 'edit_control':
+            if not ctx.triggered[0]['value']:
+                return no_update, no_update, no_update
+
+            if triggered_id == 'edit-control':
                 
-                if triggered_id=='edit_control':
-                    #TODO: get_pattern_matching_value test here
-                    if type(new_geojson)==list:
-                        new_geojson = new_geojson[0]    
-
-                if not new_geojson is None:
+                if not new_geojson_list is None:
                     new_roi = None
-                    if len(new_geojson['features'])>0:
-                        
-                        # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
-                        self.wsi.manual_rois = []
-                        self.wsi.marked_ftus = []
-
-                        if not self.wsi.spatial_omics_type=='CODEX':
-                            # This is starting off only with the FTU annotations for Visium and Regular slides
-                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
-                        else:
-                            # This is for CODEX images where each frame is added as a BaseLayer
-                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
-
-                        for geo in new_geojson['features']:
-
-                            if not geo['properties']['type'] == 'marker':
-
-                                new_roi = {'type':'FeatureCollection','features':[geo]}
+                    for new_geo in new_geojson_list:
+                        if not new_geo is None:
+                            if len(new_geo['features'])>0:
                                 
-                                # New geojson has no properties which can be used for overlays or anything so we have to add those
-                                if self.wsi.spatial_omics_type=='Visium':
-                                    # Step 1, find intersecting spots:
-                                    overlap_props,_ = self.wsi.find_intersecting_ftu(shape(new_roi['features'][0]['geometry']),'Spots')
-                                    # Adding Main_Cell_Types from intersecting spots data
-                                    main_counts_data = pd.DataFrame.from_records([i['Main_Cell_Types'] for i in overlap_props if 'Main_Cell_Types' in i]).sum(axis=0).to_frame()
-                                    main_counts_data = (main_counts_data/main_counts_data.sum()).fillna(0.000).round(decimals=18)
-                                    main_counts_data[0] = main_counts_data[0].map('{:.19f}'.format)
-                                    main_counts_dict = main_counts_data.astype(float).to_dict()[0]
+                                # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
+                                self.wsi.manual_rois = []
+                                self.wsi.marked_ftus = []
 
-                                    # Repeating for Gene Counts
-                                    gene_counts_data = pd.DataFrame.from_records([i['Gene Counts'] for i in overlap_props if 'Gene Counts' in i]).sum(axis=0).to_frame()
-                                    main_counts_data = (gene_counts_data/gene_counts_data.sum()).fillna(0.000).round(decimals=18)
-                                    gene_counts_data[0] = gene_counts_data[0].map('{:.19f}'.format)
-                                    gene_counts_dict = gene_counts_data.astype(float).to_dict()[0]
+                                self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
 
-                                    # Aggregating cell state information from intersecting spots
-                                    agg_cell_states = {}
-                                    for m_c in list(main_counts_dict.keys()):
+                                for geo in new_geo['features']:
 
-                                        cell_states = pd.DataFrame.from_records([i['Cell_States'][m_c] for i in overlap_props]).sum(axis=0).to_frame()
-                                        cell_states = (cell_states/cell_states.sum()).fillna(0.000).round(decimals=18)
-                                        cell_states[0] = cell_states[0].map('{:.19f}'.format)
+                                    if not geo['properties']['type'] == 'marker':
 
-                                        agg_cell_states[m_c] = cell_states.astype(float).to_dict()[0]
+                                        new_roi = {'type':'FeatureCollection','features':[geo]}
 
-                                    new_roi['features'][0]['properties']['user'] = {
-                                        'Main_Cell_Types': main_counts_dict,
-                                        'Cell_States': agg_cell_states,
-                                        'Gene Counts': gene_counts_dict
-                                    }
+                                        agg_properties = self.wsi.spatial_aggregation(shape(geo['geometry']))
+                                        new_roi['features'][0]['properties'] = {'user':agg_properties | {'name': 'Manual_ROI'}}
+                                        
+                                        new_manual_roi_dict = {
+                                                'geojson':new_roi,
+                                                'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                                'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
+                                                'color':'white',
+                                                'hover_color':'#32a852'
+                                            }
+                                        self.wsi.manual_rois.append(new_manual_roi_dict)
 
+                                        new_child = dl.Overlay(
+                                            dl.LayerGroup(
+                                                dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle), filter = self.ftu_filter,
+                                                        hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = filter_vals),
+                                                        hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
+                                                        children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
+                                                    )
+                                            ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
+                                        )
 
-                                elif self.wsi.spatial_omics_type=='CODEX':
-                                    overlap_props = self.wsi.intersecting_frame_intensity(shape(new_roi['features'][0]['geometry']),'all')
+                                        self.current_overlays.append(new_child)
 
-                                    # Adding channel intensity histogram to properties.
-                                    new_roi['features'][0]['properties']['user'] = {}
-                                    for frame in overlap_props:
-                                        new_roi['features'][0]['properties']['user'][frame] = overlap_props[frame]
+                                    elif geo['properties']['type']=='marker':
+                                        # Separate procedure for marking regions/FTUs with a marker
+                                        new_marked = {'type':'FeatureCollection','features':[geo]}
 
-                                #TODO: include overlapping FTU properties in visualization within Manual ROIs
-                                # Now including properties of intersecting FTUs
-                                #overlap_ftu_props, _ = self.wsi.find_intersecting_ftu(shape(new_roi['features'][0]['geometry']),'all')
+                                        overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
+                                        if not overlap_poly is None:
+                                            # Getting the intersecting ROI geojson
+                                            if len(self.wsi.marked_ftus)==0:
+                                                if triggered_id=='edit_control':
+                                                    new_marked_roi = {
+                                                        'type':'FeatureCollection',
+                                                        'features':[
+                                                            {
+                                                                'type':'Feature',
+                                                                'geometry':{
+                                                                    'type':'Polygon',
+                                                                    'coordinates':[list(overlap_poly.exterior.coords)],
+                                                                },
+                                                                'properties': {
+                                                                    'user': overlap_dict
+                                                                }
+                                                            }
+                                                        ]
+                                                    }
+                                                elif triggered_id=='add-marker-cluster':
+                                                    new_marked_roi = {
+                                                        'type':'FeatureCollection',
+                                                        'features':[
+                                                            {
+                                                                'type':'Feature',
+                                                                'geometry':{
+                                                                    'type':'Polygon',
+                                                                    'coordinates':[list(overlap_poly.exterior.coords)]
+                                                                },
+                                                                'properties':{
+                                                                    'user': overlap_dict
+                                                                }
+                                                            },
+                                                        ]
+                                                    }
 
-                                # Have to normalize and make this visible in the "Cell Compositions" or something tab (since it might be more than just cells)
+                                                self.wsi.marked_ftus = [{
+                                                    'geojson':new_marked_roi,
+                                                }]
 
-                                new_manual_roi_dict = {
-                                        'geojson':new_roi,
-                                        'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                        'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
-                                        'color':'white',
-                                        'hover_color':'#32a852'
-                                    }
-                                self.wsi.manual_rois.append(new_manual_roi_dict)
-
-                                new_child = dl.Overlay(
-                                    dl.LayerGroup(
-                                        dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle),
-                                                hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = self.filter_vals),
-                                                hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
-                                                children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
-                                            )
-                                    ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
-                                )
-
-                                self.current_overlays.append(new_child)
-
-                            elif geo['properties']['type']=='marker':
-                                # Separate procedure for marking regions/FTUs with a marker
-                                new_marked = {'type':'FeatureCollection','features':[geo]}
-
-                                overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
-                                if not overlap_poly is None:
-                                    # Getting the intersecting ROI geojson
-                                    if len(self.wsi.marked_ftus)==0:
-                                        if triggered_id=='edit_control':
-                                            new_marked_roi = {
-                                                'type':'FeatureCollection',
-                                                'features':[
+                                            else:
+                                                self.wsi.marked_ftus[0]['geojson']['features'].append(
                                                     {
                                                         'type':'Feature',
                                                         'geometry':{
                                                             'type':'Polygon',
                                                             'coordinates':[list(overlap_poly.exterior.coords)],
                                                         },
-                                                        'properties': {
-                                                            'user': overlap_dict
+                                                        'properties':{
+                                                            'user':overlap_dict
                                                         }
                                                     }
-                                                ]
-                                            }
-                                        elif triggered_id=='add-marker-cluster':
-                                            new_marked_roi = {
-                                                'type':'FeatureCollection',
-                                                'features':[
-                                                    {
-                                                        'type':'Feature',
-                                                        'geometry':{
-                                                            'type':'Polygon',
-                                                            'coordinates':[list(overlap_poly.exterior.coords)]
-                                                        },
-                                                        'properties':{
-                                                            'user': overlap_dict
-                                                        }
-                                                    },
-                                                    #new_marked['features'][0]
-                                                ]
-                                            }
+                                                )
 
-                                        self.wsi.marked_ftus = [{
-                                            'geojson':new_marked_roi,
-                                        }]
+                                # Adding the marked ftus layer if any were added
+                                if len(self.wsi.marked_ftus)>0:
+                                    print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
+                                    
+                                    self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
+                                    self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
 
-                                    else:
-                                        self.wsi.marked_ftus[0]['geojson']['features'].append(
-                                            {
-                                                'type':'Feature',
-                                                'geometry':{
-                                                    'type':'Polygon',
-                                                    'coordinates':[list(overlap_poly.exterior.coords)],
-                                                },
-                                                'properties':{
-                                                    'user':overlap_dict
-                                                }
-                                            }
-                                        )
+                                    new_marked_dict = {
+                                        'geojson':self.wsi.marked_ftus[0]['geojson'],
+                                        'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
+                                        'color':'white',
+                                        'hover_color':'#32a852'
+                                    }
+                                    new_child = dl.Overlay(
+                                        dl.LayerGroup(
+                                            dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), filter = self.ftu_filter, pointToLayer = self.render_marker_handle,
+                                                    hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = filter_vals),
+                                                    hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
+                                                    children = []
+                                                    )
+                                        ), name = f'Marked FTUs', checked=True, id = self.wsi.item_id+f'_marked_ftus'
+                                    )
+                                    
+                                    self.current_overlays.append(new_child)
 
-                        # Adding the marked ftus layer if any were added
-                        if len(self.wsi.marked_ftus)>0:
-                            print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
-                            
-                            self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
-                            self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
+                                if len(self.wsi.manual_rois)>0:
+                                    data_select_options = self.layout_handler.data_options
+                                    data_select_options[4]['disabled'] = False
+                                else:
+                                    data_select_options = self.layout_handler.data_options
 
-                            new_marked_dict = {
-                                'geojson':self.wsi.marked_ftus[0]['geojson'],
-                                'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                'color':'white',
-                                'hover_color':'#32a852'
-                            }
-                            new_child = dl.Overlay(
-                                dl.LayerGroup(
-                                    dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), pointToLayer = self.render_marker_handle,
-                                            hideout = dict(color_key = self.hex_color_key, overlay_prop = self.overlay_prop, fillOpacity = self.cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
-                                            hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
-                                            children = []
-                                            )
-                                ), name = f'Marked FTUs', checked=True, id = self.wsi.item_id+f'_marked_ftus'
-                            )
-                            
-                            self.current_overlays.append(new_child)
+                                if len(self.wsi.marked_ftus)>0:
+                                    data_select_options[3]['disabled'] = False
 
-                        if len(self.wsi.manual_rois)>0:
-                            data_select_options = self.layout_handler.data_options
-                            data_select_options[4]['disabled'] = False
+                                hex_color_key = self.update_hex_color_key(overlay_prop)
+                                
+                                if new_roi:
+                                    user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
+                                else:
+                                    user_ann_tracking = no_update
+                                
+                            else:
+
+                                # Clearing manual ROIs and reverting overlays
+                                self.wsi.manual_rois = []
+                                self.wsi.marked_ftus = []
+
+                                self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
+                                data_select_options = self.layout_handler.data_options
+                                hex_color_key = self.update_hex_color_key(overlay_prop)
+                                user_ann_tracking = no_update
+                                                    
                         else:
+                            
                             data_select_options = self.layout_handler.data_options
+                            user_ann_tracking = no_update
 
-                        if len(self.wsi.marked_ftus)>0:
-                            data_select_options[3]['disabled'] = False
-
-                        self.update_hex_color_key()
-                        
-                        if new_roi:
-                            user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
-                            return self.current_overlays, data_select_options, user_ann_tracking
-                        
-                        return self.current_overlays, data_select_options, no_update
-                    else:
-
-                        # Clearing manual ROIs and reverting overlays
-                        self.wsi.manual_rois = []
-                        self.wsi.marked_ftus = []
-
-                        if not self.wsi.spatial_omics_type=='CODEX':
-                            self.current_overlays = self.current_overlays[0:len(self.wsi.ftu_names)]
-                        else:
-                            self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
-
-                        data_select_options = self.layout_handler.data_options
-
-                        self.update_hex_color_key()
-                        
-                        return self.current_overlays, data_select_options, no_update
+                    return self.current_overlays, data_select_options, user_ann_tracking
                 else:
                     raise exceptions.PreventUpdate
             else:
@@ -5022,7 +4835,7 @@ class FUSION:
 
         cluster_data_store = json.loads(cluster_data_store)
         if not cluster_data_store['feature_data'] is None:
-            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+            feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
         else:
             feature_data = pd.DataFrame()
         if 'current_selected_samples' in cluster_data_store:
@@ -5395,6 +5208,12 @@ class FUSION:
         if upload_type == 'Visium':
 
             self.prep_handler = VisiumPrep(self.dataset_handler)
+            user_data_store['upload_check'] = {
+                "WSI": False,
+                "Omics": False
+            }
+
+            user_data_store['upload_type'] = 'Visium'
 
             upload_reqs = html.Div([
                 dbc.Row([
@@ -5416,17 +5235,17 @@ class FUSION:
                 ],align='center'),
                 dbc.Row([
                     html.Div(
-                        id = {'type':'omics-upload-div','index':0},
+                        id = {'type':'wsi-files-upload-div','index':0},
                         children = [
                             dbc.Label('Upload your counts file here!'),
                             self.layout_handler.gen_info_button('Upload either an RDS file or h5ad file containing gene counts per-spot.'),
                             UploadComponent(
-                                id = {'type':'omics-upload','index':0},
+                                id = {'type':'wsi-files-upload','index':0},
                                 uploadComplete=False,
                                 baseurl=self.dataset_handler.apiUrl,
                                 girderToken = user_data_store['token'],
                                 parentId=parentId,
-                                filetypes=['rds','csv','h5ad']                 
+                                filetypes=['rds','h5ad']                 
                             )
                         ],
                         style = {'marginTop':'10px','display':'inline-block'}
@@ -5445,18 +5264,15 @@ class FUSION:
                     )
                 ])
             ])
-
-            user_data_store['upload_check'] = {
-                "WSI": False,
-                "Omics": False
-            }
-
-            user_data_store['upload_type'] = 'Visium'
         
         elif upload_type =='Regular':
             # Regular slide with no --omics
 
             self.prep_handler = Prepper(self.dataset_handler)
+            user_data_store['upload_check'] = {
+                'WSI': False
+            }
+            user_data_store['upload_type'] = 'Regular'
 
             upload_reqs = html.Div([
                 dbc.Row([
@@ -5490,26 +5306,41 @@ class FUSION:
                 ])
             ])
 
-            user_data_store['upload_check'] = {
-                'WSI': False
-            }
-            user_data_store['upload_type'] = 'Regular'
-
         elif upload_type == 'CODEX':
             # CODEX uploads include histology and multi-frame CODEX image (or just CODEX?)
 
             self.prep_handler = CODEXPrep(self.dataset_handler)
+            user_data_store['upload_check'] = {
+                'WSI': False,
+                'Histology': False
+            }
+            user_data_store['upload_type'] = 'CODEX'
 
             upload_reqs = html.Div([
                 dbc.Row([
                     html.Div(
                         id = {'type': 'wsi-upload-div','index':0},
                         children = [
-                            dbc.Label('Upload Whole Slide Image (CODEX) Here!'),
+                            dbc.Label('Upload CODEX Image Here!'),
                             UploadComponent(
                                 id = {'type':'wsi-upload','index':0},
                                 uploadComplete = False,
                                 baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = parentId,
+                                filetypes = ['svs','ndpi','scn','tiff','tif']
+                            )
+                        ],
+                        style = {'marginBottom':'10px','display':'inline-block'}
+                    ),
+                    html.Div(
+                        id = {'type':'wsi-files-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload Histology (H&E) Image Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index':0},
+                                uploadComplete=False,
+                                baseurl=self.dataset_handler.apiUrl,
                                 girderToken = user_data_store['token'],
                                 parentId = parentId,
                                 filetypes = ['svs','ndpi','scn','tiff','tif']
@@ -5523,7 +5354,7 @@ class FUSION:
                     dbc.Col(
                         dcc.Dropdown(
                             options = [
-                                'Kidney', 'Other Organs'
+                                'Kidney', 'Skin','Intestine','Lung','Other Organs'
                             ],
                             placeholder = 'Organ',
                             id = {'type':'organ-select','index':0}
@@ -5532,14 +5363,76 @@ class FUSION:
                 ])
             ])
 
-            self.upload_check = {'WSI':False}
-            self.current_upload_type = 'CODEX'
+        elif upload_type == 'Xenium':
+            # Xenium uploads include an H&E image, a DAPI image, an alignment file (csv), and cell id/coordinates/group(anchors)(csv)
 
+            self.prep_handler = XeniumPrep(self.dataset_handler)
             user_data_store['upload_check'] = {
-                'WSI': False
+                'WSI': False,
+                'Morphology': False,
+                'Alignment': False
             }
+            user_data_store['upload_type'] = 'Xenium'
 
-            user_data_store['upload_type'] = 'CODEX'
+            upload_reqs = html.Div([
+                dbc.Row([
+                    html.Div(
+                        id = {'type': 'wsi-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload H&E Histology Image Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-upload','index':0},
+                                uploadComplete = False,
+                                baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = parentId,
+                                filetypes = ['svs','ndpi','scn','tiff','tif']
+                            )
+                        ],
+                        style = {'marginBottom':'10px','display':'inline-block'}
+                    ),
+                    html.Div(
+                        id = {'type':'wsi-files-upload-div','index':0},
+                        children = [
+                            dbc.Label('Upload DAPI (morphology) Image Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index':0},
+                                uploadComplete = False,
+                                baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = parentId,
+                                filetypes = ['svs','ndpi','scn','tiff','tif']
+                            )
+                        ]
+                    ),
+                    html.Div(
+                        id = {'type':'wsi-files-upload-div','index':1},
+                        children = [
+                            dbc.Label('Upload Alignment File Here!'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index':1},
+                                uploadComplete = False,
+                                baseurl = self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = parentId,
+                                filetypes = ['csv','zip']
+                            )
+                        ]
+                    )
+                ],align='center'),
+                dbc.Row([
+                    dbc.Col(dbc.Label('Select Organ: ',html_for = {'type':'organ-select','index':0}),md=4),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [
+                                'Kidney', 'Skin', 'Intestine', 'Lung', 'Other Organs'
+                            ],
+                            placeholder = 'Organ',
+                            id = {'type':'organ-select','index':0}
+                        )
+                    )
+                ])
+            ])
         
         user_data_store['upload_wsi_id'] = None
         user_data_store['upload_omics_id'] = None
@@ -5549,20 +5442,102 @@ class FUSION:
     def girder_login(self,p_butt,create_butt,username,pword,email,firstname,lastname):
 
         create_user_children = []
-        print(f'login ctx.triggered_id: {ctx.triggered_id}')
         usability_signup_style = no_update
         usability_butt_style = no_update
+        long_plugin_components = [no_update]
 
         if ctx.triggered_id=='login-submit':
 
             try:
                 user_info, user_details = self.dataset_handler.authenticate(username,pword)
-
                 user_id = user_details['_id']
+
+                user_jobs = self.dataset_handler.get_user_jobs(user_id)
+                if len(user_jobs)>0:
+                    plugin_progress_div = []
+                    for job_idx, job in enumerate(user_jobs):
+                        plugin_name = job['title']
+                        plugin_status = job['status']
+                        
+                        if plugin_status==3:
+                            current_status_badge = dbc.Badge(
+                                html.A('Complete'),
+                                color = 'success',
+                                id = {'type': 'job-status-badge','index': job_idx}
+                            )
+                        elif plugin_status==2:
+                            current_status_badge = dbc.Badge(
+                                html.A('Running'),
+                                color = 'warning',
+                                id = {'type': 'job-status-badge','index': job_idx}
+                            )
+                        elif plugin_status==4:
+                            current_status_badge = dbc.Badge(
+                                html.A('Failed'),
+                                color = 'danger',
+                                id = {'type': 'job-status-badge','index': job_idx}
+                            )
+                        else:
+                            current_status_badge = dbc.Badge(
+                                html.A(f'Unknown: ({plugin_status})'),
+                                color = 'info',
+                                id = {'type': 'job-status-badge','index': job_idx}
+                            )
+
+                        plugin_progress_div.append(
+                            dbc.Card([
+                                dbc.CardHeader([
+                                    plugin_name,
+                                    current_status_badge,
+                                    html.I(
+                                        className = 'bi bi-info-circle-fill me-5',
+                                        id = {'type': 'job-status-button','index': job_idx}
+                                    ),
+                                    dbc.Popover(
+                                        children = [
+                                            html.Img(src = './assets/fusey_clean.svg',height=20,width=20),
+                                            'Update job status and view logs'
+                                        ],
+                                        target = {'type': 'job-status-button','index': job_idx},
+                                        body = True,
+                                        trigger = 'hover'
+                                    )
+                                ]),
+                                dbc.Collapse(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            html.Div(
+                                                id = {'type': 'checked-job-logs','index': job_idx},
+                                                children = [],
+                                                style = {'maxHeight': '20vh','overflow':'scroll'}
+                                            )
+                                        )
+                                    ),
+                                    id = {'type': 'checked-job-collapse','index':job_idx},
+                                    is_open = False
+                                )
+                            ])
+                        )
+
+                else:
+                    plugin_progress_div = ['No jobs run yet!']
+                
+                long_plugin_components = [html.Div(
+                    children = plugin_progress_div,
+                    style = {'maxHeight': '30vh','overflow':'scroll'}
+                )]
+
 
                 button_color = 'success'
                 button_text = 'Success!'
-                logged_in_user = f'Welcome: {username}'
+                logged_in_user = [
+                    f'Welcome: {username}',
+                    dbc.Badge(
+                        html.A('Jobs'),
+                        color = 'success' if len(user_jobs)>0 else 'secondary',
+                        id = 'long-plugin-butt'
+                    )
+                ]
                 upload_disabled = False
 
                 user_data_output = user_details
@@ -5578,12 +5553,19 @@ class FUSION:
 
                 button_color = 'warning'
                 button_text = 'Login Failed'
-                logged_in_user = 'Welcome: fusionguest'
+                logged_in_user = [
+                    'Welcome: fusionguest',
+                    dbc.Badge(
+                        html.A('Jobs'),
+                        color = 'secondary',
+                        id = 'long-plugin-butt'
+                    )
+                ]
                 upload_disabled = True
 
                 user_data_output = no_update
 
-            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output
+            return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output, long_plugin_components
         
         elif ctx.triggered_id=='create-user-submit':
             if len(email)==0 or len(firstname)==0 or len(lastname)==0:
@@ -5605,10 +5587,17 @@ class FUSION:
 
                 button_color = 'success'
                 button_text = 'Login'
-                logged_in_user = 'Welcome: fusionguest'
+                logged_in_user = [
+                    'Welcome: fusionguest',
+                    dbc.Badge(
+                        html.A('Jobs'),
+                        color = 'secondary',
+                        id = 'long-plugin-butt'
+                    )
+                ]
                 upload_disabled = True
 
-                user_data_output = no_update
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], no_update, long_plugin_components
 
                 return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], user_data_output
 
@@ -5619,7 +5608,14 @@ class FUSION:
 
                     button_color = 'success',
                     button_text = 'Success!',
-                    logged_in_user = f'Welcome: {username}'
+                    logged_in_user = [
+                        f'Welcome: {username}',
+                        dbc.Badge(
+                            html.A('Jobs'),
+                            color = 'secondary',
+                            id = 'long-plugin-butt'
+                        )
+                    ]
                     upload_disabled = False
 
                     user_data_output = {
@@ -5634,121 +5630,221 @@ class FUSION:
                         usability_signup_style = {'display':'none'}
                         usability_butt_style = {'marginLeft':'5px','display':'inline-block'}
 
+                    user_data_output = json.dumps(user_data_output)
 
                 except girder_client.AuthenticationError:
 
                     button_color = 'warning'
                     button_text = 'Login Failed'
-                    logged_in_user = f'Welcome: fusionguest'
+                    logged_in_user = [
+                        f'Welcome: fusionguest',
+                        dbc.Badge(
+                            html.A('Jobs'),
+                            color = 'secondary',
+                            id = 'long-plugin-butt'
+                        )
+                    ]
                     upload_disabled = True
 
                     user_data_output = no_update
             
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, json.dumps({'user_id': username}), [usability_signup_style],[usability_butt_style], user_data_output, long_plugin_components
 
         else:
             raise exceptions.PreventUpdate
 
     def upload_data(self,wsi_file,omics_file,wsi_file_flag,omics_file_flag, user_data_store):
-        
+        """
+        User uploads either a WSI or an associated file
+        """
         user_data_store = json.loads(user_data_store)
 
-        print(f'Triggered id for upload_data: {ctx.triggered_id}')
+        if not ctx.triggered[0]['value']:
+            raise exceptions.PreventUpdate
+
         if ctx.triggered_id['type']=='wsi-upload':
+            # This ctx.triggered component has a "fileTypeFlag" and "uploadComplete" trigger
+            wsi_file_flag = get_pattern_matching_value(wsi_file_flag)
+            if not user_data_store['upload_wsi_id']:
+                # If a wsi has not yet been uploaded
+                if not wsi_file_flag:
+                    # This is a valid file type for wsi uploads (will be None if untriggered or True for unaccepted file type)
+                    prop_id = ctx.triggered[0]['prop_id'].split('.')[-1]
+                    if prop_id=='uploadComplete':
+                        # Getting the uploaded item id
+                        upload_wsi_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                        user_data_store['upload_wsi_id'] = upload_wsi_id
 
-            # Getting the uploaded item id
-            upload_wsi_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                        wsi_upload_children = [
+                            dbc.Alert('WSI Upload Success!',color='success')
+                        ]
 
-            user_data_store['upload_wsi_id'] = upload_wsi_id
+                        user_data_store['upload_check']['WSI'] = True
 
-            if not upload_wsi_id is None:
-                if not wsi_file_flag[0]:
-                    wsi_upload_children = [
-                        dbc.Alert('WSI Upload Success!',color='success')
-                    ]
-
-                    user_data_store['upload_check']['WSI'] = True
-
-                    # Adding metadata to the uploaded slide
-                    self.dataset_handler.add_slide_metadata(
-                        item_id = upload_wsi_id,
-                        metadata_dict = {
-                            'Spatial Omics Type': user_data_store['upload_type']
-                        }
-                    )
-
-                else:
-                    wsi_upload_children = [
-                        dbc.Alert('WSI Upload Failure! Accepted file types include svs, ndpi, scn, tiff, and tif',color='danger'),
-                        UploadComponent(
-                            id = {'type':'wsi-upload','index':0},
-                            uploadComplete=False,
-                            baseurl=self.dataset_handler.apiUrl,
-                            girderToken=user_data_store['token'],
-                            parentId=user_data_store['latest_upload_folder']['id'],
-                            filetypes=['svs','ndpi','scn','tiff','tif']                      
+                        # Adding metadata to the uploaded slide
+                        self.dataset_handler.add_slide_metadata(
+                            item_id = upload_wsi_id,
+                            metadata_dict = {
+                                'Spatial Omics Type': user_data_store['upload_type']
+                            }
                         )
-                    ]
-
-            else:
-                wsi_upload_children = no_update
-            
-            if 'Omics' in user_data_store['upload_check']:
-                if not user_data_store['upload_check']['Omics']:
-                    omics_upload_children = no_update
+                    else:
+                        # upload incomplete
+                        wsi_upload_children = [no_update]*len(ctx.outputs_list[2])
                 else:
-                    omics_upload_children = [
-                        dbc.Alert('Omics Upload Success!')
+                    # This is for an invalid file type
+                    wsi_upload_children = [
+                        html.Div([
+                            dbc.Alert('WSI Upload Failure! Accepted file types include svs, ndpi, scn, tiff, and tif',color='danger'),
+                            UploadComponent(
+                                id = {'type':'wsi-upload','index':0},
+                                uploadComplete=False,
+                                baseurl=self.dataset_handler.apiUrl,
+                                girderToken=user_data_store['token'],
+                                parentId=user_data_store['latest_upload_folder']['id'],
+                                filetypes=['svs','ndpi','scn','tiff','tif']                      
+                            )
+                        ])
                     ]
             else:
-                omics_upload_children = no_update
+                # This is for if one has already been uploaded
+                wsi_upload_children = [no_update]*len(ctx.outputs_list[2])
+           
+            if not user_data_store['upload_type']=='Regular':
+                omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
-        elif ctx.triggered_id['type']=='omics-upload':
+        elif ctx.triggered_id['type']=='wsi-files-upload':
             
-            upload_omics_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
-            
-            user_data_store['upload_omics_id'] = upload_omics_id
+            if user_data_store['upload_type']=='Visium':
+                # Uploading omics file (h5ad, rds)
+                # There will only be one additional file uploaded here
+                omics_file_flag = get_pattern_matching_value(omics_file_flag)
+                if not user_data_store['upload_omics_id'] is None:
+                    # If an omics file hasn't been uploaded yet
+                    if not omics_file_flag:
+                        # If this is a valid file type
+                        prop_id = ctx.triggered[0]['prop_id'].split('.')[-1]
 
-            if not self.upload_omics_id is None:
-                #TODO: get_pattern_matching_value test here
-                if type(omics_file_flag)==list:
-                    if len(omics_file_flag)>0:
-                        if not omics_file_flag[0]:
+                        if prop_id=='uploadComplete':
+                            upload_omics_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                            user_data_store['upload_omics_id'] = upload_omics_id
+                            
                             omics_upload_children = [
                                 dbc.Alert('Omics Upload Success!')
                             ]
 
                             user_data_store['upload_check']['Omics'] = True
+
+                            #TODO: Add this to the files of the WSI
                         else:
-                            omics_upload_children = [
-                                dbc.Alert('Omics Upload Failure! Accepted file types are: rds',color = 'danger'),
+                            omics_upload_children = [no_update]*len(ctx.outputs_list[3])
+                    else:
+                        # This is an invalid file tye:
+                        omics_upload_children = [
+                            html.Div([
+                                dbc.Alert('Omics Upload Failure! Accepted file types are: h5ad, rds',color = 'danger'),
                                 UploadComponent(
-                                    id = {'type':'omics-upload','index':0},
+                                    id = {'type':'wsi-files-upload','index':0},
                                     uploadComplete=False,
                                     baseurl=self.dataset_handler.apiUrl,
                                     girderToken=user_data_store['token'],
                                     parentId=user_data_store['latest_upload_folder']['id'],
-                                    filetypes=['rds','csv','h5ad']                 
+                                    filetypes=['rds','h5ad']                 
                                     )
-                            ]
-                    else:
-                        omics_upload_children = no_update
+                            ])
+                        ]
                 else:
-                    omics_upload_children = no_update
-            else:
-                omics_upload_children = no_update
+                    # This has already been uploaded
+                    omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
-            if not user_data_store['upload_check']['WSI']:
-                wsi_upload_children = no_update
-            else:
-                wsi_upload_children = [
-                    dbc.Alert('WSI Upload Success!',color='success')
-                ]
+            elif user_data_store['upload_type']=='CODEX':
+                # Check index of triggered id and add to main item files
+                # Additional file is the histology image
+                omics_file_flag = get_pattern_matching_value(omics_file_flag)
+
+                if not user_data_store['upload_histology_id'] is None:
+                    # If the histology image hasn't been uploaded yet
+                    if not omics_file_flag:
+                        # If this is a valid file type
+                        prop_id = ctx.triggered[0]['prop_id'].split('.')[-1]
+
+                        if prop_id=='uploadComplete':
+                            upload_histology_id = self.dataset_handler.get_new_upload_id(user_data_store['latest_upload_folder']['id'])
+                            user_data_store['upload_histology_id'] = upload_histology_id
+
+                            omics_upload_children = [
+                                dbc.Alert('Histology Image Upload Success!')
+                            ]
+
+                            user_data_store['upload_check']['Histology'] = True
+                        else:
+                            omics_upload_children = [no_update]*len(ctx.outputs_list[3])
+
+                    else:
+                        # This is an invalid file type
+                        omics_upload_children = [
+                            html.Div([
+                                dbc.Alert('Histology Upload Failure! Accepted file types are: svs, ndpi, scn, tiff, tif',color = 'danger'),
+                                UploadComponent(
+                                    id = {'type':'wsi-files-upload','index':0},
+                                    uploadComplete = False,
+                                    baseurl = self.dataset_handler.apiUrl,
+                                    girderToken = user_data_store['token'],
+                                    parentId = user_data_store['latest_upload_folder']['id'],
+                                    filetypes = ['svs','ndpi','scn','tiff','tif']
+                                )
+                            ])
+                        ]
+                else:
+                    # This has already been uploaded
+                    omics_upload_children = [no_update]*len(ctx.outputs_list[3])
+
+            elif user_data_store['upload_type'] == 'Xenium':
+                # Check index of triggered id and add to main item files
+                # inputs go [morphology, alignment.csv.zip]
+                omics_upload_children = [no_update]*len(ctx.outputs_list[3])
+
+                triggered_prop = ctx.triggered[0]['prop_id']
+                prop_id = triggered_prop.split('.')[-1]
+                triggered_index = ctx.triggered_id['index']
+
+                if len(omics_file_flag)>triggered_index:
+                    bad_file_type = omics_file_flag[triggered_index]
+                else:
+                    bad_file_type = omics_file_flag[0]
+
+                if not bad_file_type:
+                    if prop_id=='uploadComplete':
+                        omics_upload_children[ctx.triggered_id['index']] = dbc.Alert(
+                            'Upload Success!',
+                            color = 'success'
+                        )
+
+                        user_data_store['upload_check'][list(user_data_store['upload_check'].keys())[ctx.triggered_id['index']+1]] = True
+
+                        #TODO: Add this file to the main item's files      
+                else:
+                    omics_upload_children[ctx.triggered_id['index']] = [
+                        html.Div([
+                            dbc.Alert('Upload Failure!',color='danger'),
+                            UploadComponent(
+                                id = {'type':'wsi-files-upload','index': triggered_index},
+                                baseurl=self.dataset_handler.apiUrl,
+                                girderToken = user_data_store['token'],
+                                parentId = user_data_store['latest_upload_folder']['id'],
+                                filetypes = ['svs','ndpi','scn','tiff','tif','csv','zip']
+                            )
+                        ])
+                    ]
+                
+                
+            wsi_upload_children = [no_update]*len(ctx.outputs_list[2])
 
         else:
             print(f'ctx.triggered_id["type"]: {ctx.triggered_id["type"]}')
 
         # Checking the upload check
+        print(f'upload check: {user_data_store["upload_check"]}')
         if all([user_data_store['upload_check'][i] for i in user_data_store['upload_check']]):
             print('All set!')
 
@@ -5759,11 +5855,7 @@ class FUSION:
                     dbc.Alert('Omics Upload Success!')
                 ]
             else:
-                omics_upload_children = no_update
-
-            wsi_upload_children = [
-                dbc.Alert('WSI Upload Success!',color='success')
-            ]
+                omics_upload_children = [no_update]*len(ctx.outputs_list[3])
 
             thumb_fig = dcc.Graph(
                 figure=go.Figure(
@@ -5803,18 +5895,18 @@ class FUSION:
             post_upload_style = {'display':'flex'}
             disable_upload_type = True
             
-            if 'Omics' in user_data_store['upload_check']:
-                return slide_metadata_table, thumb_fig, [wsi_upload_children], [omics_upload_children], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' }), json.dumps(user_data_store)
+            if not user_data_store['upload_type']=='Regular':
+                return slide_metadata_table, thumb_fig, wsi_upload_children, omics_upload_children, structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'Visium' }), json.dumps(user_data_store)
             else:
-                return slide_metadata_table, thumb_fig, [wsi_upload_children], [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' }), json.dumps(user_data_store)
+                return slide_metadata_table, thumb_fig, wsi_upload_children, [], structure_type_disabled, post_upload_style, disable_upload_type, json.dumps({'plugin_used': 'upload', 'type': 'non-Omnics' }), json.dumps(user_data_store)
         else:
 
             disable_upload_type = True
 
-            if 'Omics' in user_data_store['upload_check']:
-                return no_update, no_update,[wsi_upload_children], [omics_upload_children], True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
+            if not user_data_store['upload_type'] == 'Regular':
+                return no_update, no_update,wsi_upload_children, omics_upload_children, True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
             else:
-                return no_update, no_update, [wsi_upload_children], [], True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
+                return no_update, no_update, wsi_upload_children, [], True, no_update, disable_upload_type, no_update, json.dumps(user_data_store)
     
     def add_slide_metadata(self, button_click, table_data, user_data_store):
 
@@ -5954,7 +6046,15 @@ class FUSION:
             new_upload = seg_upload[0]
             
             # Processing newly uploaded annotations
-            processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'])
+            if user_data_store['upload_type']=='Xenium':
+                alignment_matrix = self.dataset_handler.grab_from_user_folder(
+                    filename = 'matrix.csv',
+                    username = user_data_store['login'],
+                    folder = user_data_store['latest_upload_folder']['path'].replace('Public/','')
+                ).T.reset_index().values
+                processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'],np.float64(alignment_matrix))
+            else:
+                processed_anns = self.prep_handler.process_uploaded_anns(new_filename,new_upload,user_data_store['upload_wsi_id'])
 
             if not processed_anns is None:
                 return_items = current_up_anns[0]
@@ -5974,7 +6074,7 @@ class FUSION:
                         title = new_filename,
                         children = [
                             dbc.Alert('Invalid file type! Vali',color='danger'),
-                            'Valid file types: Aperio XML (.xml), JSON (.json), GeoJSON (.geojson)'
+                            'Valid file types: Aperio XML (.xml), JSON (.json), GeoJSON (.geojson), or CSV (.csv)'
                         ]
                     )
                 )
@@ -6130,7 +6230,7 @@ class FUSION:
                 # Running post-segmentation worfklow from Prepper
                 self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id'],self.upload_annotations)
 
-            if user_data_store['upload_type'] == 'Visium':
+            elif user_data_store['upload_type'] == 'Visium':
                 # Extracting annotations and initial sub-compartment mask
                 self.upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
                 
@@ -6150,17 +6250,24 @@ class FUSION:
                 # Running post-segmentation workflow from CODEX Prep
                 frame_names, current_frame = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id']) 
 
+            elif user_data_store['upload_type'] == 'Xenium':
+
+                # Running post-segmentation workflow from XeniumPrep
+                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(
+                    user_data_store['upload_wsi_id']
+                )
+
             # Populate with default sub-compartment parameters
             self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
 
             sub_comp_method = 'Manual'
 
-            if user_data_store['upload_type'] in ['Visium','Regular']:
+            if user_data_store['upload_type'] in ['Visium','Regular','Xenium']:
 
                 if not self.layer_ann is None:
 
                     ftu_value = self.feature_extract_ftus[self.layer_ann['current_layer']]
-                    image, mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_info,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                    image, mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_data_store,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
 
                     self.layer_ann['current_image'] = image
                     self.layer_ann['current_mask'] = mask
@@ -6180,6 +6287,7 @@ class FUSION:
                 prep_values = {
                     'frames': frame_names
                 }
+
 
             # Generating upload preprocessing row
             prep_row = self.layout_handler.gen_uploader_prep_type(user_data_store['upload_type'],prep_values)
@@ -6253,7 +6361,7 @@ class FUSION:
 
             if ctx_triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
                 
-                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_info,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_data_store,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
                 self.layer_ann['current_image'] = new_image
                 self.layer_ann['current_mask'] = new_mask
 
@@ -6294,34 +6402,6 @@ class FUSION:
             feature_extract_children = [self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)]
 
             return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
-
-    def grab_nuc_region(self, thumb_fig_click, frame):
-
-        # Get a new region of the full image, or update the frame thumbnail.
-        print(thumb_fig_click)
-        print(frame)
-        print(ctx.triggered)
-
-        print(ctx.outputs_list)
-
-        raise exceptions.PreventUpdate
-
-        pass
-
-    def update_nuc_segmentation(self,nuc_method,nuc_thresh,view_type,go_to_feat):
-
-        # Generating nucleus segmentation image from user inputs
-        print(ctx.triggered)
-        print(nuc_method)
-        print(nuc_thresh)
-        print(view_type)
-        print(go_to_feat)
-
-        print(ctx.outputs_list)
-
-        raise exceptions.PreventUpdate
-
-        pass
 
     def run_feature_extraction(self,feat_butt,skip_feat,include_ftus,include_features,user_data_store):
 
@@ -6564,7 +6644,7 @@ class FUSION:
         user_data_store = json.loads(user_data_store)
 
         used_get_cluster_data_plugin = None
-        clustering_data = pd.DataFrame.from_records(cluster_data_store['clustering_data'])
+        clustering_data = pd.DataFrame.from_dict(cluster_data_store['clustering_data'],orient='index')
 
         if active_tab == 'clustering-tab':
              # Checking the current slides to see if they match vis_sess_store:
@@ -6658,7 +6738,7 @@ class FUSION:
                     print(f'data_get_status: {data_get_status}')
                     time.sleep(1)
 
-                cluster_data_store['clustering_data'] = self.dataset_handler.load_clustering_data(user_data_store).to_dict('records')
+                cluster_data_store['clustering_data'] = self.dataset_handler.load_clustering_data(user_data_store).to_dict('index')
 
                 get_data_div_children = dbc.Alert(
                     'Clustering data aligned!',
@@ -6713,7 +6793,7 @@ class FUSION:
             raise exceptions.PreventUpdate
         
         if not cluster_data_store['feature_data'] is None:
-            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+            feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
             feature_columns = [i for i in feature_data if i not in ['label','Hidden','Main_Cell_Types','Cell_States']]
 
             # If this is umap data then save one sheet with the raw data and another with the umap embeddings
@@ -6747,7 +6827,7 @@ class FUSION:
         if ctx.triggered[0]['value']:
 
             disable_button = True
-            feature_data = pd.DataFrame.from_records(cluster_data_store['feature_data'])
+            feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
             
             # Saving current feature data to user public folder
             features_for_markering = self.dataset_handler.save_to_user_folder(
@@ -6905,9 +6985,10 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def update_question_div(self,question_tab,logged_in_user):
+    def update_question_div(self,question_tab,user_store_data):
 
-        logged_in_username = logged_in_user.split(' ')[-1]
+        user_store_data = json.loads(user_store_data)
+        logged_in_username = user_store_data['login']
         # Updating the questions that the user sees in the usability questions tab
         usability_info = self.dataset_handler.update_usability()
         # Username is also present in the welcome div thing
@@ -7188,11 +7269,15 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def add_channel_color_select(self,channel_opts):
+    def add_channel_color_select(self,channel_opts, slide_info_store):
 
         # Creating a new color selector thing for overlaid channels?
         #TODO: get_pattern_matching_value test here
+
         if not channel_opts is None:
+            slide_info_store = json.loads(slide_info_store)
+            current_channels = slide_info_store['current_channels']
+
             if type(channel_opts)==list:
                 if len(channel_opts[0])>0:
                     channel_opts = channel_opts[0]
@@ -7202,13 +7287,14 @@ class FUSION:
                     active_tab = None
                     disable_butt = False
                     channel_opts = channel_opts[0]
-                    self.current_channels = {}
             
             # Removing any channels which aren't included from self.current_channels
-            intermediate_dict = self.current_channels.copy()
-            current_channels = list(self.current_channels.keys())
+            if not current_channels is None:
+                intermediate_dict = current_channels.copy()
+            else:
+                intermediate_dict = {}
 
-            self.current_channels = {}
+            current_channels = {}
             channel_tab_list = []
             for c_idx,channel in enumerate(channel_opts):
                 
@@ -7217,7 +7303,7 @@ class FUSION:
                 else:
                     channel_color = 'rgba(255,255,255,255)'
 
-                self.current_channels[channel] = {
+                current_channels[channel] = {
                     'index': self.wsi.channel_names.index(channel),
                     'color': channel_color
                 }
@@ -7228,6 +7314,7 @@ class FUSION:
                         tab_id = channel,
                         label = channel,
                         activeTabClassName='fw-bold fst-italic',
+                        label_style = {'color': channel_color if not channel_color=='rgba(255,255,255,255)' else 'rgb(0,0,0,255)'},
                         children = [
                             dmc.ColorPicker(
                                 id =  {'type':'overlay-channel-color','index':c_idx},
@@ -7245,25 +7332,32 @@ class FUSION:
                 active_tab = active_tab
             )
 
-            return [channel_tabs],[disable_butt]
-        else:
-            self.current_channels = {}
+            slide_info_store['current_channels'] = current_channels
+            slide_info_store = json.dumps(slide_info_store)
 
-            return [],[False]
+            return [channel_tabs],[disable_butt], slide_info_store
+        else:
+            current_channels = {}
+
+            slide_info_store['current_channels'] = current_channels
+
+            return [],[False], slide_info_store
     
-    def add_channel_overlay(self,butt_click,channel_colors,channels):
+    def add_channel_overlay(self,butt_click,channel_colors,channels, slide_info_store):
 
         # Adding an overlay for channel with a TileLayer containing stylized grayscale info
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
         
+        slide_info_store = json.loads(slide_info_store)
+        current_channels = slide_info_store['current_channels']
         # self.current_channels contains a list of all the currently overlaid channels
         # Updating the color for this channel
         for ch, co in zip(channels,channel_colors):
-            self.current_channels[ch]['color'] = co
+            current_channels[ch]['color'] = co
 
-        updated_channel_idxes = [self.current_channels[i]['index'] for i in self.current_channels]
-        updated_channel_colors = [self.current_channels[i]['color'] for i in self.current_channels]
+        updated_channel_idxes = [current_channels[i]['index'] for i in current_channels]
+        updated_channel_colors = [current_channels[i]['color'] for i in current_channels]
 
         update_style = {
             c_idx: color
@@ -7273,11 +7367,18 @@ class FUSION:
         updated_urls = []
         for c_idx, old_style in enumerate(self.wsi.channel_tile_url):
             if c_idx not in updated_channel_idxes:
-                base_style = {
-                    c_idx: "rgba(255,255,255,255)"
-                }
+                if not self.wsi.channel_names[c_idx]=='Histology (H&E)':
+                    base_style = {
+                        c_idx: "rgba(255,255,255,255)"
+                    }
+                else:
+                    base_style = {
+                        band['framedelta']: band['palette'][-1]
+                        for band in self.wsi.rgb_style_dict['bands']
+                    }
 
                 new_url = self.wsi.update_url_style(base_style | update_style)
+
             else:
 
                 new_url = self.wsi.update_url_style(update_style)
@@ -7290,7 +7391,10 @@ class FUSION:
             for co in channel_colors
         ]
 
-        return updated_urls, tab_label_style
+        slide_info_store['current_channels'] = current_channels
+        slide_info_store = json.dumps(slide_info_store)
+
+        return updated_urls, tab_label_style, slide_info_store
 
     def get_asct_table(self,butt_click,hgnc_id):
         """
@@ -7379,17 +7483,20 @@ class FUSION:
         """
         pass
     
-    def add_filter(self,butt_click, delete_click):
+    def add_filter(self,butt_click, delete_click, slide_info_store):
         """
         Adding a new filter to apply to current FTUs
         """
-        if not self.wsi is None and not self.overlay_prop is None and not self.filter_vals is None:
+
+        slide_info_store = json.loads(slide_info_store)
+        overlay_prop = slide_info_store['overlay_prop']
+        if not self.wsi is None and not overlay_prop is None and not self.filter_vals is None:
             if ctx.triggered_id=='add-filter-button':
                 # Returning a new dropdown for selecting properties to use for a filter
 
                 patched_list = Patch()
                 # Find min and max vals
-                filter_val = [i for i in self.wsi.properties_list if not 'Cell_Subtypes' in i and not i=='Max Cell Type'][0]
+                filter_val = [i for i in self.wsi.properties_list if not 'Cell_Subtypes' in i and not i in ['Max Cell Type','Cell Type']][0]
                 if '-->' in filter_val:
                     filter_val_parts = filter_val.split(' --> ')
                     m_prop = filter_val_parts[0]
@@ -7430,8 +7537,8 @@ class FUSION:
                         dbc.Row([
                             dbc.Col(
                                 dcc.Dropdown(
-                                    options = [i for i in self.wsi.properties_list if not i=='Max Cell Type' and not 'Cell_Subtypes' in i],
-                                    value = [i for i in self.wsi.properties_list if not i=='Max Cell Type' and not 'Cell_Subtypes' in i][0],
+                                    options = [i for i in self.wsi.properties_list if not i in ['Max Cell Type','Cell Type'] and not 'Cell_Subtypes' in i],
+                                    value = [i for i in self.wsi.properties_list if not i in ['Max Cell Type','Cell Type'] and not 'Cell_Subtypes' in i][0],
                                     placeholder = 'Select new property to filter FTUs',
                                     id = {'type':'added-filter-drop','index':butt_click}
                                 ),
@@ -7495,84 +7602,23 @@ class FUSION:
         """
         Takes as input some selected cells, a frame to plot their distribution of intensities, and then a Set button that labels those cells
         """
-        selectedData = get_pattern_matching_value(selectedData)
-        return_div = html.Div()
-        cell_markers = no_update
 
         if ctx.triggered_id is None:
             raise exceptions.PreventUpdate
-        
+            
         if ctx.triggered_id['type'] in ['ftu-cell-pie', 'cell-labeling-channel-drop']:
+            
+            all_cell_markers = []
+            for sD in selectedData:
+                if not sD is None:
+                    # Pulling customdata from each point object
+                    labeling_cells = [i['customdata'] for i in sD['points']]
 
-            if not selectedData is None:
-                print('Pulling new cells from clusters')
-                # Pulling customdata from each point object
-                labeling_cells = [i['customdata'] for i in selectedData['points']]
-
-                if not ctx.triggered_id['type']=='cell-labeling-channel-drop':
-                    channel_val = []
-
-                updated_cell_geojson, cell_markers = make_marker_geojson([i[0]['Bbox'] if type(i)==list else i['Bbox'] for i in labeling_cells],convert_coords = True, wsi = self.wsi)
-
-                return_div = html.Div([
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Row(html.H6('Selected Cells')),
-                            dbc.Card(
-                                dbc.CardBody(
-                                    children = [
-                                        dcc.Checklist(
-                                            options = [
-                                                {'label':f'Cell {idx}','value':'_'.join([str(j) for j in i[0]['Bbox']]) if type(i)==list else '_'.join([str(j) for j in i['Bbox']])}
-                                                for idx,i in enumerate(labeling_cells)
-                                            ],
-                                            value = ['_'.join([str(j) for j in i[0]['Bbox']]) if type(i)==list else '_'.join([str(j) for j in i['Bbox']]) for i in labeling_cells]
-                                        )
-                                        ],
-                                    style = {'maxHeight':'60vh','overflow':'scroll'}
-                                    )
-                                )
-                            ],
-                            md = 4
-                        ),
-                        dbc.Col([
-                            dbc.Row(html.H6('Selected Cell Labeling')),
-                            dbc.Row([
-                                dbc.Col(
-                                    'Label for Checked Cells: ',
-                                    md = 3
-                                ),
-                                dbc.Col(
-                                    dcc.Input(
-                                        id = {'type':'checked-cell-label','index':0},
-                                        placeholder = 'Type cell label here'
-                                    ),
-                                    md = 6
-                                ),
-                                dbc.Col(
-                                    dbc.Button(
-                                        'Submit',
-                                        className = 'd-grid col-12 mx-auto',
-                                        id = {'type':'checked-cell-label-butt','index':0}
-                                    ),
-                                    md = 3
-                                )
-                            ]),
-                            dbc.Row([
-                                html.Div(
-                                    id = 'cell-labeling-rationale',
-                                    children = [
-                                        'This is where the cell labeling rationale goes'
-                                    ]
-                                )
-                            ])
-                        ],md = 8)
-                    ])
-                ])
-            else:
-                raise exceptions.PreventUpdate
-
-        return [return_div], [f'{len(selectedData["points"])} Cells selected'], cell_markers
+                    updated_cell_geojson, cell_markers = make_marker_geojson([i[0]['Bbox'] if type(i)==list else i['Bbox'] for i in labeling_cells],convert_coords = True, wsi = self.wsi)
+                    all_cell_markers.extend(cell_markers)
+            return all_cell_markers
+        else:
+            raise exceptions.PreventUpdate
 
     def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types, user_data_store):
         """
@@ -7663,7 +7709,7 @@ class FUSION:
         
         return return_div, new_annotation_tab_group, json.dumps(user_data_store)
     
-    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data):
+    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data, viewport_store_data):
         """
         Getting current annotation data (text or image) and saving to annotation session folder on the server
         """
@@ -7676,6 +7722,7 @@ class FUSION:
         session_ftu_progress_label = [no_update]*len(ctx.outputs_list[7])
 
         user_store_data = json.loads(user_store_data)
+        viewport_store_data = json.loads(viewport_store_data)
 
         line_slide = get_pattern_matching_value(line_slide)
         if line_slide is None:
@@ -7731,7 +7778,10 @@ class FUSION:
             if not 'Manual' in clicked_ftu_name and not 'Marked' in clicked_ftu_name:
                 if clicked_ftu_name=='FTU':
                     clicked_ftu_name = ftu_names[0][0].split(':')[0]
-                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(
+                    viewport_store_data['current_slide_bounds'],
+                    clicked_ftu_name
+                )
             elif 'Manual' in clicked_ftu_name:
                 manual_idx = int(clicked_ftu_name.split(':')[-1])-1
                 intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson']['features'][0]['geometry'])]
@@ -7761,7 +7811,11 @@ class FUSION:
             ftu_bbox = np.array(self.wsi.convert_map_coords(ftu_bbox_coords))
             ftu_bbox = [np.min(ftu_bbox[:,0])-50,np.min(ftu_bbox[:,1])-50,np.max(ftu_bbox[:,0])+50,np.max(ftu_bbox[:,1])+50]
             #TODO: This method only grabs histology images that are single frame or multi-frame with RGB at 0,1,2
-            ftu_image = self.dataset_handler.get_image_region(self.wsi.item_id,user_store_data,[int(i) for i in ftu_bbox])
+            ftu_image = self.dataset_handler.get_image_region(
+                self.wsi.item_id,
+                user_store_data,
+                [int(i) for i in ftu_bbox]
+            )
 
             if not ann_class_color is None:
                 color_parts = ann_class_color.replace('rgb(','').replace(')','').split(',')
@@ -7803,7 +7857,10 @@ class FUSION:
             if ctx.triggered_id['type']=='annotation-set-label':
                 # Grab the first member of the clicked ftu
                 if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
-                    intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+                    intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(
+                        viewport_store_data['current_slide_bounds'],
+                        clicked_ftu_name
+                    )
                 elif 'Manual' in clicked_ftu_name:
                     manual_idx = int(clicked_ftu_name.split(':')[-1])
                     intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
@@ -7855,7 +7912,10 @@ class FUSION:
 
             # Grab the first member of the clicked ftu
             if not 'Manual' in clicked_ftu_name and not 'Marked' in clicked_ftu_name:
-                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(self.current_slide_bounds,clicked_ftu_name)
+                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(
+                    viewport_store_data['current_slide_bounds'],
+                    clicked_ftu_name
+                )
             elif 'Manual' in clicked_ftu_name:
                 manual_idx = int(clicked_ftu_name.split(':')[-1])
                 intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
@@ -8122,45 +8182,54 @@ class FUSION:
 
         return [patched_list]
 
-    def add_cell_subtypes(self,butt_click,main_cell_types):
+    def add_cell_subtypes(self,butt_click,main_cell_types,anchor_uploads):
         """
         Extracting subtypes for a given "Main Cell Type" and adding those as a visualizable property for overlaid heatmaps
         """
 
         main_cell_types = get_pattern_matching_value(main_cell_types)
-
-        if len(main_cell_types)==0:
-            raise exceptions.PreventUpdate
-        
+        anchor_uploads = get_pattern_matching_value(anchor_uploads)
         if not ctx.triggered:
             raise exceptions.PreventUpdate
+        if main_cell_types is None:
+            raise exceptions.PreventUpdate
+        if len(main_cell_types)==0 or anchor_uploads is None:
+            raise exceptions.PreventUpdate
+        
+        if ctx.triggered_id['type']=='cell-subtype-butt':
+            new_cell_droptions = no_update
+            new_cell_subtype_dropue = [no_update]
 
-        new_cell_droptions = no_update
-        new_cell_subtype_dropue = [no_update]
-
-        if not main_cell_types is None:
-            # Running change-level plugin with these options
-            job_id = self.wsi.run_change_level(main_cell_types)        
-            job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
-            # Checking progress of the job
-            while not job_status==3 and not job_status==4:
-                time.sleep(1)
+            if not main_cell_types is None:
+                # Running change-level plugin with these options
+                job_id = self.wsi.run_change_level(main_cell_types)        
                 job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
-                print(f'change_level job status: {job_status}')
+                # Checking progress of the job
+                while not job_status==3 and not job_status==4:
+                    time.sleep(1)
+                    job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
+                    print(f'change_level job status: {job_status}')
 
-            if job_status==4:
-                raise exceptions.PreventUpdate
+                if job_status==4:
+                    raise exceptions.PreventUpdate
+                
+                # Grabbing from user "Supplemental_Annotations" folder
+                updated_annotations_file = f'{self.wsi.item_id}.json'
+                updated_annotations = self.dataset_handler.grab_from_user_folder(updated_annotations_file,'Supplemental_Annotations')
+
+                self.wsi.update_ftu_props(updated_annotations)
+                self.wsi.update_annotation_geojson(updated_annotations)
+
+                new_cell_droptions = self.wsi.properties_list
+                new_cell_subtype_dropue= ['']
+
+        elif ctx.triggered_id['type']=='upload-anchors':
             
-            # Grabbing from user "Supplemental_Annotations" folder
-            updated_annotations_file = f'{self.wsi.item_id}.json'
-            updated_annotations = self.dataset_handler.grab_from_user_folder(updated_annotations_file,'Supplemental_Annotations')
+            new_cell_droptions = no_update
+            new_cell_subtype_dropue = [no_update]
 
-            self.wsi.update_ftu_props(updated_annotations)
-            self.wsi.update_annotation_geojson(updated_annotations)
-
-            new_cell_droptions = self.wsi.properties_list
-            new_cell_subtype_dropue= ['']
-
+            cell_groups = pd.read_csv(BytesIO(anchor_uploads))
+            print(cell_groups.columns.tolist())
 
         return new_cell_droptions, new_cell_subtype_dropue
 
@@ -8262,8 +8331,6 @@ class FUSION:
 
 
 
-
-
 def app(*args):
     
     # Using DSA as base directory for storage and accessing files
@@ -8306,7 +8373,7 @@ def app(*args):
     # Saving & organizing relevant id's in GirderHandler
     print('Getting initial items metadata')
     dataset_handler.set_default_slides(initial_collection_contents)
-    dataset_handler.initialize_folder_structure(username,initial_collection,path_type)
+    #dataset_handler.initialize_folder_structure(username,initial_collection,path_type)
 
     # Getting graphics_reference.json from the FUSION Assets folder
     print(f'Getting asset items')
@@ -8350,10 +8417,7 @@ def app(*args):
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides)
-    layout_handler.gen_vis_layout(
-        wsi,
-        cli_list
-        )
+    layout_handler.gen_vis_layout(wsi,GeneHandler(),cli_list)
     layout_handler.gen_builder_layout(dataset_handler,initial_user_info)
     layout_handler.gen_uploader_layout()
 

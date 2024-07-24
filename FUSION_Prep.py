@@ -33,8 +33,14 @@ import json
 import lxml.etree as ET
 import base64
 import shutil
+import uuid
+from math import pi
+
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
+
+from io import StringIO, BytesIO
 
 #TODO: Remove some default settings
 # sub-compartment segmentation and feature extraction should vary
@@ -369,10 +375,11 @@ class Prepper:
                                         })
         return job_response
     
-    def process_uploaded_anns(self, filename, annotation_str,item_id):
+    def process_uploaded_anns(self, filename, annotation_str,item_id, alignment = None):
 
         annotation_names = []
         annotation_str = base64.b64decode(annotation_str.split(',')[-1])
+        annotation_info = None
         
         if not os.path.exists('./assets/conversion/'):
             os.makedirs('./assets/conversion/')
@@ -403,6 +410,111 @@ class Prepper:
                 json.dump(ann,f)
                 f.close()
 
+        elif 'csv' in filename:
+            # Creating cell polygons from coordinates/group
+            csv_anns = pd.read_csv(BytesIO(annotation_str),sep=',')
+            print(csv_anns.iloc[0:5,:])
+            print(csv_anns.columns.tolist())
+
+            if any(['vertex' in i for i in csv_anns.columns.tolist()]):
+                # Creating annotations from csv of vertices
+                if 'cell_id' in csv_anns.columns.tolist():
+                    unique_cells = csv_anns['cell_id'].unique().tolist()
+                    
+                    annotation_data = {
+                        "annotation": {
+                            "name": "Cells",
+                            "elements": []
+                        }
+                    }
+                    print(f'Unique cell boundaries: {len(unique_cells)}')
+                    for u_idx,u in tqdm(enumerate(unique_cells),total = len(unique_cells)):
+
+                        cell_verts = csv_anns[csv_anns['cell_id'].str.match(u)]
+                        cell_vert_x = cell_verts['vertex_x'].values[:,None]
+                        cell_vert_y = cell_verts['vertex_y'].values[:,None]
+                        cell_vert_z = np.zeros((cell_verts.shape[0],1))
+
+                        vertex_array = np.concatenate((cell_vert_x,cell_vert_y,cell_vert_z),axis=-1)
+
+                        if not alignment is None:
+                            vertex_array = np.dot(vertex_array,alignment)
+
+                        cell_element_dict = {
+                            "type": "polyline",
+                            "id": uuid.uuid4().hex[:24],
+                            "points": vertex_array.tolist(),
+                            "user": {
+                                "cell_id": u
+                            }
+                        }
+                        annotation_data['annotation']['elements'].append(cell_element_dict)
+
+                    self.girder_handler.gc.post(
+                        f'/annotation/item/{item_id}',
+                        data = json.dumps(annotation_data),
+                        headers = {
+                            'X-HTTP-Method': "POST",
+                            'Content-Type': 'application/json'
+                        }
+                    )
+
+            if any(['centroid' in i for i in csv_anns.columns.tolist()]):
+
+                # Creating annotations from csv containing centroid and area
+                if 'cell_id' in csv_anns.columns.tolist():
+                    unique_cells = csv_anns['cell_id'].unique().tolist()
+
+                    annotation_data = {
+                        "annotation": {
+                            "name": "Cells",
+                            "elements": []
+                        }
+                    }
+
+                    print(f'Unique cell centroids: {len(unique_cells)}')
+                    for u_idx, u in tqdm(enumerate(unique_cells),total = len(unique_cells)):
+
+                        cell_center = csv_anns[csv_anns['cell_id'].str.match(u)]
+                        cell_center_x = cell_center['x_centroid'].values[:,None]
+                        cell_center_y = cell_center['y_centroid'].values[:,None]
+                        cell_center_z = np.zeros((1,1))
+
+                        center_array = np.concatenate((cell_center_x,cell_center_y,cell_center_z),axis=-1)
+
+                        if not alignment is None:
+                            center_array = np.dot(center_array,alignment)
+
+                        cell_nucleus_area = cell_center['nucleus_area'].values
+                        equivalent_radius = (cell_nucleus_area/pi)**(0.5)
+                        nucleus_circle = Point(np.squeeze(center_array).tolist()).buffer(equivalent_radius)[0]
+
+                        cell_element_dict = {
+                            "type": "polyline",
+                            "id": uuid.uuid4().hex[:24],
+                            "points": [[i[0],i[1],0] for i in list(nucleus_circle.exterior.coords)],
+                            "user": {
+                                "cell_id": u,
+                                "transcript_counts":cell_center["transcript_counts"].tolist()[0] if "transcript_counts" in cell_center.columns.tolist() else 0
+                            }
+                        }
+
+                        annotation_data['annotation']['elements'].append(cell_element_dict)
+                    
+                    self.girder_handler.gc.post(
+                        f'/annotation/item/{item_id}',
+                        data = json.dumps(annotation_data),
+                        headers = {
+                            'X-HTTP-Method': "POST",
+                            'Content-Type': 'application/json'
+                        }
+                    )
+
+                    annotation_info = {
+                        "Cells": len(unique_cells)
+                    }
+
+
         if filename in os.listdir('./assets/conversion/'):
             converter_object = wak.Converter(
                 starting_file = f'./assets/conversion/{filename}',
@@ -431,8 +543,6 @@ class Prepper:
             # Removing temporary directory
             shutil.rmtree('./assets/conversion/')
         
-        else:
-            annotation_info = None
 
         return annotation_info
 
@@ -501,7 +611,7 @@ class VisiumPrep(Prepper):
 
         self.spot_aggregation_plugin = 'samborder2256_spot_aggregation_latest/spot_agg'
 
-    def run_spot_aggregation(self,image_id):
+    def run_spot_aggregation(self,image_id, user_details):
         
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
@@ -513,12 +623,12 @@ class VisiumPrep(Prepper):
                                                        'input_image':fileId,
                                                        'basedir':folderId,
                                                        'girderApiUrl':self.girder_handler.apiUrl,
-                                                       'girderToken':self.girder_handler.user_token
+                                                       'girderToken':user_details['token']
                                                    })
 
         return job_response
 
-    def run_cell_deconvolution(self,image_id,rds_id):
+    def run_cell_deconvolution(self,image_id,rds_id,user_details):
 
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
@@ -539,7 +649,7 @@ class VisiumPrep(Prepper):
                                                    })
         return cell_deconv_job
 
-    def run_spot_annotation(self,image_id,omics_id, organ, gene_method, gene_n, gene_list):
+    def run_spot_annotation(self,image_id,omics_id, organ, gene_method, gene_n, gene_list, user_details):
 
         # Getting the fileId for the image item
         image_item = self.girder_handler.gc.get(f'/item/{image_id}')
@@ -573,7 +683,7 @@ class VisiumPrep(Prepper):
                                                     'n': 0,
                                                     'list': '',
                                                     'girderApiUrl':self.girder_handler.apiUrl,
-                                                    'girderToken':self.girder_handler.user_token
+                                                    'girderToken': user_details['token']
                                                 })
                 
 
@@ -603,19 +713,19 @@ class VisiumPrep(Prepper):
                                                 'n': gene_n,
                                                 'list': gene_list,
                                                 'girderApiUrl':self.girder_handler.apiUrl,
-                                                'girderToken':self.girder_handler.user_token
+                                                'girderToken': user_details['token']
                                             })
             
         else:
             print(f'Invalid omics type: {omics_name}')
 
-    def post_segmentation(self, upload_wsi_id, upload_omics_id, upload_annotations, organ, gene_method, gene_n, gene_list):
+    def post_segmentation(self, upload_wsi_id, upload_omics_id, upload_annotations, organ, gene_method, gene_n, gene_list, user_details):
 
         # What to do after segmentation for a Visium upload
 
         # Generate spot annotations and aggregate --omics info
-        spot_annotation = self.run_spot_annotation(upload_wsi_id,upload_omics_id, organ, gene_method, gene_n, gene_list)
-        spot_aggregation = self.run_spot_aggregation(upload_wsi_id)
+        spot_annotation = self.run_spot_annotation(upload_wsi_id,upload_omics_id, organ, gene_method, gene_n, gene_list, user_details)
+        spot_aggregation = self.run_spot_aggregation(upload_wsi_id, user_details)
 
         # Getting annotations and returning layer_anns
         ftu_names = []
@@ -665,38 +775,150 @@ class CODEXPrep(Prepper):
     def __init__(self, girder_handler):
         super().__init__(girder_handler)
 
-        self.initial_segmentation_parameters = [
-            {
-                'name':'Nuclei',
-                'threshold':100,
-                'min_size':20,
-                'color':[0,0,255],
-                'marks_color':'rgb(0,0,255)'
-            }           
-        ]
+        # Defining plugin information:
 
-    def post_segmentation(self,upload_wsi_id):
-
-        # Getting the frames present for an image
-        image_metadata = self.girder_handler.get_tile_metadata(upload_wsi_id)
-
-        frame_labels = [
-            {
-                'label': f'Frame_{idx}',
-                'value': idx,
-                'disabled': False
-            }
-            for idx in range(len(image_metadata['frames']))
-        ]
-
-        current_frame = {
-            'index': 0,
-            'region': []
+        # Registration plugin
+        self.registration_plugin = {
+            'plugin_name': 'dsarchive_histomicstk_extras_latest/RegisterImage'
         }
 
-        return frame_labels, current_frame
+        # DeepCell plugin (with post-processing and feature extraction)
+        self.cell_seg_plugin = {
+            'plugin_name': 'samborder2256_deepcell_plugin_latest/DeepCell_Plugin'
+        }
+
+    def post_segmentation(self,upload_wsi_id, upload_codex_id, upload_annotations, user_details):
+        """
+        If a histology image is provided (with annotations), then show those for morphometrics extraction
+        """
+
+        # Registration:
+        if not upload_wsi_id is None:
+            registration_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.registration_plugin["plugin"]}/run',
+                                                    parameters = {
+                                                        'image1': upload_wsi_id,
+                                                        'image2': upload_codex_id,
+                                                        'girderApiUrl': self.girder_handler.apiUrl,
+                                                        'girderToken': user_details['token']
+                                                    })
+        else:
+            registration_job = None
+
+        # Running cell segmentation:
+        cell_seg_job = self.girder_handler.gc.post(f'/slicer_cli_web/{self.cell_seg_plugin["plugin_name"]}/run',
+                                                   parameters = {
+                                                       'input_image': upload_codex_id,
+                                                       'input_region': [-1,-1,-1,-1],
+                                                       'nuclei_frame': 0,
+                                                       'get_features': True,
+                                                       'girderApiUrl': self.girder_handler.apiUrl,
+                                                       'girderToken': user_details['token']
+                                                   })
+
+        # Getting annotations and returning layer_anns
+        ftu_names = []
+        for idx, i in enumerate(upload_annotations):
+            if 'annotation' in i:
+                if 'elements' in i['annotation']:
+                    if not 'interstitium' in i['annotation']['name']:
+                        if len(i['annotation']['elements'])>0:
+                            ftu_names.append({
+                                'label':i['annotation']['name'],
+                                'value':idx,
+                                'disabled':False
+                            })
+                        else:
+                            ftu_names.append({
+                                'label': i['annotation']['name']+ ' (None detected in slide)',
+                                'value':idx,
+                                'disabled': True
+                            })
+                    else:
+                        ftu_names.append({
+                            'label': i['annotation']['name'] + ' (Not implemented for interstitium)',
+                            'value': idx,
+                            'disabled': True
+                        })
+
+        if not all([i['disabled'] for i in ftu_names]):
+            # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+            layer_ann = {
+                'current_layer': [i['value'] for i in ftu_names if not i['disabled']][0],
+                'current_annotation': 0,
+                'previous_annotation': 0,
+                'max_layers': [len(i['annotation']['elements']) for i in upload_annotations if 'annotation' in i]
+            }
+        else:
+            layer_ann = None
+            ftu_names = [{
+                'label': 'No FTUs for Feature Extraction',
+                'value':1,
+                'disabled':False
+            }]
+
+        return ftu_names, layer_ann
 
 
+class XeniumPrep(Prepper):
+    def __init__(self,
+                 girder_handler):
+        super().__init__(girder_handler)
 
+        self.girder_handler = girder_handler
+
+        # Adjusting uploaded annotations (cell segmentations)
+        self.alignment_plugin = {
+            'plugin_name': ''
+        }
+
+    def post_segmentation(self, upload_wsi_id, dapi_image_id, upload_annotations, alignment, cell_info):
+        """
+        # Aligning cell_info centroids with upload_wsi (applying alignment matrix)
+        # Processing any uploaded annotations for morphometrics extraction
+
+        """
+
+        # Getting annotations and returning layer_anns
+        ftu_names = []
+        for idx, i in enumerate(upload_annotations):
+            if 'annotation' in i:
+                if 'elements' in i['annotation']:
+                    if not 'interstitium' in i['annotation']['name']:
+                        if len(i['annotation']['elements'])>0:
+                            ftu_names.append({
+                                'label':i['annotation']['name'],
+                                'value':idx,
+                                'disabled':False
+                            })
+                        else:
+                            ftu_names.append({
+                                'label': i['annotation']['name']+ ' (None detected in slide)',
+                                'value':idx,
+                                'disabled': True
+                            })
+                    else:
+                        ftu_names.append({
+                            'label': i['annotation']['name'] + ' (Not implemented for interstitium)',
+                            'value': idx,
+                            'disabled': True
+                        })
+
+        if not all([i['disabled'] for i in ftu_names]):
+            # Initializing layer and annotation idxes (starting with the first one that isn't disabled)
+            layer_ann = {
+                'current_layer': [i['value'] for i in ftu_names if not i['disabled']][0],
+                'current_annotation': 0,
+                'previous_annotation': 0,
+                'max_layers': [len(i['annotation']['elements']) for i in upload_annotations if 'annotation' in i]
+            }
+        else:
+            layer_ann = None
+            ftu_names = [{
+                'label': 'No FTUs for Feature Extraction',
+                'value':1,
+                'disabled':False
+            }]
+
+        return ftu_names, layer_ann
 
 
