@@ -641,7 +641,8 @@ class FUSION:
         self.app.callback(
             Input({'type':'questions-submit','index':ALL},'n_clicks'),
             Output({'type':'questions-submit-alert','index':ALL},'children'),
-            State({'type':'question-input','index':ALL},'value'),
+            [State({'type':'question-input','index':ALL},'value'),
+             State('user-store','data')],
             prevent_initial_call = True
         )(self.post_usability_response)
 
@@ -1927,8 +1928,8 @@ class FUSION:
                 return [html.P('Select a slide to get started!')], [no_update], [no_update], [viewport_data_return], json.dumps(user_data_store)
     
         elif current_tab=='annotation-tab':
-            if self.dataset_handler.username=='fusionguest':
-                return [no_update], [html.P('Sign in or create an account to start annotating!')], [no_update], [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+            if user_data_store["login"]=='fusionguest':
+                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
             else:
                 
                 # Getting intersecting FTU information
@@ -3973,7 +3974,6 @@ class FUSION:
                     label = 'FTU'
                     label_data = clustering_data[label].tolist()
 
-
             # Now filtering labels according to any selected filter labels
             filter_label_names = [i['title'] for i in self.dataset_handler.filter_keys if i['key'] in filter_labels]
             filter_idx = []
@@ -4143,7 +4143,6 @@ class FUSION:
                 labels_left = umap_df['label'].tolist()
                 label_info_children, filter_info_children = self.update_graph_label_children(labels_left)
 
-
                 if not type(label_data[0]) in [int,float]:
 
                     figure = go.Figure(px.scatter(
@@ -4275,7 +4274,8 @@ class FUSION:
                         label = 'FTU'
                         label_data = clustering_data[label].tolist()
 
-                label_data = [label_data[int(i)] for i in list(feature_data.index)]
+                #TODO: original index is not preserved after reading it from "records"
+                label_data = [label_data[i] for i in list(feature_data.index)]
                 # Needs an alignment step going from the full clustering_data to the na-dropped and filtered feature_data
                 # feature_data contains the features included in the current plot, label, Hidden, Main_Cell_Types, and Cell_States
                 # So for a violin plot the shape should be nX5
@@ -5599,6 +5599,7 @@ class FUSION:
 
                 return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], no_update, long_plugin_components
 
+                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], user_data_output
 
             else:
                 create_user_children = no_update
@@ -5622,6 +5623,8 @@ class FUSION:
                         'user_details': user_details,
                         'token': self.dataset_handler.user_token
                     }
+
+                    user_data_output = json.dumps(user_data_output)
 
                     if not user_info is None:
                         usability_signup_style = {'display':'none'}
@@ -7168,9 +7171,11 @@ class FUSION:
 
         return [False]*n_outputs,['success']
 
-    def post_usability_response(self,butt_click,questions_inputs):
+    def post_usability_response(self,butt_click,questions_inputs, user_store_data):
 
         # Updating usability info file in DSA after user clicks "Submit" button
+        user_store_data = json.loads(user_store_data)
+
         if butt_click:
             # Checking if all of the responses are not empty
             responses_check = [True if not i==[] and not i is None else False for i in questions_inputs]
@@ -7186,7 +7191,7 @@ class FUSION:
                     level_name = f'Level {level_idx}'
                 else:
                     level_name = 'Comments'
-                usability_info['usability_study_users'][self.dataset_handler.username]['responses'][f'{level_name}'] = questions_inputs
+                usability_info['usability_study_users'][user_store_data["login"]]['responses'][f'{level_name}'] = questions_inputs
 
                 # Posting to DSA
                 self.dataset_handler.update_usability(usability_info)
@@ -7847,7 +7852,7 @@ class FUSION:
             elif type(class_label)==list:
                 label_dict = {i:j for i,j in zip(class_label,image_label)}
             
-            label_dict['Annotator'] = self.dataset_handler.username
+            label_dict['Annotator'] = user_store_data["login"]
             
             if ctx.triggered_id['type']=='annotation-set-label':
                 # Grab the first member of the clicked ftu
