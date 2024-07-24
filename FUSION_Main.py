@@ -2634,7 +2634,7 @@ class FUSION:
         """
 
         pie_chart_features = [
-            'Main_Cell_Types','Cell_States', 'Cell Type', 'Channel_Means', 'Cell_Subtypes'
+            'Main_Cell_Types','Cell_States', 'Cell Type', 'Channel Means', 'Channel Stds','Cell_Subtypes'
         ]
 
         def make_dash_table(df):
@@ -2724,19 +2724,28 @@ class FUSION:
 
                         if type(sub_n_data)==dict:
                             sub_sub_n_props = list(sub_n_data.keys())
+                            if len(sub_sub_n_props)>0:
+                                if type(sub_n_data[sub_sub_n_props[0]])==dict:
+                                    for s_s_n_idx, s_s_n in enumerate(sub_sub_n_props):
+                                        sub_sub_n_data = sub_n_data[s_s_n]
 
-                            if type(sub_n_data[sub_sub_n_props[0]])==dict:
-                                for s_s_n_idx, s_s_n in enumerate(sub_sub_n_props):
-                                    sub_sub_n_data = sub_n_data[s_s_n]
+                                        if type(sub_sub_n_data)==dict:
+                                            # Cell_States and Cell_Subtypes for Manual ROIs
+                                            nested_prop_list.append({
+                                                'name': n,
+                                                'sub_name': s_n,
+                                                'sub_sub_name': s_s_n,
+                                                'table': pd.DataFrame({'Property': list(sub_sub_n_data.keys()),'Value': list(sub_sub_n_data.values())})
+                                            })
 
-                                    if type(sub_sub_n_data)==dict:
-                                        # Cell_States and Cell_Subtypes for Manual ROIs
-                                        nested_prop_list.append({
-                                            'name': n,
-                                            'sub_name': s_n,
-                                            'sub_sub_name': s_s_n,
-                                            'table': pd.DataFrame({'Property': list(sub_sub_n_data.keys()),'Value': list(sub_sub_n_data.values())})
-                                        })
+                                else:
+                                    nested_prop_list.append({
+                                        'name': n,
+                                        'sub_name': s_n,
+                                        'sub_sub_name': None,
+                                        'table': pd.DataFrame({'Property': list(sub_n_data.keys()),'Value': list(sub_n_data.values())})
+                                    })
+
                             else:
                                 # Cell_States and Cell_Subtypes or Main_Cell_Types for Manual ROIs
                                 nested_prop_list.append({
@@ -2845,46 +2854,68 @@ class FUSION:
                                     )
                                 )
 
+                        # Adding remainder props and adding the AccordionItem to the main list
+                        l_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_name'] is None]
+                        if len(l_props)>0:
+                            other_data_tab_list = []
+                            for l_idx,l in enumerate(l_props):
+                                # Not sure which properties will actually fall under here but need to make sure everything is gotten prior to adding to the accordion_children list
+                                l_data = l['table']
+                                l_data = l_data[l_data['Value']>0]
+                                if not l_data.empty:
+                                    other_data_tab_list.append(
+                                        dbc.Tab(
+                                            html.Div(
+                                                make_pie_chart(l_data) if l['name'] in pie_chart_features else make_dash_table(l_data)
+                                            ),
+                                            label = f'{u_n} Data {l_idx}'
+                                        )
+                                    )
+                            
+                            accordion_children.append(
+                                dbc.AccordionItem([
+                                    html.Div(
+                                        dbc.Tabs(other_data_tab_list) if len(other_data_tab_list)>0 else html.Div()
+                                    ),
+                                    html.Div(
+                                        dbc.Accordion(sub_accordion_list) if len(sub_accordion_list)>0 else html.Div()
+                                    )
+                                ], title = u_n)
+                            )
+                        else:
 
-                    # Adding main props
-                    l_props = [i for i in nested_prop_list if i['sub_name'] is None]
-                    if len(l_props)>0:
-                        for l in l_props:
-                            print(f'l_name: {l["name"]}')
-                            l_data = l['table']
-                            l_data = l_data[l_data['Value']>0]
-                            if not l_data.empty:
+                            accordion_children.append(
+                                dbc.AccordionItem([
+                                    html.Div(
+                                        dbc.Accordion(sub_accordion_list) if len(sub_accordion_list)>0 else html.Div()
+                                    )
+                                ], title = u_n)
+                            )
+
+                    # Getting the leftover properties
+                    remainder_props = [i for i in nested_prop_list if i['name'] not in unique_names]
+                    if len(remainder_props)>0:
+                        for r in remainder_props:
+                            r_data = r['table']
+                            r_data = r_data[r_data['Value']>0]
+                            if not r_data.empty:
                                 accordion_children.append(
                                     dbc.AccordionItem([
                                         html.Div(
-                                            make_pie_chart(l_data) if l['name'] in pie_chart_features else make_dash_table(l_data)
-                                        ),
-                                        html.Div(dbc.Accordion(sub_accordion_list)) if len(sub_accordion_list)>0 else html.Div()
-                                        ],
-                                        title = l['name']
-                                    )
+                                            make_pie_chart(r_data) if r['name'] in pie_chart_features else make_dash_table(r_data)
+                                        )
+                                    ], title = r['name'])
                                 )
-                    else:
-                        accordion_children.append(
-                            dbc.AccordionItem([
-                                html.Div(
-                                    dbc.Accordion(
-                                        sub_accordion_list
-                                    )
-                                    if len(sub_accordion_list)>0 else []
-                                )
-                            ], title = u_n)
-                        )
-
 
                 else:
                     # Now getting the sub_properties
                     branch_props = [i for i in nested_prop_list if not i['sub_name'] is None]
                     if len(branch_props)>0:
                         unique_names = np.unique([i['name'] for i in branch_props]).tolist()
-                        sub_tab_list = []
+
                         for u_n in unique_names:
                             u_n_list = [i for i in branch_props if i['name']==u_n]
+                            sub_tab_list = []
                             for s_u_n in u_n_list:
                                 s_u_n_data = s_u_n['table']
                                 s_u_n_data = s_u_n_data[s_u_n_data['Value']>0]
@@ -2892,49 +2923,67 @@ class FUSION:
                                     sub_tab_list.append(
                                         dbc.Tab(
                                             html.Div(
-                                                make_pie_chart(s_u_n_data) if u_n in pie_chart_features else make_dash_table(s_u_n_data),
+                                                make_pie_chart(s_u_n_data) if u_n in pie_chart_features or s_u_n['sub_name'] in pie_chart_features else make_dash_table(s_u_n_data),
                                             ),
                                             label = s_u_n['sub_name']
                                         )
                                     )
 
-                            # Getting other name props
-                            other_name_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_name'] is None]
-                            for o_n in other_name_props:
-                                o_n_data = o_n['table']
-                                o_n_data = o_n_data[o_n_data['Value']>0]
-                                if not o_n_data.empty:
-                                    accordion_children.append(
-                                        dbc.AccordionItem(
-                                            html.Div(make_pie_chart(o_n_data) if o_n['name'] in pie_chart_features else make_dash_table(o_n_data)),
-                                            title = o_n['name']
+                            # Adding main props
+                            l_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_name'] is None]
+                            if len(l_props)>0:
+                                other_data_tab_list = []
+                                for l_idx,l in enumerate(l_props):
+                                    l_data = l['table']
+                                    l_data = l_data[l_data['Value']>0]
+                                    if not l_data.empty:
+                                        other_data_tab_list.append(
+                                            dbc.Tab(
+                                                html.Div(
+                                                    make_pie_chart(l_data) if l['name'] in pie_chart_features else make_dash_table(l_data)
+                                                ),
+                                                label = f'{u_n} Data {l_idx}'
+                                            )
                                         )
-                                    )
 
-                        if len(sub_tab_list)>0:
-                            accordion_children.append(
-                                dbc.AccordionItem(
-                                    dbc.Tabs(
-                                        sub_tab_list
-                                    ),
-                                    title = u_n
-                                )
-                            )
-
-                        # Adding main props
-                        l_props = [i for i in nested_prop_list if i['sub_name'] is None and not i['name'] in unique_names]
-                        for l in l_props:
-                            l_data = l['table']
-                            l_data = l_data[l_data['Value']>0]
-                            if not l_data.empty:
                                 accordion_children.append(
-                                    dbc.AccordionItem(
+                                    dbc.AccordionItem([
                                         html.Div(
-                                            make_pie_chart(l_data) if l['name'] in pie_chart_features else make_dash_table(l_data)
+                                            dbc.Tabs(other_data_tab_list) if len(other_data_tab_list)>0 else html.Div()
                                         ),
-                                        title = l['name']
-                                    )
+                                        html.Div(
+                                            dbc.Tabs(sub_tab_list) if len(sub_tab_list)>0 else html.Div()
+                                        )
+                                    ], title = u_n)
                                 )
+
+                            else:
+                                accordion_children.append(
+                                    dbc.AccordionItem([
+                                        html.Div(
+                                            dbc.Tabs(
+                                                sub_tab_list
+                                            )
+                                            if len(sub_tab_list)>0 else []
+                                        )
+                                    ], title = u_n)
+                                )
+
+                        # All other "name" props
+                        remainder_props = [i for i in nested_prop_list if i['name'] not in unique_names]
+                        if len(remainder_props)>0:
+                            for r in remainder_props:
+                                r_data = r['table']
+                                r_data = r_data[r_data['Value']>0]
+                                if not r_data.empty:
+                                    accordion_children.append(
+                                        dbc.AccordionItem([
+                                            html.Div(
+                                                make_pie_chart(r_data) if r['name'] in pie_chart_features else make_dash_table(r_data)
+                                            )
+                                        ], title = r['name'])
+                                    )
+                        
 
                     else:
                         # Only has main props

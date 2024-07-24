@@ -587,6 +587,15 @@ class DSASlide:
                     # Just getting the count of each unique value here
                     col_vals_dict[col_name] = {i:col_values.count(i) for i in np.unique(col_values).tolist()}
 
+                elif type(col_values[0])==list:
+                    # Getting an average of all the lists
+                    mean_list_vals = np.mean(np.array(col_values),axis=0)
+                    col_vals_dict[col_name] = {
+                        f'Value {i}': j
+                        for i,j in enumerate(mean_list_vals.tolist())
+                    }
+
+
                 aggregated_properties[ftu] = aggregated_properties[ftu] | col_vals_dict
 
         return aggregated_properties
