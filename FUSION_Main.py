@@ -3244,7 +3244,6 @@ class FUSION:
         """
         if not clicked is None:
             
-            print(clicked)
             organ_store = json.loads(organ_store)
 
             table = pd.DataFrame.from_records(organ_store['table'])
@@ -3272,7 +3271,6 @@ class FUSION:
                     table_data = table_data[table_data[clicked['col']].str.match(clicked['label'])]
 
             label = clicked['label']
-            print(table_data)
 
             if not table_data.empty:
                 id = table_data[f'{clicked["col"]}/ID'].tolist()[0]
@@ -3294,7 +3292,6 @@ class FUSION:
                 else:
                     notes = 'No notes.'
             else:
-                print(table[clicked["col"]].tolist())
                 if clicked['col']+'/LABEL' in table.columns.tolist():
                     print(table[clicked['col']+'/LABEL'].tolist())
                 raise exceptions.PreventUpdate
