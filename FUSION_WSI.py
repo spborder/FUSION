@@ -518,6 +518,15 @@ class DSASlide:
         Generalized aggregation of underlying structure properties for a given polygon
         """
 
+        # Getting shape properties for the polygon itself:
+        polygon_properties = {
+            'Area': agg_polygon.area * (self.x_scale * -(self.y_scale))
+        }
+        print(agg_polygon.area)
+        print(self.x_scale)
+        print(self.y_scale)
+        print(polygon_properties)
+
         ignore_columns = ['unique_index','name','structure','ftu_name','image_id','ftu_type',
                           'Min_x_coord','Max_x_coord','Min_y_coord','Max_y_coord',
                           'x_tsne','y_tsne','x_umap','y_umap']
@@ -550,9 +559,6 @@ class DSASlide:
                 col_values = agg_object_props[col_name].tolist()
                 col_vals_dict = {col_name: {}}
                 
-                #print(col_name)
-                #print(col_values)
-
                 if type(col_values[0])==dict:
                     
                     # Test for single nested dictionary
