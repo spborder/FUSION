@@ -520,12 +520,8 @@ class DSASlide:
 
         # Getting shape properties for the polygon itself:
         polygon_properties = {
-            'Area': agg_polygon.area * (self.x_scale * -(self.y_scale))
+            'Area (pixels)': round(agg_polygon.area * 1/(self.x_scale * -(self.y_scale)))
         }
-        print(agg_polygon.area)
-        print(self.x_scale)
-        print(self.y_scale)
-        print(polygon_properties)
 
         ignore_columns = ['unique_index','name','structure','ftu_name','image_id','ftu_type',
                           'Min_x_coord','Max_x_coord','Min_y_coord','Max_y_coord',
@@ -604,7 +600,7 @@ class DSASlide:
 
                 aggregated_properties[ftu] = aggregated_properties[ftu] | col_vals_dict
 
-        return aggregated_properties
+        return aggregated_properties, polygon_properties
 
 
 

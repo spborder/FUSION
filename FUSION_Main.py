@@ -4680,8 +4680,8 @@ class FUSION:
 
                                         new_roi = {'type':'FeatureCollection','features':[geo]}
 
-                                        agg_properties = self.wsi.spatial_aggregation(shape(geo['geometry']))
-                                        new_roi['features'][0]['properties'] = {'user':agg_properties | {'name': 'Manual_ROI'}}
+                                        agg_properties, polygon_properties = self.wsi.spatial_aggregation(shape(geo['geometry']))
+                                        new_roi['features'][0]['properties'] = {'user':agg_properties | {'name': 'Manual_ROI'} | polygon_properties}
                                         
                                         new_manual_roi_dict = {
                                                 'geojson':new_roi,
