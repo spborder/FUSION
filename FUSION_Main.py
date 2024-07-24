@@ -2689,7 +2689,6 @@ class FUSION:
 
             return simple_pie
 
-        print(ctx.triggered)
 
         if not ctx.triggered[0]['value']:
             print('raising preventupdate')
@@ -2775,24 +2774,24 @@ class FUSION:
                 ],title = 'Other Properties')
             )
 
-            print(f'len of nested_prop_list: {len(nested_prop_list)}')
-            print(nested_prop_list)
+            #print(f'len of nested_prop_list: {len(nested_prop_list)}')
+            #print(nested_prop_list)
             if len(nested_prop_list)>0:
 
                 # Start from the bottom and go up as opposed to top-down
                 trunk_props = [i for i in nested_prop_list if not i['sub_sub_name'] is None]
-                print(f'len(trunk_props): {len(trunk_props)}')
+                #print(f'len(trunk_props): {len(trunk_props)}')
                 if len(trunk_props)>0:
                     unique_names = np.unique([i['name'] for  i in trunk_props]).tolist()
                     for u_n in unique_names:
-                        print(f'u_n: {u_n}')
+                        #print(f'u_n: {u_n}')
                         shared_name_trunk = [i for i in trunk_props if i['name']==u_n]
 
                         shared_name_sub = np.unique([i['sub_name'] for i in shared_name_trunk]).tolist()
-                        print(f'shared_name_sub: {shared_name_sub}')
+                        #print(f'shared_name_sub: {shared_name_sub}')
                         sub_accordion_list = []
                         for u_sub in shared_name_sub:
-                            print(f'u_sub: {u_sub}')
+                            #print(f'u_sub: {u_sub}')
 
                             sub_prop_data = [i for i in shared_name_trunk if i['sub_name']==u_sub]
                             sub_tab_list = []
@@ -2811,7 +2810,7 @@ class FUSION:
 
                             # Checking if any other features are in this sub_name
                             other_sub_name_props = [i for i in nested_prop_list if i['sub_name']==u_sub and i['sub_sub_name'] is None]
-                            print(f'other_sub_name_props: {other_sub_name_props}')
+                            #print(f'other_sub_name_props: {other_sub_name_props}')
                             for o_sub in other_sub_name_props:
                                 o_sub_data = o_sub['table']
                                 o_sub_data = o_sub_data[o_sub_data['Value']>0]
@@ -2838,11 +2837,11 @@ class FUSION:
                         
                         # Getting shared name props the no sub_sub_name
                         other_name_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_sub_name'] is None and not i['sub_name'] is None]
-                        print(f'other_name_props: {other_name_props}')
+                        #print(f'other_name_props: {other_name_props}')
                         for o_n_prop in other_name_props:
                             o_prop_data = o_n_prop['table']
                             o_prop_data = o_prop_data[o_prop_data['Value']>0]
-                            print(o_prop_data)
+                            #print(o_prop_data)
                             if not o_prop_data.empty:
                                 print(f'o_sub: {o_n_prop["sub_name"]}')
 
