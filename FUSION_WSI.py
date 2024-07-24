@@ -1232,7 +1232,7 @@ class CODEXSlide(DSASlide):
                     
                     viewport_data[f]['count'] = len(counts_data_list)
 
-                    counts_value_dict = counts_data['Cluster'].value_counts().to_dict()
+                    counts_value_dict = counts_data['Cell'].value_counts().to_dict()
                     pie_chart_data = []
                     for key,val in counts_value_dict.items():
                         pie_chart_data.append(
@@ -1407,8 +1407,117 @@ class XeniumSlide(DSASlide):
         viewport_data_components = []
         viewport_data = None
 
-        #TODO: Collect all FTUs within the bounds_box
+        intersecting_ftus = {}
+        intersecting_ftu_polys = {}
+        if view_type['name'] in ['cell_composition','features']:
 
+            for ftu in self.ftu_names:
+                intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
+
+            for m_idx, m_ftu in enumerate(self.manual_rois):
+                for int_ftu in list(m_ftu['geojson']['features'][0]['properties']['user']):
+                    if int_ftu in self.ftu_names:
+                        intersecting_ftus[f'Manual ROI: {m_idx+1}, {int_ftu}'] = [m_ftu['geojson']['features'][0]['properties']['user'][int_ftu]]
+
+            for marked_idx, marked_ftu in enumerate(self.marked_ftus):
+                intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
+
+            if len(list(intersecting_ftus.keys()))>0:
+                viewport_data = {}
+                tab_list = []
+
+                for f_idx, f in enumerate(list(intersecting_ftus.keys())):
+                    if len(intersecting_ftus[f])==0:
+                        continue
+
+                    if view_type['name']=='cell_composition':
+
+                        chart_label = 'Cell Composition'
+                        viewport_data[f] = {}
+                        counts_data_list = []
+                        counts_data = pd.DataFrame()
+                        if type(intersecting_ftus[f])==list:
+                            for ind_ftu in intersecting_ftus[f]:
+
+                                if 'Cell Type' in ind_ftu:
+                                    if type(ind_ftu['Cell Type'])==str:
+                                        counts_data_list.append({
+                                            'Cell Type': ind_ftu['Cell Type']
+                                        })
+                                    elif type(ind_ftu['Cell Type'])==dict:
+                                        for i,j in ind_ftu['Cell Type'].items():
+                                            counts_data_list.extend([{'Cell Type': i}]*j)
+                                else:
+                                    counts_data_list.append({
+                                        'Cell Type': 'Ungrouped'
+                                    })
+
+                        if len(counts_data_list)>0:
+                            counts_data = pd.DataFrame.from_records(counts_data_list)
+                            viewport_data[f]['data'] = counts_data.to_dict('records')
+                        else: 
+                            viewport_data[f]['data'] = []
+
+                        viewport_data[f]['count'] = len(counts_data_list)
+
+                        counts_value_dict = counts_data['Cell Type'].value_counts().to_dict()
+                        pie_chart_data = []
+                        for key,val in counts_value_dict.items():
+                            pie_chart_data.append(
+                                {'Cell Type': key, 'Count': val}
+                            )
+
+                        pie_chart_df = pd.DataFrame.from_records(pie_chart_data)
+                        f_tab_plot = px.pie(
+                            data_frame=pie_chart_df,
+                            values = 'Count',
+                            names = 'Cell Type'
+                        )
+
+                        f_tab_plot.update_traces(textposition='inside')
+                        f_tab_plot.update_layout(
+                            uniformtext_minsize=12,uniformtext_mode='hide'
+                        )
+
+                    f_tab = dbc.Tab([
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Label(chart_label),
+                                dcc.Graph(
+                                    id = {'type': 'ftu-cell-pie','index': f_idx},
+                                    figure = go.Figure(f_tab_plot)
+                                )
+                            ],md=12)
+                        ])
+                    ], label = f+f' ({viewport_data[f]["count"]})', tab_id = f'tab_{len(tab_list)}')
+
+                    tab_list.append(f_tab)
+
+            viewport_data_components = html.Div([
+                dbc.Row([
+                    dbc.Col(
+                        children = [
+                            dbc.Label('Select View Type: '),
+                        ],
+                        md = 4
+                    ),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [
+                                {'label': 'Cell Composition','value': 'cell_composition'},
+                                {'label': 'Features','value': 'features','disabled': True}
+                            ],
+                            value = view_type['name'],
+                            multi = False,
+                            id = {'type': 'roi-view-data','index': 0}
+                        )
+                    )
+                ]),
+                html.Hr(),
+                dbc.Row(
+                    dbc.Tabs(tab_list,active_tab = f'tab_{len(tab_list)-1}')
+                )
+            ])
 
 
         return viewport_data_components, viewport_data

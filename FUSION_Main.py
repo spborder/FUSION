@@ -4817,7 +4817,7 @@ class FUSION:
                                                     
                         else:
                             
-                            dataset_select_options = self.layout_handler.data_options
+                            data_select_options = self.layout_handler.data_options
                             user_ann_tracking = no_update
 
                     return self.current_overlays, data_select_options, user_ann_tracking
