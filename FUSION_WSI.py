@@ -1057,6 +1057,7 @@ class CODEXSlide(DSASlide):
                 intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
             
             for m_idx, m_ftu in enumerate(self.manual_rois):
+                print(list(m_ftu.keys()))
                 for int_ftu in m_ftu:
                     intersecting_ftus[f'Manual ROI: {m_idx+1}, {int_ftu}'] = [m_ftu['geojson']['features'][0]['properties']['user'][int_ftu]]
 

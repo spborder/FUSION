@@ -2520,7 +2520,7 @@ class LayoutHandler:
                     html.Div(
                         children = [
                             dcc.Store(
-                                id = 'available-datasets-store',
+                                id = {'type': 'available-datasets-store','index':0},
                                 data = json.dumps(slide_datasets),
                                 storage_type='memory'
                             )

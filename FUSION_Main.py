@@ -857,7 +857,7 @@ class FUSION:
         # Adding manual ROIs using EditControl
         self.app.callback(
             Input({'type':'edit-control','index':ALL},'geojson'),
-            [Output('layer-control','children'),
+            [Output({'type': 'layer-control','index': ALL},'children'),
              Output('data-select','options'),
              Output('user-annotations-div', 'children')],
             State('slide-info-store','data'),
@@ -1163,7 +1163,7 @@ class FUSION:
         self.app.callback(
             Input('dataset-table','selected_rows'),
             [State('visualization-session-store','data'),
-             State('available-datasets-store','data')],
+             State({'type': 'available-datasets-store','index': ALL},'data')],
             [Output('selected-dataset-slides','children'),
              Output('slide-metadata-plots','children'),
              Output('slide-select','options'),
@@ -1178,7 +1178,7 @@ class FUSION:
              Input({'type':'agg-meta-drop','index':ALL},'value'),
              Input({'type':'slide-dataset-table','index':ALL},'selected_rows')],
             [State('visualization-session-store','data'),
-             State('available-datasets-store','data')],
+             State({'type': 'available-datasets-store','index': ALL},'data')],
              [Output('slide-select','options'),
              Output({'type':'meta-plot','index':ALL},'figure'),
              Output({'type':'cell-meta-drop','index':ALL},'options'),
@@ -1444,7 +1444,7 @@ class FUSION:
         Creating plot and slide select divs in dataset-builder
         """
         vis_sess_store = json.loads(vis_sess_store)
-        dataset_store = json.loads(dataset_store)
+        dataset_store = json.loads(get_pattern_matching_value(dataset_store))
 
         # Extracting metadata from selected datasets and plotting
         all_metadata_labels = []
@@ -1553,7 +1553,7 @@ class FUSION:
         """
 
         vis_sess_store = json.loads(vis_sess_store)
-        dataset_store = json.loads(dataset_store)
+        dataset_store = json.loads(get_pattern_matching_value(dataset_store))
 
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
@@ -3163,7 +3163,7 @@ class FUSION:
                 matching_rows = matching_rows[matching_rows['CT/1/ABBR'].astype(str).str.match(c['val'])]
             else:
                 matching_rows = table_data.dropna(subset=[c["col"]])
-                matching_rows = matching_rows[matching_rows[c['col']].str.match(c['val'])]
+                matching_rows = matching_rows[matching_rows[c['col']].astype(str).str.match(c['val'])]
 
             if not matching_rows.empty:
                 cell_start_y += 75
@@ -3252,23 +3252,23 @@ class FUSION:
                 if 'CT' in clicked['col']:
                     if not clicked['id']=='Main_Cell':
                         table_data = table.dropna(subset=['CT/1/ABBR'])
-                        table_data = table_data[table_data['CT/1/ABBR'].str.match(clicked['label'])]
+                        table_data = table_data[table_data['CT/1/ABBR'].astype(str).str.match(clicked['label'])]
                     else:
                         table_data = pd.DataFrame()
                 else:
                     if clicked['col']+'/LABEL' in table.columns.tolist():
                         table_data = table.dropna(subset=[clicked['col']+'/LABEL'])
-                        table_data = table_data[table_data[clicked['col']+'/LABEL'].str.match(clicked['label'])]
+                        table_data = table_data[table_data[clicked['col']+'/LABEL'].astype(str).str.match(clicked['label'])]
                     else:
                         table_data = table.dropna(subset=[clicked['col']])
-                        table_data = table_data[table_data[clicked['col']].str.match(clicked['label'])]
+                        table_data = table_data[table_data[clicked['col']].astype(str).str.match(clicked['label'])]
             else:
                 if clicked['col']+'/LABEL' in table.columns.tolist():
                     table_data = table.dropna(subset=[clicked['col']+'/LABEL'])
-                    table_data = table_data[table_data[clicked['col']+'/LABEL'].str.match(clicked['label'])]
+                    table_data = table_data[table_data[clicked['col']+'/LABEL'].astype(str).str.match(clicked['label'])]
                 else:
                     table_data = table.dropna(subset=[clicked['col']])
-                    table_data = table_data[table_data[clicked['col']].str.match(clicked['label'])]
+                    table_data = table_data[table_data[clicked['col']].astype(str).str.match(clicked['label'])]
 
             label = clicked['label']
 
@@ -3526,6 +3526,7 @@ class FUSION:
                 slide_info_store_data = json.dumps(slide_info_store_data)
 
             else:
+                slide_info_store_data = json.dumps(slide_info_store_data)
                 disable_slide_load = True
                 modal_open = False
 
@@ -3563,10 +3564,11 @@ class FUSION:
                             tileSize = self.wsi.tile_dims[0],
                             maxNativeZoom = self.wsi.zoom_levels-1,
                             #id = f'codex-tile-layer{random.randint(0,100)}',
-                            id = {'type': 'codex-tile-layer','index': c_idx}
+                            id = {'type': 'codex-tile-layer','index': random.randint(0,1000)}
                         ),
                         name = c_name,
-                        checked = c_name== self.wsi.channel_names[0]
+                        checked = c_name== self.wsi.channel_names[0],
+                        id = f'codex-base-layer{random.randint(0,1000)}'
                     )
                     for c_idx,c_name in enumerate(self.wsi.channel_names)
                 ]
@@ -3691,7 +3693,7 @@ class FUSION:
             ]
 
             new_layer_control = dl.LayersControl(
-                id = f'layer-control',
+                id = {'type': 'layer-control','index': random.randint(0,100)},
                 children = new_children
             )
 
@@ -4654,7 +4656,7 @@ class FUSION:
                 triggered_id = ctx.triggered_id
 
             if not ctx.triggered[0]['value']:
-                return no_update, no_update, no_update
+                return [no_update], no_update, no_update
 
             if triggered_id == 'edit-control':
                 
@@ -4816,7 +4818,7 @@ class FUSION:
                             data_select_options = self.layout_handler.data_options
                             user_ann_tracking = no_update
 
-                    return self.current_overlays, data_select_options, user_ann_tracking
+                    return [self.current_overlays], data_select_options, user_ann_tracking
                 else:
                     raise exceptions.PreventUpdate
             else:
@@ -7336,6 +7338,8 @@ class FUSION:
             current_channels = {}
 
             slide_info_store['current_channels'] = current_channels
+
+            slide_info_store = json.dumps(slide_info_store)
 
             return [],[False], slide_info_store
     
