@@ -526,6 +526,8 @@ class DSASlide:
         ignore_columns = ['unique_index','name','structure','ftu_name','image_id','ftu_type',
                           'Min_x_coord','Max_x_coord','Min_y_coord','Max_y_coord',
                           'x_tsne','y_tsne','x_umap','y_umap']
+        
+        categorical_columns = ['Cluster']
 
         # Step 1: Find intersecting structures with polygon
         aggregated_properties = {}
@@ -540,6 +542,9 @@ class DSASlide:
             # string and dict types will be called "object" dtypes in pandas
             agg_numeric_props = agg_prop_df.select_dtypes(exclude = 'object')
 
+            # Remove properties designated to be categorical
+            agg_numeric_props = agg_numeric_props.drop(columns = [i for i in categorical_columns if i in agg_numeric_props.columns.tolist()])
+
             # Scaling numeric props by area
             #for row_idx, area in enumerate(overlap_area):
                 #print(f'area: {area}')
@@ -551,6 +556,8 @@ class DSASlide:
             aggregated_properties[ftu][f'{ftu} Count'] = len(overlap_area)
 
             agg_object_props = agg_prop_df.select_dtypes(include='object')
+            # Adding categorical properties
+            agg_object_props = pd.concat([agg_object_props,agg_prop_df[:,[i for i in categorical_columns if i in agg_prop_df.columns.tolist()]]],axis=1)
             for col_idx, col_name in enumerate(agg_object_props.columns.tolist()):
                 col_values = agg_object_props[col_name].tolist()
                 col_vals_dict = {col_name: {}}
@@ -591,6 +598,7 @@ class DSASlide:
 
                 elif type(col_values[0])==list:
                     # Getting an average of all the lists
+                    #TODO: This could include the channel names if it's for Channel Means with CODEX
                     mean_list_vals = np.mean(np.array(col_values),axis=0)
                     col_vals_dict[col_name] = {
                         f'Value {i}': j
@@ -1057,8 +1065,7 @@ class CODEXSlide(DSASlide):
                 intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
             
             for m_idx, m_ftu in enumerate(self.manual_rois):
-                print(list(m_ftu.keys()))
-                for int_ftu in m_ftu:
+                for int_ftu in m_ftu['geojson']['features'][0]['properties']['user']:
                     intersecting_ftus[f'Manual ROI: {m_idx+1}, {int_ftu}'] = [m_ftu['geojson']['features'][0]['properties']['user'][int_ftu]]
 
             for marked_idx, marked_ftu in enumerate(self.marked_ftus):
@@ -1125,8 +1132,12 @@ class CODEXSlide(DSASlide):
                             cell_features = {}
 
                             if 'Channel Means' in ind_ftu:
-                                for frame in f_frame_list:
-                                    cell_features[f'Channel {self.channel_names.index(frame)}'] = ind_ftu['Channel Means'][self.channel_names.index(frame)]
+                                if type(ind_ftu['Channel Means'])==list:
+                                    for frame in f_frame_list:
+                                        cell_features[f'Channel {self.channel_names.index(frame)}'] = ind_ftu['Channel Means'][self.channel_names.index(frame)]
+                                elif type(ind_ftu['Channel Means'])==dict:
+                                    for frame in f_frame_list:
+                                        cell_features[f'Channel {self.channel_names.index(frame)}'] = ind_ftu['Channel Means'][f'Value {self.channel_names.index(frame)}']
                             else:
                                 for frame in f_frame_list:
                                     cell_features[f'Channel {self.channel_names.index(frame)}'] = 0.0
@@ -1140,7 +1151,7 @@ class CODEXSlide(DSASlide):
                             if f in intersecting_ftu_polys:
                                 cell_features['Hidden'] = {'Bbox':list(intersecting_ftu_polys[f][ftu_idx].bounds)}
 
-                            counts_data_list.append(cell_features)
+                                counts_data_list.append(cell_features)
 
                     if len(counts_data_list)>0:
                         counts_data = pd.DataFrame.from_records(counts_data_list)
@@ -1154,8 +1165,8 @@ class CODEXSlide(DSASlide):
                     if len(f_frame_list)==1:
                         f_tab_plot = gen_violin_plot(
                             feature_data = counts_data,
-                            label_col = f_label if not f_label is None else 'label',
-                            label_name = f_label if not f_label is None else 'Unlabeled',
+                            label_col = f_label if not f_label is None and f_label in counts_data.columns.tolist() else 'label',
+                            label_name = f_label if not f_label is None and f_label in counts_data.columns.tolist() else 'Unlabeled',
                             feature_col = f'Channel {self.channel_names.index(f_frame_list[0])}',
                             custom_col = 'Hidden'
                         )

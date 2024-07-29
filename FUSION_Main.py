@@ -1553,7 +1553,10 @@ class FUSION:
         """
 
         vis_sess_store = json.loads(vis_sess_store)
-        dataset_store = json.loads(get_pattern_matching_value(dataset_store))
+        if len(dataset_store)>0:
+            dataset_store = json.loads(get_pattern_matching_value(dataset_store))
+        else:
+            dataset_store = {}
 
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate

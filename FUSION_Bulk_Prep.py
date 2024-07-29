@@ -40,12 +40,6 @@ class BulkProcessApp:
         self.dataset_handler = dataset_handler
         self.prep_handler = prep_handler
 
-        self.all_datasets = [dataset_handler.slide_datasets[i]['name'] for i in list(dataset_handler.slide_datasets.keys())]
-        self.current_dataset = self.all_datasets[0]
-        self.current_slides = dataset_handler.slide_datasets[list(dataset_handler.slide_datasets.keys())[self.all_datasets.index(self.current_dataset)]]['Slides']
-        self.done_slides = []
-        self.current_slide_index = 0
-
         self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
 
         self.bulk_callbacks()
@@ -64,7 +58,9 @@ class BulkProcessApp:
              Output('sub-thresh-slider','disabled'),
              Output('sub-comp-method','disabled'),
              Output('go-to-feat','disabled'),
-             Output('slide-drop','options')]
+             Output('slide-drop','options'),
+             Output('slide-store','data')],
+             State('slide-store','data')
         )(self.update_slide)
 
         # Updating sub-compartment segmentation
@@ -77,40 +73,50 @@ class BulkProcessApp:
              Input('ex-ftu-slider','value'),
              Input('sub-thresh-slider','value'),
              Input('sub-comp-method','value')],
-            State('go-to-feat','disabled'),
+            [State('go-to-feat','disabled'),
+             State('slide-store','data')],
             [Output('ex-ftu-img','figure'),
              Output('sub-thresh-slider','marks'),
              Output('feature-items','children'),
              Output('sub-thresh-slider','disabled'),
              Output('sub-comp-method','disabled'),
-             Output('go-to-feat','disabled')],
+             Output('go-to-feat','disabled'),
+             Output('slide-store','data')],
             prevent_initial_call=True
         )(self.update_sub_compartment)
 
         self.app.callback(
             Input({'type':'start-feat','index':ALL},'n_clicks'),
             [Output({'type':'feat-logs','index':ALL},'children'),
-             Output('slide-drop','options')],
+             Output('slide-drop','options'),Output('slide-store','data')],
              [State({'type': 'include-ftu-drop','index':ALL},'value'),
-              State({'type': 'include-feature-drop','index':ALL},'value')],
+              State({'type': 'include-feature-drop','index':ALL},'value'),
+              State('slide-store','data')],
             prevent_initial_call=True
         )(self.run_feature_extraction)
 
-    def update_slide(self,folder,slide):
+    def update_slide(self,folder,slide,slide_store):
 
         # no matter what the triggered_id, a new slide is loaded
+        slide_store = json.loads(slide_store)
+        layer_ann = slide_store['layer_ann']
+        user_info = slide_store['user_info']
+
         if type(slide)==dict:
             slide = slide['value']
         
         if ctx.triggered_id == 'folder-drop':
-            self.current_dataset = folder
-            self.current_slides = self.dataset_handler.slide_datasets[list(self.dataset_handler.slide_datasets.keys())[self.all_datasets.index(self.current_dataset)]]['Slides']
+
+            slide_store['current_slides'] = self.dataset_handler.get_folder_slides(folder)
+            slide_store['done_slides'] = []
+            done_slides = []
+            current_slides = slide_store['current_slides']
 
             new_slides = [
                 {'label':i['name'],'value':i['_id'],'disabled':False}
-                if i['_id'] not in self.done_slides
+                if i['_id'] not in done_slides
                 else {'label':i['name'],'value':i['_id'],'disabled':True}
-                for i in self.current_slides
+                for i in current_slides
             ]
             slide = new_slides[0]['value']
         else:
@@ -147,17 +153,14 @@ class BulkProcessApp:
         
         print(ftu_options)
         if len([i for i in ftu_options if not i['disabled']])>0:
-            self.layer_ann = {
+            layer_ann = {
                 'current_layer':[i['value'] for i in ftu_options if not i['disabled']][0],
                 'current_annotation':0,
                 'previous_annotation':0,
                 'max_layers':[len(i['annotation']['elements']) for i in slide_annotations]
             }
 
-            image, mask = self.prep_handler.get_annotation_image_mask(slide,slide_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
-
-            self.layer_ann['current_image'] = image
-            self.layer_ann['current_mask'] = mask
+            image, mask = self.prep_handler.get_annotation_image_mask(slide,user_info,slide_annotations,layer_ann['current_layer'],layer_ann['current_annotation'])
 
             ex_ftu_img = go.Figure(
                 data = px.imshow(image)['data'],
@@ -166,13 +169,25 @@ class BulkProcessApp:
         else:
             ex_ftu_img = go.Figure()
 
-        self.upload_wsi_id = slide
-        self.upload_annotations = slide_annotations
-        self.feature_extract_ftus = ftu_options
+        slide_store['upload_wsi_id'] = slide
+        slide_store['upload_annotations'] = slide_annotations
+        slide_store['feature_extract_ftus'] = ftu_options
+        slide_store['layer_ann'] = layer_ann
 
-        return ex_ftu_img, ftu_options, [], False, False, False, new_slides
+        slide_store = json.dumps(slide_store)
 
-    def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state):
+        return ex_ftu_img, ftu_options, [], False, False, False, new_slides, slide_store
+
+    def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state, slide_store):
+
+        slide_store = json.loads(slide_store)
+
+        sub_compartment_params = slide_store['sub_compartment_params']
+        layer_ann = slide_store['layer_ann']
+        feature_extract_ftus = slide_store['feature_extract_ftus']
+        upload_wsi_id = slide_store['upload_wsi_id']
+        upload_annotations = slide_store['upload_annotations']
+        user_info = slide_store['user_info']
 
         new_ex_ftu = go.Figure()
         feature_extract_children = []
@@ -182,118 +197,150 @@ class BulkProcessApp:
 
         slider_marks = {
             val:{'label':f'{sub_comp["name"]}: {val}','style':{'color':sub_comp["marks_color"]}}
-            for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
+            for val,sub_comp in zip(thresh_slider[::-1],sub_compartment_params)
         }
 
-        for idx,ftu,thresh in zip(list(range(len(self.sub_compartment_params))),self.sub_compartment_params,thresh_slider[::-1]):
+        for idx,ftu,thresh in zip(list(range(len(sub_compartment_params))),sub_compartment_params,thresh_slider[::-1]):
             ftu['threshold'] = thresh
-            self.sub_compartment_params[idx] = ftu
+            sub_compartment_params[idx] = ftu
 
         if ctx.triggered_id=='next-butt':
             # Moving to next annotation in current layer
-            self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+            layer_ann['previous_annotation'] = layer_ann['current_annotation']
 
-            if self.layer_ann['current_annotation']+1>=self.layer_ann['max_layers'][self.layer_ann['current_layer']]:
-                self.layer_ann['current_annotation'] = 0
+            if layer_ann['current_annotation']+1>=layer_ann['max_layers'][layer_ann['current_layer']]:
+                layer_ann['current_annotation'] = 0
             else:
-                self.layer_ann['current_annotation'] += 1
+                layer_ann['current_annotation'] += 1
 
         elif ctx.triggered_id=='prev-butt':
             # Moving back to previous annotation in current layer
-            self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+            layer_ann['previous_annotation'] = layer_ann['current_annotation']
 
-            if self.layer_ann['current_annotation']==0:
-                self.layer_ann['current_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]-1
+            if layer_ann['current_annotation']==0:
+                layer_ann['current_annotation'] = layer_ann['max_layers'][layer_ann['current_layer']]-1
             else:
-                self.layer_ann['current_annotation'] -= 1
+                layer_ann['current_annotation'] -= 1
         
         elif ctx.triggered_id=='ftu-select':
             # Moving to next annotation layer, restarting annotation count
             if type(select_ftu)==dict:
-                self.layer_ann['current_layer']=select_ftu['value']
+                layer_ann['current_layer']=select_ftu['value']
             elif type(select_ftu)==int:
-                self.layer_ann['current_layer'] = select_ftu
+                layer_ann['current_layer'] = select_ftu
 
-            self.layer_ann['current_annotation'] = 0
-            self.layer_ann['previous_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]
+            layer_ann['current_annotation'] = 0
+            layer_ann['previous_annotation'] = layer_ann['max_layers'][layer_ann['current_layer']]
 
         if ctx.triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
             
-            new_image, new_mask = self.prep_handler.get_annotation_image_mask(self.upload_wsi_id,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
-            self.layer_ann['current_image'] = new_image
-            self.layer_ann['current_mask'] = new_mask
+            new_image, new_mask = self.prep_handler.get_annotation_image_mask(upload_wsi_id,user_info,upload_annotations,layer_ann['current_layer'],layer_ann['current_annotation'])
 
         if ctx.triggered_id not in ['go-to-feat']:
             
-            sub_compartment_image = self.prep_handler.sub_segment_image(self.layer_ann['current_image'],self.layer_ann['current_mask'],self.sub_compartment_params,ex_ftu_view,ftu_slider)
+            new_image,new_mask = self.prep_handler.get_annotation_image_mask(upload_wsi_id,user_info,upload_annotations,layer_ann['current_layer'],layer_ann['current_annotation'])
+            sub_compartment_image = self.prep_handler.sub_segment_image(new_image,new_mask,sub_compartment_params,ex_ftu_view,ftu_slider)
 
             new_ex_ftu = go.Figure(
                 data = px.imshow(sub_compartment_image)['data'],
                 layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
             )
+
         else:
             go_to_feat_disabled = True
             disable_slider = True
             disable_method = True
 
-            new_ex_ftu = go.Figure(
-                data = px.imshow(self.prep_handler.current_sub_comp_image)['data'],
-                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-            )
+            new_ex_ftu = no_update
+            feature_extract_children = self.prep_handler.gen_feat_extract_card(feature_extract_ftus)
 
-            feature_extract_children = self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)
+        slide_store['layer_ann'] = layer_ann
+        slide_store['sub_compartment_params'] = sub_compartment_params
+        slide_store = json.dumps(slide_store)
 
-        if go_to_feat_state:
-            return new_ex_ftu, slider_marks, no_update, disable_slider, disable_method, go_to_feat_disabled
-        else:
-            return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
+        return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled, slide_store
 
-    def run_feature_extraction(self,feat_butt,include_ftu,include_feature):
+    def run_feature_extraction(self,feat_butt,include_ftu,include_feature, slide_store):
         
+        slide_store = json.loads(slide_store)
+        done_slides = slide_store['done_slides']
+        upload_wsi_id = slide_store['upload_wsi_id']
+        feature_extract_ftus = slide_store['feature_extract_ftus']
+        sub_compartment_params = slide_store['sub_compartment_params']
+        current_slides = slide_store['current_slides']
+
         if not ctx.triggered_id is None:
             if type(feat_butt) == list:
                 if len(feat_butt)>0:
                     if feat_butt[0]>0:
                         
                         include_feature = ','.join(include_feature[0])
-                        include_ftu = [self.feature_extract_ftus[i]['label'] for i in include_ftu[0]]
-                        ignore_ftus = ','.join([i['label'] for i in self.feature_extract_ftus if i['label'] not in include_ftu or '(' in i['label']])
+                        include_ftu = [feature_extract_ftus[i]['label'] for i in include_ftu[0]]
+                        ignore_ftus = ','.join([i['label'] for i in feature_extract_ftus if i['label'] not in include_ftu or '(' in i['label']])
                         
                         # Getting the file to send to feature extraction
                         #file_id = self.dataset_handler.gc.get(f'/item/{self.upload_wsi_id}/files')[0]["_id"]
-                        feat_ext_job = self.prep_handler.run_feature_extraction(self.upload_wsi_id,self.sub_compartment_params,include_feature,ignore_ftus)
+                        feat_ext_job = self.prep_handler.run_feature_extraction(upload_wsi_id,sub_compartment_params,include_feature,ignore_ftus)
                         
-                        self.done_slides.append(self.upload_wsi_id)
+                        done_slides.append(upload_wsi_id)
 
                         # Updating slide-drop options
                         updated_slide_drop = [
                             {'label':i['name'],'value':i['_id'], 'disabled':False}
-                            if i['_id'] not in self.done_slides
+                            if i['_id'] not in done_slides
                             else {'label':i['name'],'value':i['_id'],'disabled':True}
-                            for i in self.current_slides
+                            for i in current_slides
                         ]
                         
-                        return ['Submitted!'], updated_slide_drop
+                        slide_store['done_slides'] = done_slides
+
+                        slide_store = json.dumps(slide_store)
+
+                        return ['Submitted!'], updated_slide_drop, slide_store
                     else:
-                        return [no_update], no_update
+                        slide_store = json.dumps(slide_store)
+                        return [no_update], no_update,slide_store
                 else:
-                    return [no_update], no_update
+                    slide_store = json.dumps(slide_store)
+                    return [no_update], no_update,slide_store
             else:
-                return [no_update], no_update
+                slide_store = json.dumps(slide_store)
+                return [no_update], no_update,slide_store
         else:
             raise exceptions.PreventUpdate
 
 # Special layout
-def gen_bulk_prep_layout(dataset_handler):
+def gen_bulk_prep_layout(dataset_handler,dataset_path,prep_handler):
 
     # Layout handler has the initial layout, just need to add the container stuff
 
     # Copying some stuff over from uploader_layout but removing file upload and multi-compartment prediction
 
     # Getting slide datasets
-    all_datasets = [dataset_handler.slide_datasets[i]['name'] for i in list(dataset_handler.slide_datasets.keys())]
+    resource_id = dataset_handler.get_resource_id(dataset_path)
+    folder_slides = dataset_handler.get_folder_slides(resource_id)
+
+    all_datasets = [{
+        'label': dataset_path.split('/')[-1],
+        'val': resource_id
+        }]
     first_dataset = all_datasets[0]
-    first_dataset_slides = dataset_handler.slide_datasets[list(dataset_handler.slide_datasets.keys())[all_datasets.index(first_dataset)]]['Slides']
+    
+    first_dataset_slides = folder_slides
+
+    slide_store = {
+        'all_datasets': all_datasets,
+        'current_slides': folder_slides,
+        'done_slides': [],
+        'upload_wsi_id': '',
+        'upload_annotations': {},
+        'sub_compartment_params': [],
+        'feature_extract_ftus': {},
+        'layer_ann': {},
+        'sub_compartment_params': prep_handler.initial_segmentation_parameters,
+        'user_info': dataset_handler.gc.get('/user/me') | dataset_handler.gc.get('/token/session')
+    }
+
 
     # Creating the row for folder/slide iteration
     folder_slide_select = [
@@ -304,7 +351,7 @@ def gen_bulk_prep_layout(dataset_handler):
                     'Available Folders:',
                     dcc.Dropdown(
                         options = [
-                            {'label':i,'value':i,'disabled':False}
+                            {'label':i['label'],'value':i['val'],'disabled':False}
                             for i in all_datasets
                         ],
                         value = first_dataset,
@@ -323,7 +370,14 @@ def gen_bulk_prep_layout(dataset_handler):
                     )
                 ],md=6)
             ],align='center')
-        ])
+        ]),
+        html.Div(
+            dcc.Store(
+                id = 'slide-store',
+                storage_type='memory',
+                data = json.dumps(slide_store)
+            )
+        )
     ]
 
     # Sub-compartment segmentation card:
@@ -480,10 +534,7 @@ def main():
 
     dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
 
-    dataset_path = '/user/sam123/Private/Feature Extraction Re-run/Reference'
-    path_type = 'folder'
-
-    dataset_handler.initialize_folder_structure(dataset_path,path_type)
+    dataset_path = '/collection/10x Xenium/Kidney'
 
     external_stylesheets = [
         dbc.themes.LUX,
@@ -493,11 +544,12 @@ def main():
     ]
 
     layout_handler = LayoutHandler()
-    bulk_layout = gen_bulk_prep_layout(dataset_handler)
+    prep_handler = Prepper(dataset_handler)
+
+    bulk_layout = gen_bulk_prep_layout(dataset_handler,dataset_path,prep_handler)
 
     app_layout = layout_handler.gen_single_page_layout('Application for bulk pre-processing of slides in collections',bulk_layout)
 
-    prep_handler = Prepper(dataset_handler)
 
     main_app = DashProxy(__name__,
                          external_stylesheets=external_stylesheets,
