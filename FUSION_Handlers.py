@@ -3754,10 +3754,18 @@ class GirderHandler:
         for c in all_collections:
 
             # Get all large image objects in each collection that are not in histoqc outputs
-            if not c["_id"]==user_public_folder["_id"]:
-                collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'collection'})
-            else:
-                collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'folder'})
+            max_retries = 5
+            try_n = 1
+            done_check = False
+            while try_n<max_retries and not done_check:
+                try:
+                    if not c["_id"]==user_public_folder["_id"]:
+                            collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'collection'})
+                    else:
+                        collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'folder'})
+                    done_check = True
+                except requests.exceptions.JSONDecodeError:
+                    try_n+1
 
             image_items = [i for i in collection_items if 'largeImage' in i and not 'png' in i['name']]
 

@@ -1932,7 +1932,7 @@ class FUSION:
     
         elif current_tab=='annotation-tab':
             if user_data_store["login"]=='fusionguest':
-                return no_update, html.P('Sign in or create an account to start annotating!'), frame_label_disable, [json.dumps(viewport_store_data)], json.dumps(user_data_store)
+                return no_update, html.P('Sign in or create an account to start annotating!'), [no_update], [json.dumps(viewport_store_data)], json.dumps(user_data_store)
             else:
                 
                 # Getting intersecting FTU information
@@ -2057,7 +2057,10 @@ class FUSION:
         Updating overlay hideout property in GeoJSON layer used in self.ftu_style_handle        
         """
 
-        if cell_val is None:
+        #if cell_val is None:
+        #    raise exceptions.PreventUpdate
+        #
+        if self.wsi is None:
             raise exceptions.PreventUpdate     
         m_prop = None
         cell_sub_select_children = no_update
@@ -7278,7 +7281,7 @@ class FUSION:
         if not channel_opts is None:
             slide_info_store = json.loads(slide_info_store)
             current_channels = slide_info_store['current_channels']
-
+            print(f'channel_options: {get_pattern_matching_value(channel_opts)}')
             if type(channel_opts)==list:
                 if len(channel_opts[0])>0:
                     channel_opts = channel_opts[0]
