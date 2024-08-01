@@ -22,6 +22,9 @@ from dash import dcc
 import dash_bootstrap_components as dbc
 from dash_extensions.enrich import html
 
+from typing_extensions import Union
+
+
 from tqdm import tqdm
 from FUSION_Utils import (
     extract_overlay_value,
@@ -228,7 +231,7 @@ class DSASlide:
                     f['properties']['name'] = f_name
 
                     if not 'user' in f['properties']:
-                        f['user'] = {}
+                        f['properties']['user'] = {}
 
                 self.ftu_names.append(f_name)
 
@@ -334,24 +337,105 @@ class DSASlide:
 
             f.close()
 
-    def find_intersecting_ftu(self, box_poly, ftu: str):
+    def find_intersecting_ftu(self, query_poly: Union[list,Polygon], ftu: Union[str,list], slide_info: dict):
+        """
+        Find intersecting FTU's with a given query_poly (either boundary coordinates for a viewport or a manual ROI polygon)
+        Searches for each FTU separately by given id      
+        """
+        if type(query_poly)==list:
+            box_poly = query_poly
+            query_poly = box(*box_poly)
+        else:
+            # Getting bounding box for manual annotation
+            box_poly = list(query_poly.bounds)
 
-        if type(box_poly)==list:
-            box_poly = box(*box_poly)
+        #TODO: Test out using the API annotations/{id}?region 
+        #TODO: Have to pass the x_scale and y_scale as additional arguments
+        if isinstance(ftu,list):
+            intersecting_ftus_polys = {}
+            intersecting_ftus_props = {}
 
+            #TODO: Temporary here until updating the rest of the calls to this method to pass annotation id's instead of names
+            annotation_info = self.girder_handler.get_available_annotation_ids(self.item_id)
+            ann_names = [i['annotation']['name'] for i in annotation_info]
+
+            for f in ftu:
+                
+                f_id = annotation_info[ann_names.index(f)]['_id']
+                girder_response = self.girder_handler.gc.get(
+                    f'/annotation/{f_id}',
+                    parameters = {
+                        'left': int(box_poly[0]/self.x_scale),
+                        'top': int(box_poly[3]/self.y_scale),
+                        'right': int(box_poly[2]/self.x_scale),
+                        'bottom': int(box_poly[1]/self.y_scale)
+                    }
+                )
+
+                intersecting_ftus_polys[f] = [
+                    Polygon([(j[0]*self.x_scale,j[1]*self.y_scale) for j in i['points']])
+                    for i in girder_response['annotation']['elements']
+                ]
+                intersecting_ftus_props[f] = [
+                    i['user'] for i in girder_response['annotation']['elements']
+                ]
+
+
+        else:
+            intersecting_ftus_polys = []
+            intersecting_ftus_props = []
+
+            annotation_info = self.girder_handler.get_available_annotation_ids(self.item_id)
+            ann_names = [i['annotation']['name'] for i in annotation_info]
+
+            f_id = annotation_info[ann_names.index(ftu)]['_id']
+
+            girder_response = self.girder_handler.gc.get(
+                f'/annotation/{f_id}',
+                parameters = {
+                    'left': int(box_poly[0]/self.x_scale),
+                    'top': int(box_poly[3]/self.y_scale),
+                    'right': int(box_poly[2]/self.x_scale),
+                    'bottom': int(box_poly[1]/self.y_scale)
+                }
+            )
+
+            intersecting_ftus_polys = [
+                Polygon([(j[0]*self.x_scale,j[1]*self.y_scale) for j in i['points']])
+                for i in girder_response['annotation']['elements']
+            ]
+            intersecting_ftus_props = [
+                i['user'] for i in girder_response['annotation']['elements']
+            ]
+
+        return intersecting_ftus_props, intersecting_ftus_polys
+
+        """
         if ftu in self.ftu_names:
             # Finding which members of a specfied ftu group intersect with the provided box_poly
-            ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(box_poly)]
+            ftu_intersect_idx = [i for i in range(0,len(self.ftu_polys[ftu])) if self.ftu_polys[ftu][i].intersects(query_poly)]
             
             # Returning list of dictionaries that use original keys in properties
             intersecting_ftu_props = []
             intersecting_ftu_polys = []
 
             if len(ftu_intersect_idx)>0:
-                if len(self.ftu_props[ftu])>0:
+                try:                
                     intersecting_ftu_props = [self.ftu_props[ftu][i] for i in ftu_intersect_idx]
                     intersecting_ftu_polys = [self.ftu_polys[ftu][i] for i in ftu_intersect_idx]
-
+                except IndexError:
+                    intersect_ftu_props = []
+                    intersecting_ftu_polys = []
+                    for i in ftu_intersect_idx:
+                        if i >=len(self.ftu_props[ftu]):
+                            print(f'{i} is greater than the length of self.ftu_props[{ftu}]')
+                        else:
+                            intersecting_ftu_props.append(self.ftu_props[ftu][i])
+                        
+                        if i>=len(self.ftu_polys[ftu]):
+                            print(f'{i} is greater than the length of self.ftu_polys[{ftu}]')
+                        else:
+                            intersecting_ftu_polys.append(self.ftu_polys[ftu][i])
 
             return intersecting_ftu_props, intersecting_ftu_polys
         elif ftu=='all':
@@ -365,10 +449,11 @@ class DSASlide:
                 if len(ftu_intersect_idx)==1:
                     intersecting_ftu_props = self.ftu_props[ftu][ftu_intersect_idx[0]]
                     intersecting_ftu_poly = self.ftu_polys[ftu][ftu_intersect_idx[0]]
-            
+        
             return intersecting_ftu_props, intersecting_ftu_poly
         else:
             raise ValueError
+        """
         
     def convert_map_coords(self, input_coords):
 
@@ -499,7 +584,7 @@ class DSASlide:
             if any(['Main_Cell_Types' in i for i in self.properties_list]):
                 self.properties_list.append('Max Cell Type')
 
-    def update_viewport_data(self,bounds_box:list,view_type:dict):
+    def update_viewport_data(self,bounds_box:list,view_type:dict, slide_info:dict):
         """
         Grabbing info for intersecting ftus        
         """
@@ -514,7 +599,7 @@ class DSASlide:
         
         return viewport_data_components, viewport_data
 
-    def spatial_aggregation(self, agg_polygon):
+    def spatial_aggregation(self, agg_polygon: Polygon, slide_info: dict):
         """
         Generalized aggregation of underlying structure properties for a given polygon
         """
@@ -533,7 +618,7 @@ class DSASlide:
         # Step 1: Find intersecting structures with polygon
         aggregated_properties = {}
         for ftu_idx, ftu in enumerate(self.ftu_names):
-            overlap_properties, overlap_polys = self.find_intersecting_ftu(agg_polygon, ftu)
+            overlap_properties, overlap_polys = self.find_intersecting_ftu(agg_polygon, ftu, slide_info)
 
             overlap_area = [(i.intersection(agg_polygon).area)/(agg_polygon.area) for i in overlap_polys]
             # overlap_properties is a list of properties for each intersecting polygon
@@ -558,7 +643,8 @@ class DSASlide:
 
             agg_object_props = agg_prop_df.select_dtypes(include='object')
             # Adding categorical properties
-            agg_object_props = pd.concat([agg_object_props,agg_prop_df[:,[i for i in categorical_columns if i in agg_prop_df.columns.tolist()]]],axis=1)
+            if any([i in categorical_columns for i in agg_prop_df.columns.tolist()]):
+                agg_object_props = pd.concat([agg_object_props,agg_prop_df[:,[i for i in categorical_columns if i in agg_prop_df.columns.tolist()]]],axis=1)
             for col_idx, col_name in enumerate(agg_object_props.columns.tolist()):
                 col_values = agg_object_props[col_name].tolist()
                 col_vals_dict = {col_name: {}}
@@ -672,7 +758,7 @@ class VisiumSlide(DSASlide):
 
         return job_id
 
-    def update_viewport_data(self,bounds_box:list, view_type:dict):
+    def update_viewport_data(self,bounds_box:list, view_type:dict, slide_info: dict):
         """
         Find intersecting structures, including marked and manual.
 
@@ -689,7 +775,7 @@ class VisiumSlide(DSASlide):
         intersecting_ftu_polys = {}
 
         for ftu in self.ftu_names:
-            intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
+            intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu,slide_info)
 
         for m_idx,m_ftu in enumerate(self.manual_rois):
             manual_intersect_ftus = list(m_ftu['geojson']['features'][0]['properties']['user'])
@@ -1046,7 +1132,7 @@ class CODEXSlide(DSASlide):
 
         return styled_url
 
-    def update_viewport_data(self,bounds_box: list,view_type:dict):
+    def update_viewport_data(self,bounds_box: list,view_type:dict, slide_info:dict):
         """
         Finding viewport data according to view selection
         view_types available: cell, features, channel_hist
@@ -1063,7 +1149,7 @@ class CODEXSlide(DSASlide):
         if view_type['name'] in ['cell','features']:
             
             for ftu in self.ftu_names:
-                intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
+                intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu,slide_info)
             
             for m_idx, m_ftu in enumerate(self.manual_rois):
                 for int_ftu in m_ftu['geojson']['features'][0]['properties']['user']:
@@ -1409,7 +1495,7 @@ class XeniumSlide(DSASlide):
 
         self.n_frames = 0
 
-    def update_viewport_data(self,bounds_box,view_type):
+    def update_viewport_data(self,bounds_box:list,view_type:dict,slide_info:dict):
         """
         Updating data passed to charts based on change in viewport position
 
@@ -1427,7 +1513,7 @@ class XeniumSlide(DSASlide):
         if view_type['name'] in ['cell_composition','features']:
 
             for ftu in self.ftu_names:
-                intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu)
+                intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box,ftu,slide_info)
 
             for m_idx, m_ftu in enumerate(self.manual_rois):
                 for int_ftu in list(m_ftu['geojson']['features'][0]['properties']['user']):
@@ -1436,6 +1522,7 @@ class XeniumSlide(DSASlide):
 
             for marked_idx, marked_ftu in enumerate(self.marked_ftus):
                 intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
+
 
             if len(list(intersecting_ftus.keys()))>0:
                 viewport_data = {}
@@ -1476,6 +1563,7 @@ class XeniumSlide(DSASlide):
                         viewport_data[f]['count'] = len(counts_data_list)
 
                         counts_value_dict = counts_data['Cell Type'].value_counts().to_dict()
+                        
                         pie_chart_data = []
                         for key,val in counts_value_dict.items():
                             pie_chart_data.append(

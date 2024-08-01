@@ -42,33 +42,51 @@ def get_pattern_matching_value(input_val):
 def extract_overlay_value(structure_list,overlay_prop):
     """
     Used to pull out raw value to add to list used to generate heatmaps/colorbars
+    Hierarchy for nested features is like this:
+    - name
+        - value
+            - sub_value
+
+    Aggregated str properties end up with a count per-value which is different from non-aggregated structures
+    e.g.: Non-aggregated: {'Cell Type': 'POD'} whereas aggregated: {'Cell Type': {'POD': 6, 'EC': 10, etc.}}
     """
+    print(overlay_prop)
     raw_values_list = []
     if not overlay_prop['name'] is None:
         for st in structure_list:
             if overlay_prop['name'] in st:
                 if not overlay_prop['value'] is None:
                     if overlay_prop['value'] in st[overlay_prop['name']]:
-                        if not overlay_prop['sub_value'] is None:
+                        if not overlay_prop['sub_value'] is None and not type(st[overlay_prop['value']]) in [int,float,str]:
                             if overlay_prop['sub_value'] in st[overlay_prop['name']][overlay_prop['value']]:
-                                if not type(st[overlay_prop['name']][overlay_prop['sub_value']])==str:
+                                if not type(st[overlay_prop['name']][overlay_prop['value']][overlay_prop['sub_value']])==str:
+                                    # Converting all numbers to float
                                     raw_values_list.append(float(st[overlay_prop['name']][overlay_prop['value']][overlay_prop['sub_value']]))
-                                else:
+                                elif type(st[overlay_prop['name']][overlay_prop['value']][overlay_prop['sub_value']])==str:
+                                    # Leaving strings as is
                                     raw_values_list.append(st[overlay_prop['name']][overlay_prop['value']][overlay_prop['sub_value']])
                         else:
-                            if not type(st[overlay_prop['name']][overlay_prop['value']])==str:
-                                raw_values_list.append(float(st[overlay_prop['name']][overlay_prop['value']]))
+                            # Non-aggregated case
+                            if not type(st[overlay_prop['name']]) in [float,int,str]:
+                                if not type(st[overlay_prop['name']][overlay_prop['value']])==str:
+                                    raw_values_list.append(float(st[overlay_prop['name']][overlay_prop['value']]))
+                                else:
+                                    raw_values_list.append(st[overlay_prop['name']][overlay_prop['value']])
                             else:
-                                raw_values_list.append(st[overlay_prop['name']][overlay_prop['value']])
+                                # Appending a value/count of 1
+                                raw_values_list.append(1)
                     elif overlay_prop['value']=='max':
                         # Getting the max index of st[overlay_prop['name']][overlay_prop['value']]
                         check_values = list(st[overlay_prop['name']].values())
                         raw_values_list.append(np.argmax(check_values))
-                else:
-                    if not type(st[overlay_prop['name']])==str:
-                        raw_values_list.append(float(st[overlay_prop['name']]))
                     else:
-                        raw_values_list.append(st[overlay_prop['name']])
+                        raw_values_list.append(0)
+                else:
+                    if not type(st[overlay_prop['name']])==dict:
+                        if not type(st[overlay_prop['name']])==str:
+                            raw_values_list.append(float(st[overlay_prop['name']]))
+                        else:
+                            raw_values_list.append(st[overlay_prop['name']])
 
     return raw_values_list
 

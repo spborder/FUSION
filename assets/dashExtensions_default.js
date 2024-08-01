@@ -10,7 +10,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 } = context.hideout;
 
                 var overlay_value = Number.Nan;
-                if (overlay_prop) {
+                if (overlay_prop && "user" in feature.properties) {
                     if (overlay_prop.name) {
                         if (overlay_prop.name in feature.properties.user) {
                             if (overlay_prop.value) {

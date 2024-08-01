@@ -189,7 +189,7 @@ class FUSION:
             const {color_key,overlay_prop,fillOpacity,ftu_colors,filter_vals} = context.hideout;
                                        
             var overlay_value = Number.Nan;
-            if (overlay_prop) {
+            if (overlay_prop && "user" in feature.properties) {
                 if (overlay_prop.name) {
                     if (overlay_prop.name in feature.properties.user) {
                         if (overlay_prop.value) {
@@ -201,6 +201,7 @@ class FUSION:
                                         var overlay_value = Number.Nan;
                                     }
                                 } else {
+                                    \\TODO: Might have to do something here for non-aggregated String props
                                     var overlay_value = feature.properties.user[overlay_prop.name][overlay_prop.value];
                                 }
                             } else if (overlay_prop.value==="max") {
@@ -286,6 +287,7 @@ class FUSION:
                                                 return_feature = return_feature & false;
                                             }
                                         } else {
+                                            \\TODO: Might have to do something here for non-aggregated String props
                                             var test_val = feature.properties.user[filter.name][filter.value];
                                         }
                                     } else if (filter.value==="max") {
@@ -722,7 +724,8 @@ class FUSION:
              State({'type':'frame-histogram-drop','index':ALL},'value'),
              State({'type':'frame-label-drop','index':ALL},'value'),
              State({'type':'viewport-store-data','index':ALL},'data'),
-             State('user-store','data')
+             State('user-store','data'),
+             State('slide-info-store','data')
              ],
             prevent_initial_call = True
         )(self.update_viewport_data)      
@@ -779,6 +782,7 @@ class FUSION:
              Output('ftu-structure-hierarchy','children'),
              Output('cell-annotation-tab','disabled')],
             Input('slide-load-interval','disabled'),
+            State('slide-info-store','data'),
             prevent_initial_call=True,
             suppress_callback_exceptions=True
         )(self.ingest_wsi)
@@ -1855,11 +1859,12 @@ class FUSION:
 
         return [html.P(f'Included Slide Count: {len(slide_rows)}')], slide_options, current_session
 
-    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,current_tab,update_data,frame_list,frame_label,current_data, user_data_store):
+    def update_viewport_data(self,bounds,cell_view_type,frame_plot_butt,current_tab,update_data,frame_list,frame_label,current_data, user_data_store, slide_info_store):
         """
         Updating data used for current viewport visualizations
         """
         user_data_store = json.loads(user_data_store)
+        slide_info_store = json.loads(slide_info_store)
         
         if not len(get_pattern_matching_value(current_data))==0:
             viewport_store_data = json.loads(get_pattern_matching_value(current_data))
@@ -1870,7 +1875,6 @@ class FUSION:
         viewport_data_components = no_update
         annotation_session_components = no_update
         cell_annotation_components = no_update
-        
         if update_data or ctx.triggered_id=='roi-view-data':
             if not self.wsi is None:
                 if not bounds is None:
@@ -1915,7 +1919,8 @@ class FUSION:
                     # Generalized get_viewport_data method for self.wsi which should return a list of all the stuff needed for that tab
                     viewport_data_components, viewport_data = self.wsi.update_viewport_data(
                         bounds_box = viewport_store_data['current_slide_bounds'],
-                        view_type = view_type_dict
+                        view_type = view_type_dict,
+                        slide_info = slide_info_store
                     )
 
                     viewport_store_data['data'] = viewport_data
@@ -1938,10 +1943,11 @@ class FUSION:
                 # Getting intersecting FTU information
                 intersecting_ftus = {}
                 for ftu in self.current_ftu_layers:
-                    if not ftu=='Spots':
+                    if not ftu=='Spots' and not ftu=='Cells':
                         intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(
                             viewport_store_data['current_slide_bounds'],
-                            ftu
+                            ftu,
+                            slide_info_store
                         )
 
                 for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
@@ -1951,7 +1957,7 @@ class FUSION:
                     intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
                 
                 #TODO: Check for current annotation session in user's public folder
-                annotation_tabs, first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler,self.current_ftus, user_data_store)
+                annotation_tabs, first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler,intersecting_ftus, user_data_store)
                 user_data_store["current_ann_session"] = first_session
 
                 annotation_tab_group = html.Div([
@@ -3321,6 +3327,8 @@ class FUSION:
         slide_info_store_data = json.loads(slide_info_store_data)
         user_data_store = json.loads(user_data_store)
 
+        #TODO: Change the active_tab to overlays when loading a new slide just to reset other tabs' content
+
         if ctx.triggered_id=='slide-select':
 
             if not slide_id:
@@ -3329,6 +3337,7 @@ class FUSION:
             # "slide_name" here is the itemId of a slide
             print(f'Getting info for slide: {slide_id}')
             slide_info = self.dataset_handler.get_item_info(slide_id)
+            tiles_metadata = self.dataset_handler.get_tile_metadata(slide_id)
             annotation_info = self.dataset_handler.get_available_annotation_ids(slide_id)
 
             if 'Spatial Omics Type' in slide_info['meta']:
@@ -3380,6 +3389,7 @@ class FUSION:
                         marked_ftus = []
                     )
             else:
+                slide_type = 'Regular'
                 self.wsi = DSASlide(
                     item_id = slide_info['_id'],
                     user_details=user_data_store,
@@ -3390,8 +3400,12 @@ class FUSION:
                 )
 
             # Storing some info in a data store component (erases upon refresh)
+            #TODO: slide_info_store should also include tiles metadata
+            #TODO: This should also include the x and y scale to apply to annotations in those slides
             slide_annotation_info = {
                 'slide_info': slide_info,
+                'tiles_metadata': tiles_metadata,
+                'slide_type': slide_type,
                 'annotations': annotation_info,
                 'overlay_prop': None,
                 'cell_vis_val': 0.5,
@@ -3408,6 +3422,7 @@ class FUSION:
                 
 
                 # Starting the get_annotation_geojson function on a new thread
+                #TODO: Change name of the thread to the annotation id
                 new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = first_annotation, args = [0])
                 new_thread.daemon = True
                 new_thread.start()
@@ -3467,6 +3482,7 @@ class FUSION:
                             slide_info_store_data['loading_annotation'] = slide_info_store_data['annotations'][next_ann_idx]['_id']
                             
                             # Starting the get_annotation_geojson function on a new thread
+                            #TODO: Change name of the thread to the annotation id
                             new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = next_annotation, args = [next_ann_idx])
                             new_thread.daemon = True
                             new_thread.start()
@@ -3536,16 +3552,20 @@ class FUSION:
                 disable_slide_load = True
                 modal_open = False
 
+        print(slide_info_store_data)
+
         return modal_open, modal_children, slide_info_store_data, disable_slide_load
 
-    def ingest_wsi(self,load_slide_done):
+    def ingest_wsi(self,load_slide_done,slide_info_store):
         """
         Populating slide visualization components after loading annotation and tile information
         """
 
+        slide_info_store = json.loads(slide_info_store)
         load_slide_done = get_pattern_matching_value(load_slide_done)
         if load_slide_done:
             # Updating in the case that an FTU isn't in the previous set of ftu_colors
+            #TODO: Remove reference to self.ftu_colors, store in slide_info_store
             self.ftu_colors = self.wsi.ftu_colors
 
             # Updating overlays colors according to the current cell
@@ -3626,9 +3646,6 @@ class FUSION:
                 'zoom': 3,
                 'transition':'flyTo'
             }
-
-            self.current_ftus = self.wsi.ftu_props
-            self.current_ftu_layers = self.wsi.ftu_names
 
             # Adding the layers to be a property for the edit_control callback
             self.current_overlays = new_children
@@ -5078,11 +5095,12 @@ class FUSION:
 
         return new_children
 
-    def download_data(self,options,button_click,user_store_data):
+    def download_data(self,options,button_click,user_store_data,slide_info_store):
         """
         Download data for external secondary analysis
         """
         user_store_data = json.loads(user_store_data)
+        slide_info_store = json.loads(slide_info_store)
 
         if not self.wsi is None:
             if button_click:
@@ -7281,7 +7299,6 @@ class FUSION:
         if not channel_opts is None:
             slide_info_store = json.loads(slide_info_store)
             current_channels = slide_info_store['current_channels']
-            print(f'channel_options: {get_pattern_matching_value(channel_opts)}')
             if type(channel_opts)==list:
                 if len(channel_opts[0])>0:
                     channel_opts = channel_opts[0]
