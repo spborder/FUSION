@@ -201,7 +201,7 @@ class FUSION:
                                         var overlay_value = Number.Nan;
                                     }
                                 } else {
-                                    \\TODO: Might have to do something here for non-aggregated String props
+                                    // TODO: Might have to do something here for non-aggregated String props
                                     var overlay_value = feature.properties.user[overlay_prop.name][overlay_prop.value];
                                 }
                             } else if (overlay_prop.value==="max") {
@@ -287,7 +287,7 @@ class FUSION:
                                                 return_feature = return_feature & false;
                                             }
                                         } else {
-                                            \\TODO: Might have to do something here for non-aggregated String props
+                                            // TODO: Might have to do something here for non-aggregated String props
                                             var test_val = feature.properties.user[filter.name][filter.value];
                                         }
                                     } else if (filter.value==="max") {
@@ -3551,8 +3551,6 @@ class FUSION:
                 slide_info_store_data = json.dumps(slide_info_store_data)
                 disable_slide_load = True
                 modal_open = False
-
-        print(slide_info_store_data)
 
         return modal_open, modal_children, slide_info_store_data, disable_slide_load
 

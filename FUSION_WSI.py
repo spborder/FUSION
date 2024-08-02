@@ -24,6 +24,9 @@ from dash_extensions.enrich import html
 
 from typing_extensions import Union
 
+#import sleepyjson
+import geopandas
+
 
 from tqdm import tqdm
 from FUSION_Utils import (
@@ -349,8 +352,89 @@ class DSASlide:
             # Getting bounding box for manual annotation
             box_poly = list(query_poly.bounds)
 
-        #TODO: Test out using the API annotations/{id}?region 
+        # Slide annotation ids:
+        print(slide_info)
+        slide_annotation_ids = [i for i in os.listdir(f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}') if '.json' in i]
+        print(f'slide annotation ids: {slide_annotation_ids}')
+        print(ftu)
+
         #TODO: Have to pass the x_scale and y_scale as additional arguments
+        intersecting_ftus_polys = []
+        intersecting_ftus_props = []
+
+        ann_names = [i['annotation']['name'] for i in slide_info['annotations']]
+
+        if isinstance(ftu,list):
+            intersecting_ftus_polys = {}
+            intersecting_ftus_props = {}
+            
+            for f in ftu:
+                intersecting_ftus_polys[f] = []
+                intersecting_ftus_props[f] = []
+                ann_id = slide_info['annotations'][ann_names.index(f)]['_id']
+                # Reading GeoJSON
+                with open(f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/{ann_id}.json') as g:
+                    geojson_data = json.load(g)
+
+                    g.close()
+                
+                geo_df = geopandas.GeoDataFrame.from_features(geojson_data['features'])
+                intersect_ftus = geo_df[geo_df.intersects(query_poly)]
+
+                intersecting_ftus_polys[f] = [
+                    shape(i)
+                    for i in intersect_ftus['geometry']
+                ]
+                intersecting_ftus_props[f] = [
+                    i
+                    for i in intersect_ftus['user']
+                ]
+
+                """
+                with open(f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/{ann_id}.json') as g:
+                    reader = sleepyjson.Reader(g)
+
+                    for feat in tqdm(reader['features']):
+                        if shape(feat['geometry'].value()).intersects(query_poly):
+                            intersecting_ftus_polys[f].append(shape(feat['geometry'].value()))
+                            intersecting_ftus_props[f].append(feat['properties']['user'].value())
+                
+                    g.close()
+                """
+        elif isinstance(ftu,str):
+
+            ann_id = slide_info['annotations'][ann_names.index(ftu)]['_id']
+            # Reading GeoJSON
+            with open(f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/{ann_id}.json') as g:
+                geojson_data = json.load(g)
+
+                g.close()
+            
+            geo_df = geopandas.GeoDataFrame.from_features(geojson_data['features'])
+            intersect_ftus = geo_df[geo_df.intersects(query_poly)]
+
+            intersecting_ftus_polys = [
+                shape(i)
+                for i in intersect_ftus['geometry']
+            ]
+            intersecting_ftus_props = [
+                i
+                for i in intersect_ftus['user']
+            ]
+
+            """
+            with open(f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/{ann_id}.json') as g:
+                reader = sleepyjson.Reader(g)
+
+                for feat in tqdm(reader['features']):
+                    if shape(feat['geometry'].value()).intersects(query_poly):
+                        intersecting_ftus_polys.append(shape(feat['geometry'].value()))
+                        intersecting_ftus_props.append(feat['properties']['user'].value())        
+
+                g.close()
+            """
+
+        """
         if isinstance(ftu,list):
             intersecting_ftus_polys = {}
             intersecting_ftus_props = {}
@@ -407,6 +491,7 @@ class DSASlide:
             intersecting_ftus_props = [
                 i['user'] for i in girder_response['annotation']['elements']
             ]
+        """
 
         return intersecting_ftus_props, intersecting_ftus_polys
 

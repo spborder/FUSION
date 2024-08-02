@@ -2463,6 +2463,7 @@ class LayoutHandler:
         # Table with metadata for each dataset in dataset_handler
         combined_dataset_dict = []
 
+        print('generating builder_layout')
         # Accessing the folder structure saved in dataset_handler     
         slide_datasets = dataset_handler.update_slide_datasets(user_info)
 
@@ -3731,7 +3732,7 @@ class GirderHandler:
 
         return cli
 
-    def update_slide_datasets(self,user_info):
+    def update_slide_datasets(self,user_info, current_set = None):
         """
         Grabbing available collections as well as user public folders
         outputs list of accessible folders' info (folders that are immediate parents of slides)
@@ -3754,18 +3755,14 @@ class GirderHandler:
         for c in all_collections:
 
             # Get all large image objects in each collection that are not in histoqc outputs
-            max_retries = 5
-            try_n = 1
-            done_check = False
-            while try_n<max_retries and not done_check:
-                try:
-                    if not c["_id"]==user_public_folder["_id"]:
-                            collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'collection'})
-                    else:
-                        collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'folder'})
-                    done_check = True
-                except requests.exceptions.JSONDecodeError:
-                    try_n+1
+            collection_items = []
+            try:
+                if not c["_id"]==user_public_folder["_id"]:
+                        collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'collection'})
+                else:
+                    collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'folder'})
+            except json.JSONDecodeError:
+                print(f'JSONDecodeError encountered')
 
             image_items = [i for i in collection_items if 'largeImage' in i and not 'png' in i['name']]
 
@@ -3776,7 +3773,6 @@ class GirderHandler:
 
             # Aggregating slide metadata in each folder
             for f in folder_info:
-
                 folder_slides = [i for i in image_items if i['folderId']==f["_id"]]
                 f['Aggregated_Metadata'] = {}
                 
