@@ -50,7 +50,8 @@ import dash_treeview_antd as dta
 from timeit import default_timer as timer
 import time
 
-from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide, XeniumSlide
+#from FUSION_WSI import DSASlide, VisiumSlide, CODEXSlide, XeniumSlide
+from FUSION_WSI import SlideHandler
 from FUSION_Handlers import LayoutHandler, DownloadHandler, GirderHandler, GeneHandler
 from FUSION_Prep import XeniumPrep, CODEXPrep, VisiumPrep, Prepper
 from FUSION_Utils import (
@@ -86,6 +87,9 @@ class FUSION:
         self.prep_handler = prep_handler
 
         self.gene_handler = GeneHandler()
+        self.slide_handler = SlideHandler(
+            girder_handler = self.dataset_handler
+        )
 
         # Setting some app-related things
         self.app = app
@@ -152,24 +156,6 @@ class FUSION:
 
         # ASCT+B table for cell hierarchy generation
         self.table_df = self.dataset_handler.asct_b_table    
-
-        # FTU settings
-        self.wsi = None
-        if not self.wsi is None:
-            self.ftus = self.wsi.ftu_names
-            self.ftu_colors = self.wsi.ftu_colors
-
-            self.current_ftu_layers = self.wsi.ftu_names
-        else:
-            # Initialization of these properties
-            self.ftu_colors = {
-                'Glomeruli':'#390191',
-                'Tubules':'#e71d1d',
-                'Arterioles':'#b6d7a8',
-                'Spots':'#dffa00'
-            }
-            self.ftus = []
-            self.current_ftu_layers = []
 
         # Cell Hierarchy related properties
         self.node_cols = {
@@ -395,33 +381,33 @@ class FUSION:
 
         slide_select_value = ''
 
+        #TODO: Make this one more generalizable like grab extra data for any studies, etc.
         self.dataset_handler.update_usability()
+        #TODO: Currently this method does not remove old annotations as expected
         self.dataset_handler.clean_old_annotations()
 
-        if pathname in self.layout_handler.layout_dict:
-            self.current_page = pathname
 
+
+        if pathname in self.layout_handler.layout_dict:
             if not pathname=='vis':
                 if not pathname=='dataset-builder':
                     if pathname=='dataset-uploader':
                         # Double-checking that a user is logged in before giving access to dataset-uploader
                         if user_data['login']=='fusionguest':
-                            self.current_page = 'welcome'
-                    container_content = self.layout_handler.layout_dict[self.current_page]
+                            #self.current_page = 'welcome'
+                            pathname = 'welcome'
+                    container_content = self.layout_handler.layout_dict[pathname]
                 else:
                     # Checking if there was any new slides added via uploader (or just added externally)
                     #self.dataset_handler.update_folder_structure(user_data['login'])
                     self.layout_handler.gen_builder_layout(self.dataset_handler,user_data)
-
-                    container_content = self.layout_handler.layout_dict[self.current_page]
+                    container_content = self.layout_handler.layout_dict[pathname]
 
             else:
 
                 # Generating visualization layout with empty clustering data, default filter vals, and no WSI
-                self.wsi = None
-                self.filter_vals = None
                 self.layout_handler.gen_vis_layout(
-                    self.wsi,
+                    None,
                     self.gene_handler
                 )
 
@@ -433,19 +419,24 @@ class FUSION:
                         s['included'] = True
                         vis_sess_store.append(s)
 
-                container_content = self.layout_handler.layout_dict[self.current_page]
+                container_content = self.layout_handler.layout_dict[pathname]
 
         else:
-            self.current_page = 'welcome'
-                
-            container_content = self.layout_handler.layout_dict[self.current_page]
+            #self.current_page = 'welcome'
+            pathname = 'welcome'
+            container_content = self.layout_handler.layout_dict[pathname]
 
-        if self.current_page == 'vis':
+        if pathname == 'vis':
             slide_style = {'marginBottom':'20px','display':'inline-block'}
         else:
             slide_style = {'display':'none'}
 
-        return container_content, slide_style, slide_select_value, json.dumps(vis_sess_store)
+        # Clearing slide_info_store and updating vis_sess_store
+        slide_info_store = json.dumps({})
+        vis_sess_store = json.dumps(vis_sess_store)
+
+
+        return container_content, slide_style, slide_select_value, json.dumps(vis_sess_store), slide_info_store
 
     def open_nav_collapse(self,n,is_open):
         if n:
@@ -532,7 +523,8 @@ class FUSION:
             [Output('container-content','children'),
              Output('slide-select-card','style'),
              Output('slide-select','value'),
-             Output('visualization-session-store','data')],
+             Output('visualization-session-store','data'),
+             Output('slide-info-store','data')],
              Input('url','pathname'),
              [State('user-store','data'),
               State('visualization-session-store','data')],
@@ -692,7 +684,10 @@ class FUSION:
                 Input('add-filter-button','n_clicks'),
                 Input({'type':'delete-filter','index':ALL},'n_clicks')
             ],
-            State('slide-info-store','data'),
+            [
+                State('slide-info-store','data'),
+                State('cell-drop','options')
+            ],
             prevent_initial_call = True
         )(self.add_filter)
 
@@ -704,6 +699,7 @@ class FUSION:
                 Output({'type':'added-filter-slider-div','index':MATCH},'style')
             ],
             Input({'type':'added-filter-drop','index':MATCH},'value'),
+            State('slide-info-store','data'),
             prevent_initial_call = True
         )(self.add_filter_slider)
 
@@ -779,7 +775,6 @@ class FUSION:
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children'),
-             Output('ftu-structure-hierarchy','children'),
              Output('cell-annotation-tab','disabled')],
             Input('slide-load-interval','disabled'),
             State('slide-info-store','data'),
@@ -841,7 +836,8 @@ class FUSION:
             [Input('cluster-graph','clickData'),
             Input('cluster-graph','selectedData')],
             [State('cluster-store','data'),
-             State('user-store','data')],
+             State('user-store','data'),
+             State('slide-info-store','data')],
             [Output('selected-image','figure'),
             Output('selected-cell-types','figure'),
             Output('selected-cell-states','figure'),
@@ -871,7 +867,8 @@ class FUSION:
         # Add histology marker from clustering/plot
         self.app.callback(
             Input({'type':'add-mark-cluster','index':ALL},'n_clicks'),
-            State('cluster-store','data'),
+            [State('cluster-store','data'),
+             State('slide-info-store','data')],
             [Output({'type':'edit_control','index':ALL},'geojson'),
              Output('marker-add-div','children')],
             prevent_initial_call=True
@@ -1005,16 +1002,6 @@ class FUSION:
             prevent_initial_call = True
         )(self.add_channel_overlay)
 
-        # Populating structure hierarchy tab
-        self.app.callback(
-            [
-                Output({'type':'structure-tree-div','index':ALL},'children'),
-                Output({'type':'reset-structure-hierarchy','index':ALL},'disabled')
-            ],
-            Input('ftu-structure-hierarchy','active_tab'),
-            prevent_initial_call = True
-        )(self.populate_structure_hierarchy)
-
         # Grabbing points from current viewport umap (CODEX) and plotting other properties
         self.app.callback(
             [
@@ -1121,7 +1108,8 @@ class FUSION:
                 State({'type':'annotation-station-ftu','index':ALL},'children'),
                 State({'type':'annotation-station-ftu-idx','index':ALL},'children'),
                 State('user-store','data'),
-                State({'type':'viewport-store-data','index': ALL},'data')
+                State({'type':'viewport-store-data','index': ALL},'data'),
+                State('slide-info-store','data')
             ],
             prevent_initial_call = True
         )(self.update_current_annotation)
@@ -1865,6 +1853,7 @@ class FUSION:
         """
         user_data_store = json.loads(user_data_store)
         slide_info_store = json.loads(slide_info_store)
+        print(f'slide_info_store in update_viewport_data: {slide_info_store}')
         
         if not len(get_pattern_matching_value(current_data))==0:
             viewport_store_data = json.loads(get_pattern_matching_value(current_data))
@@ -1876,7 +1865,7 @@ class FUSION:
         annotation_session_components = no_update
         cell_annotation_components = no_update
         if update_data or ctx.triggered_id=='roi-view-data':
-            if not self.wsi is None:
+            if not len(list(slide_info_store.keys()))==0:
                 if not bounds is None:
                     if len(bounds)==2:
                         bounds_box = shapely.geometry.box(bounds[0][1],bounds[0][0],bounds[1][1],bounds[1][0])
@@ -1886,19 +1875,19 @@ class FUSION:
                     # Storing current slide boundaries
                     viewport_store_data['current_slide_bounds'] = list(bounds_box.bounds)
                 else:
-                    viewport_store_data['current_slide_bounds'] = self.wsi.map_bounds
+                    viewport_store_data['current_slide_bounds'] = slide_info_store['map_bounds']
             else:
+                # If no slide is currently in view
                 viewport_store_data['current_slide_bounds'] = None
-
                 raise exceptions.PreventUpdate
         
         # Making a box-poly from the bounds
         if current_tab=='cell-compositions-tab':
-            if not self.wsi is None:
+            if not len(list(slide_info_store.keys()))==0:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
-                if self.wsi.spatial_omics_type=='CODEX':
+                if slide_info_store['slide_type']=='CODEX':
                     if frame_list is None or len(frame_list)==0:
-                        frame_list = [[self.wsi.channel_names[0]]]
+                        frame_list = [[slide_info_store['tiles_metadata']['frames'][0]]]
                     
                     if frame_label is None or len(frame_list)==0:
                         frame_label = [None]
@@ -1916,8 +1905,8 @@ class FUSION:
                 viewport_store_data['view_type_dict'] = view_type_dict
 
                 if update_data or not update_data and not ctx.triggered_id=='slide-map':
-                    # Generalized get_viewport_data method for self.wsi which should return a list of all the stuff needed for that tab
-                    viewport_data_components, viewport_data = self.wsi.update_viewport_data(
+                    #TODO: Generalized get_viewport_data method for current wsi which should return a list of all the stuff needed for that tab
+                    viewport_data_components, viewport_data = self.slide_handler.update_viewport_data(
                         bounds_box = viewport_store_data['current_slide_bounds'],
                         view_type = view_type_dict,
                         slide_info = slide_info_store
@@ -1944,16 +1933,16 @@ class FUSION:
                 intersecting_ftus = {}
                 for ftu in self.current_ftu_layers:
                     if not ftu=='Spots' and not ftu=='Cells':
-                        intersecting_ftus[ftu], _ = self.wsi.find_intersecting_ftu(
+                        intersecting_ftus[ftu], _ = self.slide_handler.find_intersecting_ftu(
                             viewport_store_data['current_slide_bounds'],
                             ftu,
                             slide_info_store
                         )
 
-                for m_idx,m_ftu in enumerate(self.wsi.manual_rois):
+                for m_idx,m_ftu in enumerate(slide_info_store['manual_ROIs']):
                     intersecting_ftus[f'Manual ROI: {m_idx+1}'] = [m_ftu['geojson']['features'][0]['properties']['user']]
 
-                for marked_idx, marked_ftu in enumerate(self.wsi.marked_ftus):
+                for marked_idx, marked_ftu in enumerate(slide_info_store['marked_FTUs']):
                     intersecting_ftus[f'Marked FTUs: {marked_idx+1}'] = [i['properties']['user'] for i in marked_ftu['geojson']['features']]
                 
                 #TODO: Check for current annotation session in user's public folder
@@ -1984,7 +1973,8 @@ class FUSION:
                 'n_labeled': 0,
                 'current_rules': []
             }
-            cell_annotation_components = self.wsi.populate_cell_annotation(
+
+            cell_annotation_components = self.slide_handler.populate_cell_annotation(
                 viewport_store_data['current_slide_bounds'], 
                 current_cell_annotation_data
             )
@@ -2019,7 +2009,7 @@ class FUSION:
         else:
             return go.Figure()
     
-    def update_hex_color_key(self, overlay_prop):
+    def update_hex_color_key(self, overlay_prop, slide_info_store):
         
         # Iterate through all structures (and spots) in current wsi,
         # concatenate all of their proportions of specific cell types together
@@ -2032,7 +2022,8 @@ class FUSION:
         raw_values_list = []
         if not overlay_prop is None:
             if not overlay_prop['name'] is None:
-                raw_values_list.extend(self.wsi.get_overlay_value_list(overlay_prop))
+                #TODO: Attach this method to something else
+                raw_values_list.extend(self.slide_handler.get_overlay_value_list(overlay_prop,slide_info_store))
 
         # Converting to RGB
         if len(raw_values_list)>0:
@@ -2063,14 +2054,12 @@ class FUSION:
         Updating overlay hideout property in GeoJSON layer used in self.ftu_style_handle        
         """
 
-        #if cell_val is None:
-        #    raise exceptions.PreventUpdate
-        #
-        if self.wsi is None:
-            raise exceptions.PreventUpdate     
         m_prop = None
         cell_sub_select_children = no_update
         slide_info_store = json.loads(slide_info_store)
+
+        if len(list(slide_info_store.keys()))==0:
+            raise exceptions.PreventUpdate
         
         if 'overlay_prop' in slide_info_store:
             overlay_prop = slide_info_store['overlay_prop']
@@ -2082,7 +2071,7 @@ class FUSION:
         else:
             ftu_filter_vals = None
 
-        if self.wsi.spatial_omics_type=='Visium':
+        if slide_info_store['slide_type']=='Visium':
             gene_info_style = [{'display':'none'}]
             gene_info_components = [[]]
         else:
@@ -2106,11 +2095,12 @@ class FUSION:
         else:
             triggered_id = ctx.triggered_id
 
-        #TODO: Add a button to update FTU/boundary structure colors instead of making it responsive to the color selector-=
         try:
             if triggered_id['type']=='ftu-bound-color-butt':
                 if not ftu_bound_color is None:
-                    self.ftu_colors[self.wsi.ftu_names[triggered_id['index']]] = ftu_bound_color[triggered_id['index']]
+                    ftu_colors = slide_info_store['ftu_colors']
+                    ftu_names = [i['annotation']['name'] for i in slide_info_store['annotations']]
+                    ftu_colors[ftu_names[triggered_id['index']]] = ftu_bound_color[triggered_id['index']]
         
         except TypeError:
             # This is for non-pattern matching components so the ctx.triggered_id is just a str
@@ -2163,7 +2153,7 @@ class FUSION:
 
                 if cell_sub_val is None:
 
-                    self.overlap_prop = {
+                    overlap_prop = {
                         'name': m_prop,
                         'value': cell_name,
                         'sub_value': cell_sub_val
@@ -2183,7 +2173,7 @@ class FUSION:
                         'value': cell_name,
                         'sub_value': cell_sub_val
                     }
-                hex_color_key = self.update_hex_color_key(overlay_prop)
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
                 color_bar_style['width'] = '350px'
 
                 color_bar = dl.Colorbar(
@@ -2248,7 +2238,7 @@ class FUSION:
                         'sub_value': None
                     }
                 
-                hex_color_key = self.update_hex_color_key(overlay_prop)
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
                 color_bar_style['width'] = '350px'
 
                 color_bar = dl.Colorbar(
@@ -2275,7 +2265,7 @@ class FUSION:
                     'sub_value': None
                 }
 
-                hex_color_key = self.update_hex_color_key(overlay_prop)
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
                 color_bar_style['width'] = '350px'
 
                 color_bar = dl.Colorbar(
@@ -2295,7 +2285,7 @@ class FUSION:
                     'value':'max',
                     'sub_value': None
                 }
-                hex_color_key = self.update_hex_color_key(overlay_prop)
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
                 color_bar_style['width'] = '650px'
 
                 cell_sub_select_children = []
@@ -2319,7 +2309,7 @@ class FUSION:
                     'value': None,
                     'sub_value': None
                 }
-                hex_color_key = self.update_hex_color_key(overlay_prop)
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                 cluster_labels = sorted(list(hex_color_key.keys()))
                 color_bar = dlx.categorical_colorbar(
@@ -2341,7 +2331,7 @@ class FUSION:
                     'value': None,
                     'sub_value': None
                 }
-                hex_color_key = self.update_hex_color_key(overlay_prop)
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                 cell_sub_select_children = []
 
@@ -2365,7 +2355,7 @@ class FUSION:
                     'value': cell_val,
                     'sub_value': None
                 }
-                hex_color_key = self.update_hex_color_key(overlay_prop)
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                 # Now displaying gene info
                 if triggered_id=='cell-drop':
@@ -2399,7 +2389,7 @@ class FUSION:
                     'value': cell_val,
                     'sub_value': None
                 }
-                hex_color_key = self.update_hex_color_key(overlay_prop)
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                 cell_sub_select_children = []
 
@@ -2426,7 +2416,7 @@ class FUSION:
                         'value': cell_val,
                         'sub_value': None
                     }
-                hex_color_key = self.update_hex_color_key(overlay_prop)
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                 cell_sub_select_children = []
 
@@ -2466,7 +2456,7 @@ class FUSION:
                 'value': None,
                 'sub_value': None
             }
-            hex_color_key = self.update_hex_color_key(overlay_prop)
+            hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
             cell_sub_select_children = []
 
@@ -2509,6 +2499,7 @@ class FUSION:
 
         slide_info_store['overlay_prop'] = overlay_prop
         slide_info_store['filter_vals'] = ftu_filter_vals
+        slide_info_store['cell_vis_val'] = cell_vis_val
         slide_info_store = json.dumps(slide_info_store)
 
         return geojson_hideout, color_bar, filter_min_val, filter_max_val, filter_disable, cell_sub_select_children, gene_info_style, gene_info_components, slide_info_store
@@ -3014,6 +3005,7 @@ class FUSION:
 
 
             if 'unique_index' in ftu_click['properties']['user']:
+                #TODO: Store these user ftu labels somewhere else
                 add_labels_children = self.layout_handler.get_user_ftu_labels(self.wsi,ftu_click)
 
                 accordion_children.append(
@@ -3328,89 +3320,32 @@ class FUSION:
         user_data_store = json.loads(user_data_store)
 
         #TODO: Change the active_tab to overlays when loading a new slide just to reset other tabs' content
-
         if ctx.triggered_id=='slide-select':
 
             if not slide_id:
                 raise exceptions.PreventUpdate
 
-            # "slide_name" here is the itemId of a slide
             print(f'Getting info for slide: {slide_id}')
             slide_info = self.dataset_handler.get_item_info(slide_id)
-            tiles_metadata = self.dataset_handler.get_tile_metadata(slide_id)
-            annotation_info = self.dataset_handler.get_available_annotation_ids(slide_id)
 
             if 'Spatial Omics Type' in slide_info['meta']:
                 slide_type = slide_info['meta']['Spatial Omics Type']
-                if slide_type=='Visium':
-                    self.wsi = VisiumSlide(
-                        item_id = slide_info['_id'],
-                        user_details = user_data_store,
-                        girder_handler=self.dataset_handler,
-                        ftu_colors = self.ftu_colors,
-                        manual_rois = [],
-                        marked_ftus = []
-                    )
-                elif slide_type=='CODEX':
-                    self.wsi = CODEXSlide(
-                        item_id = slide_info['_id'],
-                        user_details= user_data_store,
-                        girder_handler = self.dataset_handler,
-                        ftu_colors = self.ftu_colors,
-                        manual_rois = [],
-                        marked_ftus = []
-                    )
-                elif slide_type=='Regular':
-                    self.wsi = DSASlide(
-                        item_id = slide_info['_id'],
-                        user_details=user_data_store,
-                        girder_handler = self.dataset_handler,
-                        ftu_colors = self.ftu_colors,
-                        manual_rois = [],
-                        marked_ftus = []
-                    )
-
-                elif slide_type == 'Xenium':
-                    self.wsi = XeniumSlide(
-                        item_id = slide_info['_id'],
-                        user_details = user_data_store,
-                        girder_handler = self.dataset_handler,
-                        ftu_colors = self.ftu_colors,
-                        manual_rois = [],
-                        marked_ftus = []
-                    )
-                else:
-                    self.wsi = DSASlide(
-                        item_id = slide_info['_id'],
-                        user_details= user_data_store,
-                        girder_handler = self.dataset_handler,
-                        ftu_colors = self.ftu_colors,
-                        manual_rois = [],
-                        marked_ftus = []
-                    )
-            else:
-                slide_type = 'Regular'
-                self.wsi = DSASlide(
-                    item_id = slide_info['_id'],
-                    user_details=user_data_store,
-                    girder_handler = self.dataset_handler,
-                    ftu_colors = self.ftu_colors,
-                    manual_rois = [],
-                    marked_ftus = []
-                )
 
             # Storing some info in a data store component (erases upon refresh)
-            #TODO: slide_info_store should also include tiles metadata
-            #TODO: This should also include the x and y scale to apply to annotations in those slides
             slide_annotation_info = {
                 'slide_info': slide_info,
-                'tiles_metadata': tiles_metadata,
                 'slide_type': slide_type,
-                'annotations': annotation_info,
                 'overlay_prop': None,
                 'cell_vis_val': 0.5,
                 'filter_vals': None,
-                'current_channels': None
+                'current_channels': None,
+            }
+
+            slide_annotation_info = slide_annotation_info | self.slide_handler.get_slide_map_data(slide_id,user_data_store)
+            annotation_info = slide_annotation_info['annotations']
+            slide_annotation_info['ftu_colors'] = {
+                i['annotation']['name']: '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+                for i in annotation_info
             }
 
             n_annotations = len(annotation_info)
@@ -3420,10 +3355,9 @@ class FUSION:
 
                 slide_info_store_data = json.dumps(slide_annotation_info)
                 
-
                 # Starting the get_annotation_geojson function on a new thread
                 #TODO: Change name of the thread to the annotation id
-                new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = first_annotation, args = [0])
+                new_thread = threading.Thread(target = self.slide_handler.get_annotation_geojson, name = first_annotation, args = [slide_annotation_info, user_data_store, 0])
                 new_thread.daemon = True
                 new_thread.start()
 
@@ -3454,7 +3388,7 @@ class FUSION:
         
         elif ctx.triggered_id=='slide-load-interval':
             
-            if not new_interval or self.wsi is None:
+            if not new_interval or len(list(slide_info_store_data.keys()))==0:
                 raise exceptions.PreventUpdate
             
             if len(slide_info_store_data['annotations'])>0:
@@ -3483,7 +3417,7 @@ class FUSION:
                             
                             # Starting the get_annotation_geojson function on a new thread
                             #TODO: Change name of the thread to the annotation id
-                            new_thread = threading.Thread(target = self.wsi.get_annotation_geojson, name = next_annotation, args = [next_ann_idx])
+                            new_thread = threading.Thread(target = self.slide_handler.get_annotation_geojson, name = next_annotation, args = [slide_info_store_data, user_data_store,next_ann_idx])
                             new_thread.daemon = True
                             new_thread.start()
 
@@ -3558,86 +3492,34 @@ class FUSION:
         """
         Populating slide visualization components after loading annotation and tile information
         """
-
         slide_info_store = json.loads(slide_info_store)
         load_slide_done = get_pattern_matching_value(load_slide_done)
         if load_slide_done:
-            # Updating in the case that an FTU isn't in the previous set of ftu_colors
-            #TODO: Remove reference to self.ftu_colors, store in slide_info_store
-            self.ftu_colors = self.wsi.ftu_colors
 
             # Updating overlays colors according to the current cell
-            overlay_prop = None
-            cell_vis_val = 0.5
-            filter_vals = None
-            hex_color_key = self.update_hex_color_key(overlay_prop)
+            hex_color_key = self.update_hex_color_key(None,slide_info_store)
 
-            special_overlays_opts = self.layout_handler.gen_special_overlay_opts(self.wsi)
+            special_overlays_opts = self.layout_handler.gen_special_overlay_opts(slide_info_store)
+            visualizable_properties_list = self.slide_handler.get_properties_list(slide_info_store)
 
-            new_children = []
-            if self.wsi.spatial_omics_type=='CODEX':
+            if slide_info_store['slide_type']=='CODEX':
 
                 # Enabling cell annotation tab
                 cell_annotation_tab_disable = False
-
-                # Adding the different frames to the layers control object
-                new_children+=[
-                    dl.BaseLayer(
-                        dl.TileLayer(
-                            url = self.wsi.channel_tile_url[c_idx],
-                            tileSize = self.wsi.tile_dims[0],
-                            maxNativeZoom = self.wsi.zoom_levels-1,
-                            #id = f'codex-tile-layer{random.randint(0,100)}',
-                            id = {'type': 'codex-tile-layer','index': random.randint(0,1000)}
-                        ),
-                        name = c_name,
-                        checked = c_name== self.wsi.channel_names[0],
-                        id = f'codex-base-layer{random.randint(0,1000)}'
-                    )
-                    for c_idx,c_name in enumerate(self.wsi.channel_names)
-                ]
-
                 slide_tile_layer = []
 
             else:
-                
                 cell_annotation_tab_disable = True
                 slide_tile_layer = [
                     dl.TileLayer(
                         id = f'slide-tile{np.random.randint(0,100)}',
-                        url = self.wsi.tile_url,
-                        tileSize = self.wsi.tile_dims[0],
-                        maxNativeZoom = self.wsi.zoom_levels-1
+                        url = slide_info_store['tile_url'],
+                        tileSize = slide_info_store['tile_dims'][0],
+                        maxNativeZoom = slide_info_store['zoom_levels']-1
                     )
                 ]
 
-            new_children += [
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(url = self.wsi.map_dict['FTUs'][struct]['url'], id = self.wsi.map_dict['FTUs'][struct]['id'], options = dict(style = self.ftu_style_handle), filter = self.ftu_filter,
-                                    hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = filter_vals),
-                                    hoverStyle = arrow_function(dict(weight=5, color = self.wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
-                                    zoomToBounds=False,children = [dl.Popup(id=self.wsi.map_dict['FTUs'][struct]['popup_id'])])
-                    ), name = struct, checked = True, id = self.wsi.item_id+'_'+struct
-                )
-                for struct in self.wsi.map_dict['FTUs']
-            ]
-
-            # Now iterating through manual ROIs
-            for m_idx, man in enumerate(self.wsi.manual_rois):
-                new_children.append(
-                    dl.Overlay(
-                        dl.LayerGroup(
-                            dl.GeoJSON(data = man['geojson'], id = man['id'], options = dict(style = self.ftu_style_handle),filter = self.ftu_filter,
-                                        hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = self.filter_vals),
-                                        hoverStyle = arrow_function(dict(weight=5,color=man['hover_color'], dashArray='')),
-                                        children = [dl.Popup(id=man['popup_id'])])
-                        ),
-                        name = f'Manual ROI {m_idx}', checked = True, id = self.wsi.item_id+f'_manual_roi{m_idx}'
-                    )
-                )
-
-            center_point = [2.0*(self.wsi.map_bounds[0][0]+self.wsi.map_bounds[1][0]),1.0*(self.wsi.map_bounds[0][1]+self.wsi.map_bounds[1][1])]
+            center_point = [2.0*(slide_info_store['map_bounds'][0][0]+slide_info_store['map_bounds'][1][0]),1.0*(slide_info_store['map_bounds'][0][1]+slide_info_store['map_bounds'][1][1])]
 
             map_center = {
                 'center': center_point,
@@ -3646,7 +3528,12 @@ class FUSION:
             }
 
             # Adding the layers to be a property for the edit_control callback
-            self.current_overlays = new_children
+            current_overlays = self.slide_handler.generate_annotation_overlays(
+                slide_info = slide_info_store,
+                style_handler = self.ftu_style_handle,
+                filter_handler = self.ftu_filter,
+                color_key = hex_color_key
+            )
 
             # Removes manual ROIs added via dl.EditControl
             remove_old_edits = [{
@@ -3657,8 +3544,8 @@ class FUSION:
 
             # Populating FTU boundary options:
             combined_colors_dict = {}
-            for f in self.wsi.map_dict['FTUs']:
-                combined_colors_dict[f] = {'color':self.wsi.map_dict['FTUs'][f]['color']}
+            for f in slide_info_store['ftu_colors']:
+                combined_colors_dict[f] = {'color':slide_info_store[f]}
             
             boundary_options_children = [
                 dbc.Tab(
@@ -3680,45 +3567,12 @@ class FUSION:
                 for idx, struct in enumerate(list(combined_colors_dict.keys()))
             ]
 
-            # Structure hierarchy tab creation
-            structure_hierarchy_tabs = [
-                dbc.Tab(
-                    children = [
-                        html.Div(
-                            id = {'type':'structure-tree-div','index':idx},
-                            children = []
-                        ),
-                        dbc.Row([
-                                dbc.Col(
-                                    dbc.Button(
-                                        'Reset',
-                                        className = 'd-grid col-12 mx-auto',
-                                        id = {'type':'reset-structure-hierarchy','index':idx}
-                                    ),
-                                    md = 6
-                                ),
-                                dbc.Col(
-                                    dbc.Button(
-                                        'Update Structure',
-                                        className = 'd-grid col-12 mx-auto',
-                                        id = {'type': 'update-structure-hierarchy','index':idx}
-                                    ),
-                                    md = 6
-                                )
-                            ], align = 'center', style = {'marginTop':'5px'})
-                        ],
-                    label = struct,
-                    tab_id = struct
-                )
-                for idx,struct in enumerate(list(combined_colors_dict.keys()))
-            ]
-
             new_layer_control = dl.LayersControl(
                 id = {'type': 'layer-control','index': random.randint(0,100)},
-                children = new_children
+                children = current_overlays
             )
 
-            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, self.wsi.properties_list, boundary_options_children, special_overlays_opts, structure_hierarchy_tabs, cell_annotation_tab_disable
+            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, visualizable_properties_list, boundary_options_children, special_overlays_opts, cell_annotation_tab_disable
         else:
             raise exceptions.PreventUpdate
 
@@ -4448,13 +4302,14 @@ class FUSION:
         
         return img_list        
 
-    def update_selected(self,click,selected,cluster_data_store,user_store_data):
+    def update_selected(self,click,selected,cluster_data_store,user_store_data,slide_info_store):
         """
         Getting cell/state information and image for selected point in plot.
         """
 
         cluster_data_store = json.loads(cluster_data_store)
         user_store_data = json.loads(user_store_data)
+        slide_info_store = json.loads(slide_info_store)
         feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient = 'index')
 
         if click is not None:
@@ -4489,13 +4344,13 @@ class FUSION:
             image_labels = [label_list[l] for l in sample_index]
 
             #TODO: Disable if the slide is changed
-            if not self.wsi is None:
-                if any([i==self.wsi.slide_name for i in slide_names]) and len(slide_names)>1:
+            if not len(list(slide_info_store.keys()))==0:
+                if any([i==slide_info_store['slide_info']['name'] for i in slide_names]) and len(slide_names)>1:
                     selected_image_info = [
                         dbc.Row([
                             dbc.Col(
                                 dbc.Button(
-                                    f'Add All Markers ({slide_names.count(self.wsi.slide_name)})',
+                                    f'Add All Markers ({slide_names.count(slide_info_store["slide_info"]["name"])})',
                                     id = {'type':'add-mark-cluster','index':0},
                                     className='d-grid col-12 mx-auto',
                                     style = {'marginBottom':'5px'}
@@ -4510,8 +4365,8 @@ class FUSION:
 
             for i,j,k in zip(list(range(len(slide_names))),slide_names,image_labels):
                 
-                if not self.wsi is None:
-                    if j == self.wsi.slide_name:
+                if not len(list(slide_info_store.keys()))==0:
+                    if j == slide_info_store['slide_info']['name']:
                         selected_image_info.append(
                             dbc.Row([
                                 dbc.Col(
@@ -4648,8 +4503,9 @@ class FUSION:
         """
         Adding a rectangle, polygon, or marker annotation to the current image
         """
-        if not self.wsi is None:
-            slide_info_store = json.loads(slide_info_store)
+        slide_info_store = json.loads(slide_info_store)
+
+        if not len(list(slide_info_store.keys()))==0:
             if 'overlay_prop' in slide_info_store:
                 overlay_prop = slide_info_store['overlay_prop']
             else:
@@ -4688,158 +4544,140 @@ class FUSION:
                             if len(new_geo['features'])>0:
                                 
                                 # Adding each manual annotation iteratively (good for if annotations are edited or deleted as well as for new annotations)
-                                self.wsi.manual_rois = []
-                                self.wsi.marked_ftus = []
-
-                                self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
-
                                 for geo in new_geo['features']:
 
                                     if not geo['properties']['type'] == 'marker':
 
                                         new_roi = {'type':'FeatureCollection','features':[geo]}
 
-                                        agg_properties, polygon_properties = self.wsi.spatial_aggregation(shape(geo['geometry']))
+                                        agg_properties, polygon_properties = self.slide_handler.spatial_aggregation(shape(geo['geometry']),slide_info_store)
                                         new_roi['features'][0]['properties'] = {'user':agg_properties | {'name': 'Manual_ROI'} | polygon_properties}
                                         
                                         new_manual_roi_dict = {
                                                 'geojson':new_roi,
-                                                'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                                'popup_id':{'type':'ftu-popup','index':len(self.current_overlays)},
-                                                'color':'white',
-                                                'hover_color':'#32a852'
                                             }
-                                        self.wsi.manual_rois.append(new_manual_roi_dict)
-
-                                        new_child = dl.Overlay(
-                                            dl.LayerGroup(
-                                                dl.GeoJSON(data = new_roi, id = new_manual_roi_dict['id'], options = dict(style = self.ftu_style_handle), filter = self.ftu_filter,
-                                                        hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors, filter_vals = filter_vals),
-                                                        hoverStyle = arrow_function(dict(weight=5, color = new_manual_roi_dict['hover_color'], dashArray='')),
-                                                        children = [dl.Popup(id = new_manual_roi_dict['popup_id'])]
-                                                    )
-                                            ), name = f'Manual ROI {len(self.wsi.manual_rois)}', checked = True, id = self.wsi.item_id+f'_manual_roi{len(self.wsi.manual_rois)}'
-                                        )
-
-                                        self.current_overlays.append(new_child)
+                                        
+                                        slide_info_store['manual_ROIs'].append(new_manual_roi_dict)
 
                                     elif geo['properties']['type']=='marker':
                                         # Separate procedure for marking regions/FTUs with a marker
                                         new_marked = {'type':'FeatureCollection','features':[geo]}
+                                        
+                                        intersect_dict, intersect_poly = self.slide_handler.find_intersecting_ftu(
+                                            shape(new_marked['features'][0]['geometry']),
+                                            [i['annotation']['name'] for i in slide_info_store['annotations']],
+                                            slide_info_store
+                                        )
 
-                                        overlap_dict, overlap_poly = self.wsi.find_intersecting_ftu(shape(new_marked['features'][0]['geometry']),'all')
-                                        if not overlap_poly is None:
-                                            # Getting the intersecting ROI geojson
-                                            if len(self.wsi.marked_ftus)==0:
-                                                if triggered_id=='edit_control':
-                                                    new_marked_roi = {
-                                                        'type':'FeatureCollection',
-                                                        'features':[
-                                                            {
-                                                                'type':'Feature',
-                                                                'geometry':{
-                                                                    'type':'Polygon',
-                                                                    'coordinates':[list(overlap_poly.exterior.coords)],
-                                                                },
-                                                                'properties': {
-                                                                    'user': overlap_dict
-                                                                }
+                                        # Checking which one is non-empty:
+                                        intersect_count = [len(intersect_dict[i]) for i in intersect_dict]
+                                        print(f'intersect_count: {intersect_count}')
+                                        
+                                        if not all([i==0 for i in intersect_count]):
+                                            non_zeros = [list(intersect_dict.keys())[i] for i in range(len(intersect_count)) if not intersect_count[i]==0]
+                                            for structure in non_zeros:
+                                                overlap_polys = intersect_poly[structure]
+                                                overlap_props = intersect_dict[structure]
+                                                for o_idx in range(len(overlap_polys)):
+                                                    # Getting the intersecting ROI geojson
+                                                    if len(slide_info_store["marked_FTUs"])==0:
+                                                        if triggered_id=='edit_control':
+                                                            new_marked_roi = {
+                                                                'type':'FeatureCollection',
+                                                                'features':[
+                                                                    {
+                                                                        'type':'Feature',
+                                                                        'geometry':{
+                                                                            'type':'Polygon',
+                                                                            'coordinates':[list(overlap_polys[o_idx].exterior.coords)],
+                                                                        },
+                                                                        'properties': {
+                                                                            'user': overlap_props[o_idx]
+                                                                        }
+                                                                    }
+                                                                ]
                                                             }
-                                                        ]
-                                                    }
-                                                elif triggered_id=='add-marker-cluster':
-                                                    new_marked_roi = {
-                                                        'type':'FeatureCollection',
-                                                        'features':[
+                                                        elif triggered_id=='add-marker-cluster':
+                                                            new_marked_roi = {
+                                                                'type':'FeatureCollection',
+                                                                'features':[
+                                                                    {
+                                                                        'type':'Feature',
+                                                                        'geometry':{
+                                                                            'type':'Polygon',
+                                                                            'coordinates':[list(overlap_polys[o_idx].exterior.coords)]
+                                                                        },
+                                                                        'properties':{
+                                                                            'user': overlap_props[o_idx]
+                                                                        }
+                                                                    },
+                                                                ]
+                                                            }
+
+                                                        slide_info_store['marked_FTUs'] = [{
+                                                            'geojson':new_marked_roi,
+                                                        }]
+
+                                                    else:
+                                                        slide_info_store['marked_FTUs'][0]['geojson']['features'].append(
                                                             {
                                                                 'type':'Feature',
                                                                 'geometry':{
                                                                     'type':'Polygon',
-                                                                    'coordinates':[list(overlap_poly.exterior.coords)]
+                                                                    'coordinates':[list(overlap_polys[o_idx].exterior.coords)],
                                                                 },
                                                                 'properties':{
-                                                                    'user': overlap_dict
+                                                                    'user':overlap_props[o_idx]
                                                                 }
-                                                            },
-                                                        ]
-                                                    }
+                                                            }
+                                                        )
 
-                                                self.wsi.marked_ftus = [{
-                                                    'geojson':new_marked_roi,
-                                                }]
-
-                                            else:
-                                                self.wsi.marked_ftus[0]['geojson']['features'].append(
-                                                    {
-                                                        'type':'Feature',
-                                                        'geometry':{
-                                                            'type':'Polygon',
-                                                            'coordinates':[list(overlap_poly.exterior.coords)],
-                                                        },
-                                                        'properties':{
-                                                            'user':overlap_dict
-                                                        }
-                                                    }
-                                                )
-
-                                # Adding the marked ftus layer if any were added
-                                if len(self.wsi.marked_ftus)>0:
-                                    print(f'Number of marked ftus: {len(self.wsi.marked_ftus[0]["geojson"]["features"])}')
-                                    
-                                    self.wsi.marked_ftus[0]['id'] = {'type':'ftu-bounds','index':len(self.current_overlays)}
-                                    self.wsi.marked_ftus[0]['hover_color'] = '#32a852'
-
-                                    new_marked_dict = {
-                                        'geojson':self.wsi.marked_ftus[0]['geojson'],
-                                        'id':{'type':'ftu-bounds','index':len(self.current_overlays)},
-                                        'color':'white',
-                                        'hover_color':'#32a852'
-                                    }
-                                    new_child = dl.Overlay(
-                                        dl.LayerGroup(
-                                            dl.GeoJSON(data = new_marked_dict['geojson'], id = new_marked_dict['id'], options = dict(style = self.ftu_style_handle), filter = self.ftu_filter, pointToLayer = self.render_marker_handle,
-                                                    hideout = dict(color_key = hex_color_key, overlay_prop = overlay_prop, fillOpacity = cell_vis_val, ftu_colors = self.ftu_colors,filter_vals = filter_vals),
-                                                    hoverStyle = arrow_function(dict(weight=5, color = new_marked_dict['hover_color'],dashArray='')),
-                                                    children = []
-                                                    )
-                                        ), name = f'Marked FTUs', checked=True, id = self.wsi.item_id+f'_marked_ftus'
-                                    )
-                                    
-                                    self.current_overlays.append(new_child)
-
-                                if len(self.wsi.manual_rois)>0:
+                                if len(slide_info_store['manual_ROIs'])>0:
                                     data_select_options = self.layout_handler.data_options
                                     data_select_options[4]['disabled'] = False
                                 else:
                                     data_select_options = self.layout_handler.data_options
 
-                                if len(self.wsi.marked_ftus)>0:
+                                if len(slide_info_store['marked_FTUs'])>0:
                                     data_select_options[3]['disabled'] = False
 
-                                hex_color_key = self.update_hex_color_key(overlay_prop)
+                                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
+
+                                current_overlays = self.slide_handler.generate_annotation_overlays(
+                                    slide_info = slide_info_store,
+                                    style_handler=self.ftu_style_handle,
+                                    filter_handler=self.ftu_filter,
+                                    color_key = hex_color_key
+                                )
                                 
                                 if new_roi:
-                                    user_ann_tracking = json.dumps({ 'slide_name': self.wsi.slide_name, 'item_id': self.wsi.item_id })
+                                    user_ann_tracking = json.dumps({ 'slide_name': slide_info_store['slide_info']["name"], 'item_id': slide_info_store['slide_info']['_id'] })
                                 else:
                                     user_ann_tracking = no_update
                                 
                             else:
 
                                 # Clearing manual ROIs and reverting overlays
-                                self.wsi.manual_rois = []
-                                self.wsi.marked_ftus = []
+                                slide_info_store['manual_ROIs'] = []
+                                slide_info_store['marked_FTUs'] = []
 
-                                self.current_overlays = self.current_overlays[0:self.wsi.n_frames+len(self.wsi.ftu_names)]
                                 data_select_options = self.layout_handler.data_options
-                                hex_color_key = self.update_hex_color_key(overlay_prop)
+                                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
                                 user_ann_tracking = no_update
-                                                    
+
+                                current_overlays = self.slide_handler.generate_annotation_overlays(
+                                    slide_info = slide_info_store,
+                                    style_handler = self.ftu_style_handle,
+                                    filter_handler = self.ftu_filter,
+                                    color_key = hex_color_key
+                                )
+                                                                                    
                         else:
                             
                             data_select_options = self.layout_handler.data_options
                             user_ann_tracking = no_update
 
-                    return [self.current_overlays], data_select_options, user_ann_tracking
+                    return [current_overlays], data_select_options, user_ann_tracking
                 else:
                     raise exceptions.PreventUpdate
             else:
@@ -4847,13 +4685,14 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def add_marker_from_cluster(self,mark_click,cluster_data_store):
+    def add_marker_from_cluster(self,mark_click,cluster_data_store,slide_info_store):
         """
         Marking structure in GeoJSON layer from selected points in plot (in the current slide)
         """
 
         cluster_data_store = json.loads(cluster_data_store)
-        if not cluster_data_store['feature_data'] is None:
+        slide_info_store = json.loads(slide_info_store)
+        if not cluster_data_store['feature_data'] is None and not len(list(slide_info_store.keys()))==0:
             feature_data = pd.DataFrame.from_dict(cluster_data_store['feature_data'],orient='index')
         else:
             feature_data = pd.DataFrame()
@@ -4875,9 +4714,24 @@ class FUSION:
                 # Iterating through all current selected samples
                 # current_selected_samples is an index from feature_data
                 current_selected_hidden = [feature_data['Hidden'].tolist()[i] for i in current_selected_samples]
-                marker_bboxes = [i['Bounding_Box'] for i in current_selected_hidden if i['Slide_Id']==self.wsi.item_id]
-                marker_map_coords = [self.wsi.convert_slide_coords([[i[0],i[1]],[i[2],i[3]]]) for i in marker_bboxes]
-                marker_center_coords = [[(i[0][0]+i[1][0])/2,(i[0][1]+i[1][1])/2] for i in marker_map_coords]
+                marker_bboxes = [i['Bounding_Box'] for i in current_selected_hidden if i['Slide_Id']==slide_info_store['slide_info']['_id']]
+                
+                slide_x_scale = slide_info_store['scales'][0]
+                slide_y_scale = slide_info_store['scales'][1]
+                marker_map_coords = [
+                    [
+                        [i[0]*slide_x_scale,i[1]*slide_y_scale],
+                        [i[2]*slide_x_scale,i[3]*slide_y_scale]
+                    ]
+                    for i in marker_bboxes
+                ]
+                marker_center_coords = [
+                    [
+                        (i[0][0]+i[1][0])/2,
+                        (i[0][1]+i[1][1])/2
+                    ] 
+                    for i in marker_map_coords
+                ]
                 
                 mark_geojson['features'].extend([
                     {
@@ -4896,10 +4750,19 @@ class FUSION:
                 # Add marker for a specific sample
                 mark_geojson = {'type':'FeatureCollection','features':[]}
 
+                slide_x_scale = slide_info_store['scales'][0]
+                slide_y_scale = slide_info_store['scales'][1]
+
                 # Pulling out one specific sample
                 selected_bbox = feature_data['Hidden'].tolist()[current_selected_samples[ctx.triggered_id['index']-1]]['Bounding_Box']
-                marker_map_coords = self.wsi.convert_slide_coords([[selected_bbox[0],selected_bbox[1]],[selected_bbox[2],selected_bbox[3]]])
-                marker_center_coords = [(marker_map_coords[0][0]+marker_map_coords[1][0])/2,(marker_map_coords[0][1]+marker_map_coords[1][1])/2]
+                marker_map_coords = [
+                    [selected_bbox[0]*slide_x_scale,selected_bbox[1]*slide_y_scale],
+                    [selected_bbox[2]*slide_x_scale,selected_bbox[3]*slide_y_scale]
+                ]
+                marker_center_coords = [
+                    (marker_map_coords[0][0]+marker_map_coords[1][0])/2,
+                    (marker_map_coords[0][1]+marker_map_coords[1][1])/2
+                ]
                 
                 mark_geojson['features'].append(
                     {
@@ -5097,10 +4960,12 @@ class FUSION:
         """
         Download data for external secondary analysis
         """
+        #TODO: Update procedure for downloading data (make it accessible from the whole visualization session)
+
         user_store_data = json.loads(user_store_data)
         slide_info_store = json.loads(slide_info_store)
 
-        if not self.wsi is None:
+        if not len(list(slide_info_store.keys()))==0:
             if button_click:
                 if ctx.triggered_id['type'] == 'download-butt':
                     # Download data has to be a dictionary with content and filename keys. The filename extension will vary
@@ -5111,13 +4976,16 @@ class FUSION:
 
                     print(f'Download type: {self.download_handler.what_data(options)}')
                     download_type = self.download_handler.what_data(options)
+
                     if download_type == 'annotations':
+                        #TODO: Update extracting annotations 
                         download_list = self.download_handler.extract_annotations(
                             self.wsi,
                             self.current_slide_bounds,
                             options
                         )
                     elif download_type == 'cell':
+                        #TODO: Update extracting cell information
                         download_list = self.download_handler.extract_cell(
                             self.current_ftus,
                             options
@@ -5168,14 +5036,16 @@ class FUSION:
         if ctx.triggered_id=='cli-drop':
 
             # Get description for cli
-            cli_results = 'Click "Run Job!" to do the damn thing!'
+            cli_results = 'Click "Run Job!" to do the thing!'
 
             # Getting current image region:
+            #TODO: switch conversion here to not reference self.wsi or self.current_slide_bounds
             wsi_coords = np.array(self.wsi.convert_map_coords(list(self.current_slide_bounds.exterior.coords)))
             min_x = np.min(wsi_coords[:,0])
             min_y = np.min(wsi_coords[:,1])
             max_x = np.max(wsi_coords[:,0])
             max_y = np.max(wsi_coords[:,1])
+            #TODO: Set maximum image size or pull from certain magnification level
             image_region = self.dataset_handler.get_image_region(self.wsi.item_id,[min_x,min_y,max_x,max_y])
 
             current_image_region = html.Div(
@@ -6638,19 +6508,22 @@ class FUSION:
         if ctx.triggered_id['type']=='add-popup-note':
             if not pop_input is None:
                 # Adding provided label to ftu's user_label property
+                #TODO: Update labeling individual structures 
                 self.wsi.add_label(self.clicked_ftu,pop_input,'add')
 
             # Getting current user-labels
+            #TODO: Update labeling individual structures
             pop_label_children = self.layout_handler.get_user_ftu_labels(self.wsi,self.clicked_ftu)
 
         elif ctx.triggered_id['type']=='delete-user-label':
             
             # Removing label based on index
             remove_index = ctx.triggered_id['index']
-
+            #TODO: Update labeling individual structures
             self.wsi.add_label(self.clicked_ftu,remove_index,'remove')
 
             # Getting current user-labels
+            #TODO: Update labeling individual structures
             pop_label_children = self.layout_handler.get_user_ftu_labels(self.wsi,self.clicked_ftu)
 
         output_list.append(pop_label_children)
@@ -7323,7 +7196,7 @@ class FUSION:
                     channel_color = 'rgba(255,255,255,255)'
 
                 current_channels[channel] = {
-                    'index': self.wsi.channel_names.index(channel),
+                    'index': slide_info_store['frame_names'].index(channel),
                     'color': channel_color
                 }
 
@@ -7386,23 +7259,24 @@ class FUSION:
         }
 
         updated_urls = []
-        for c_idx, old_style in enumerate(self.wsi.channel_tile_url):
+        for c_idx, old_style in enumerate(slide_info_store['tile_url']):
             if c_idx not in updated_channel_idxes:
-                if not self.wsi.channel_names[c_idx]=='Histology (H&E)':
+                if not slide_info_store['frame_names'][c_idx]=='Histology (H&E)':
                     base_style = {
                         c_idx: "rgba(255,255,255,255)"
                     }
                 else:
+                    #TODO: Add a method to get the RGB style dict from slide_handler
                     base_style = {
                         band['framedelta']: band['palette'][-1]
                         for band in self.wsi.rgb_style_dict['bands']
                     }
 
-                new_url = self.wsi.update_url_style(base_style | update_style)
+                new_url = self.slide_handler.update_url_style(base_style | update_style)
 
             else:
 
-                new_url = self.wsi.update_url_style(update_style)
+                new_url = self.slide_handler.update_url_style(update_style)
 
             updated_urls.append(new_url)
 
@@ -7459,144 +7333,103 @@ class FUSION:
 
         return [return_table]
 
-    def populate_structure_hierarchy(self, active_tab):
-        """
-        Showing which structures are contained within which structure in a tree/dropdown structure for set operations
-        """
-        if not active_tab:
-            raise exceptions.PreventUpdate
-        
-        print(f'active_tab: {active_tab}')
-        tree_data = []
-        button_disable = True
-
-        # Getting structure hierarchy for current structure
-        if not active_tab in self.wsi.ftu_hierarchy:
-            tree_data = self.wsi.gen_structure_hierarchy(active_tab)
-
-        else:
-            tree_data = self.wsi.ftu_hierarchy[active_tab]
-
-        if len(tree_data['children'])==0:
-            button_disable = False
-
-        if active_tab in self.wsi.ftu_names:
-            use_idx = self.wsi.ftu_names.index(active_tab)
-        elif active_tab=='Spots':
-            use_idx = len(self.wsi.ftu_names)
-        
-        tree_select = dta.TreeView(
-            id = {'type':'structure-tree','index': use_idx},
-            multiple = True,
-            checkable = True,
-            selected = [],
-            checked = [],
-            data = tree_data
-        )
-        
-        return_list = [tree_select]*len(ctx.outputs_list[0])
-
-        return return_list, [button_disable]*len(ctx.outputs_list[1])
-
-    def update_structure_hierarchy(self,butt_click):
-        """
-        Updating structure boundaries according to selected hierarchy        
-        """
-        pass
-    
-    def add_filter(self,butt_click, delete_click, slide_info_store):
+    def add_filter(self,butt_click, delete_click, slide_info_store, available_properties):
         """
         Adding a new filter to apply to current FTUs
         """
 
         slide_info_store = json.loads(slide_info_store)
-        overlay_prop = slide_info_store['overlay_prop']
-        if not self.wsi is None and not overlay_prop is None and not self.filter_vals is None:
-            if ctx.triggered_id=='add-filter-button':
-                # Returning a new dropdown for selecting properties to use for a filter
-
-                patched_list = Patch()
-                # Find min and max vals
-                filter_val = [i for i in self.wsi.properties_list if not 'Cell_Subtypes' in i and not i in ['Max Cell Type','Cell Type']][0]
-                if '-->' in filter_val:
-                    filter_val_parts = filter_val.split(' --> ')
-                    m_prop = filter_val_parts[0]
-                    val = filter_val_parts[1]
-                    # For full cell names
-                    if val in self.cell_names_key:
-                        val = self.cell_names_key[val]
-                else:
-                    m_prop = filter_val
-                    val = None
-                
-                unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
-                value_types = [type(i) for i in unique_values][0]
-                if value_types in [int,float]:
-                    value_disable = False
-                    value_display = {'display':'inline-block','margin':'auto','width':'100%'}
-                else:
-                    value_disable = True
-                    value_display = {'display':'none','margin':'auto','width':'100%'}
-
-                value_slider = html.Div(
-                        dcc.RangeSlider(
-                            id = {'type':'added-filter-slider','index':butt_click},
-                            min = np.min(unique_values),
-                            max = np.max(unique_values),
-                            step = 0.01,
-                            marks = None,
-                            tooltip = {'placement':'bottom','always_visible':True},
-                            allowCross = False,
-                            disabled = value_disable
-                        ),
-                        style = value_display,
-                        id = {'type':'added-filter-slider-div','index':butt_click}  
-                    )
-                
-                def new_filter_item():
-                    return html.Div([
-                        dbc.Row([
-                            dbc.Col(
-                                dcc.Dropdown(
-                                    options = [i for i in self.wsi.properties_list if not i in ['Max Cell Type','Cell Type'] and not 'Cell_Subtypes' in i],
-                                    value = [i for i in self.wsi.properties_list if not i in ['Max Cell Type','Cell Type'] and not 'Cell_Subtypes' in i][0],
-                                    placeholder = 'Select new property to filter FTUs',
-                                    id = {'type':'added-filter-drop','index':butt_click}
-                                ),
-                                md = 10
-                            ),
-                            dbc.Col(
-                                html.I(
-                                    id = {'type':'delete-filter','index':butt_click},
-                                    n_clicks= 0,
-                                    className = 'bi bi-x-circle-fill fa-2x',
-                                    style = {'color':'rgb(255,0,0)'}
-                                ),
-                                md = 2
-                            )
-                        ],align='center'),
-                        value_slider,
-                    ])
-
-                patched_list.append(new_filter_item())
-
-            elif ctx.triggered_id['type']=='delete-filter':
-
-                patched_list = Patch()
-                values_to_remove = []
-                for i,val in enumerate(delete_click):
-                    if val:
-                        values_to_remove.insert(0,i)
-                
-                for v in values_to_remove:
-                    del patched_list[v]
-                
-            return patched_list
-        else:
+        if len(list(slide_info_store.keys()))==0:
             raise exceptions.PreventUpdate
-        
-    def add_filter_slider(self, filter_drop):
+        else:
+            if slide_info_store['overlay_prop'] is None and slide_info_store['filter_vals'] is None:
+                raise exceptions.PreventUpdate
 
+        if ctx.triggered_id=='add-filter-button':
+            # Returning a new dropdown for selecting properties to use for a filter
+
+            patched_list = Patch()
+            # Find min and max vals
+            filter_val = [i for i in available_properties if not 'Cell_Subtypes' in i and not i in ['Max Cell Type','Cell Type']][0]
+            if '-->' in filter_val:
+                filter_val_parts = filter_val.split(' --> ')
+                m_prop = filter_val_parts[0]
+                val = filter_val_parts[1]
+                # For full cell names
+                if val in self.cell_names_key:
+                    val = self.cell_names_key[val]
+            else:
+                m_prop = filter_val
+                val = None
+            
+            unique_values = self.slide_handler.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None},slide_info_store)
+            value_types = [type(i) for i in unique_values][0]
+            if value_types in [int,float]:
+                value_disable = False
+                value_display = {'display':'inline-block','margin':'auto','width':'100%'}
+            else:
+                value_disable = True
+                value_display = {'display':'none','margin':'auto','width':'100%'}
+
+            value_slider = html.Div(
+                    dcc.RangeSlider(
+                        id = {'type':'added-filter-slider','index':butt_click},
+                        min = np.min(unique_values),
+                        max = np.max(unique_values),
+                        step = 0.01,
+                        marks = None,
+                        tooltip = {'placement':'bottom','always_visible':True},
+                        allowCross = False,
+                        disabled = value_disable
+                    ),
+                    style = value_display,
+                    id = {'type':'added-filter-slider-div','index':butt_click}  
+                )
+            
+            def new_filter_item():
+                return html.Div([
+                    dbc.Row([
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = [i for i in available_properties if not i in ['Max Cell Type','Cell Type'] and not 'Cell_Subtypes' in i],
+                                value = [i for i in available_properties if not i in ['Max Cell Type','Cell Type'] and not 'Cell_Subtypes' in i][0],
+                                placeholder = 'Select new property to filter FTUs',
+                                id = {'type':'added-filter-drop','index':butt_click}
+                            ),
+                            md = 10
+                        ),
+                        dbc.Col(
+                            html.I(
+                                id = {'type':'delete-filter','index':butt_click},
+                                n_clicks= 0,
+                                className = 'bi bi-x-circle-fill fa-2x',
+                                style = {'color':'rgb(255,0,0)'}
+                            ),
+                            md = 2
+                        )
+                    ],align='center'),
+                    value_slider,
+                ])
+
+            patched_list.append(new_filter_item())
+
+        elif ctx.triggered_id['type']=='delete-filter':
+
+            patched_list = Patch()
+            values_to_remove = []
+            for i,val in enumerate(delete_click):
+                if val:
+                    values_to_remove.insert(0,i)
+            
+            for v in values_to_remove:
+                del patched_list[v]
+            
+        return patched_list
+
+        
+    def add_filter_slider(self, filter_drop,slide_info):
+
+        slide_info = json.loads(slide_info)
         # Find min and max vals
         filter_val = filter_drop
         if '-->' in filter_val:
@@ -7610,7 +7443,7 @@ class FUSION:
             m_prop = filter_val
             val = None
 
-        unique_values = self.wsi.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None})
+        unique_values = self.slide_handler.get_overlay_value_list({'name':m_prop,'value':val,'sub_value': None}, slide_info)
         value_types = [type(i) for i in unique_values][0]
         if value_types in [int,float]:
             slider_style = {'display':'inline-block','margin':'auto','width':'100%'}
@@ -7635,7 +7468,7 @@ class FUSION:
                     # Pulling customdata from each point object
                     labeling_cells = [i['customdata'] for i in sD['points']]
 
-                    updated_cell_geojson, cell_markers = make_marker_geojson([i[0]['Bbox'] if type(i)==list else i['Bbox'] for i in labeling_cells],convert_coords = True, wsi = self.wsi)
+                    updated_cell_geojson, cell_markers = make_marker_geojson([i[0]['Bounding_Box'] if type(i)==list else i['Bounding_Box'] for i in labeling_cells])
                     all_cell_markers.extend(cell_markers)
             return all_cell_markers
         else:
@@ -7730,7 +7563,7 @@ class FUSION:
         
         return return_div, new_annotation_tab_group, json.dumps(user_data_store)
     
-    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data, viewport_store_data):
+    def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data, viewport_store_data, slide_info_store):
         """
         Getting current annotation data (text or image) and saving to annotation session folder on the server
         """
@@ -7744,6 +7577,7 @@ class FUSION:
 
         user_store_data = json.loads(user_store_data)
         viewport_store_data = json.loads(viewport_store_data)
+        slide_info_store = json.loads(slide_info_store)
 
         line_slide = get_pattern_matching_value(line_slide)
         if line_slide is None:
@@ -7799,15 +7633,16 @@ class FUSION:
             if not 'Manual' in clicked_ftu_name and not 'Marked' in clicked_ftu_name:
                 if clicked_ftu_name=='FTU':
                     clicked_ftu_name = ftu_names[0][0].split(':')[0]
-                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(
+                intersecting_ftu_props, intersecting_ftu_polys = self.slide_handler.find_intersecting_ftu(
                     viewport_store_data['current_slide_bounds'],
-                    clicked_ftu_name
+                    clicked_ftu_name,
+                    slide_info = slide_info_store
                 )
             elif 'Manual' in clicked_ftu_name:
                 manual_idx = int(clicked_ftu_name.split(':')[-1])-1
-                intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson']['features'][0]['geometry'])]
+                intersecting_ftu_polys = [shape(slide_info_store['manual_ROIs'][manual_idx]['geojson']['features'][0]['geometry'])]
             elif 'Marked' in clicked_ftu_name:
-                intersecting_ftu_polys = [shape(i['geojson']['features'][0]['geometry']) for i in self.wsi.marked_ftus]
+                intersecting_ftu_polys = [shape(i['geojson']['features'][0]['geometry']) for i in slide_info_store['marked_FTUs']]
 
             # Getting bounding box of this ftu
             if ctx.triggered_id['type']=='annotation-station-ftu':
@@ -7829,11 +7664,12 @@ class FUSION:
 
             ftu_bbox_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
             
+            #TODO: Remove reference to self.wsi
             ftu_bbox = np.array(self.wsi.convert_map_coords(ftu_bbox_coords))
             ftu_bbox = [np.min(ftu_bbox[:,0])-50,np.min(ftu_bbox[:,1])-50,np.max(ftu_bbox[:,0])+50,np.max(ftu_bbox[:,1])+50]
             #TODO: This method only grabs histology images that are single frame or multi-frame with RGB at 0,1,2
             ftu_image = self.dataset_handler.get_image_region(
-                self.wsi.item_id,
+                slide_info_store['slide_info']['_id'],
                 user_store_data,
                 [int(i) for i in ftu_bbox]
             )
@@ -7878,22 +7714,29 @@ class FUSION:
             if ctx.triggered_id['type']=='annotation-set-label':
                 # Grab the first member of the clicked ftu
                 if not 'Manual' in clicked_ftu_name or 'Marked' in clicked_ftu_name:
-                    intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(
+                    intersecting_ftu_props, intersecting_ftu_polys = self.slide_handler.find_intersecting_ftu(
                         viewport_store_data['current_slide_bounds'],
-                        clicked_ftu_name
+                        clicked_ftu_name,
+                        slide_info_store
                     )
                 elif 'Manual' in clicked_ftu_name:
                     manual_idx = int(clicked_ftu_name.split(':')[-1])
-                    intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
+                    intersecting_ftu_polys = [shape(slide_info_store['manual_ROIs'][manual_idx]['geojson'])]
                 elif 'Marked' in clicked_ftu_name:
-                    intersecting_ftu_polys = [shape(i['geojson']) for i in self.wsi.marked_ftus]
+                    intersecting_ftu_polys = [shape(i['geojson']) for i in slide_info_store['marked_FTUs']]
 
                 ftu_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
+                #TODO: Remove reference to self.wsi
                 ftu_coords = np.array(self.wsi.convert_map_coords(ftu_coords))
                 ftu_bbox = [np.min(ftu_coords[:,0])-50,np.min(ftu_coords[:,1])-50,np.max(ftu_coords[:,0])+50,np.max(ftu_coords[:,1])+50]
 
                 # Now saving image with label in metadata
-                ftu_image = np.array(self.dataset_handler.get_image_region(self.wsi.item_id,[int(i) for i in ftu_bbox]))
+                ftu_image = np.array(
+                    self.dataset_handler.get_image_region(
+                        slide_info_store['slide_info']['_id'],
+                        [int(i) for i in ftu_bbox]
+                    )
+                )
 
                 ftu_content = {
                     'content': ftu_image,
@@ -7905,21 +7748,21 @@ class FUSION:
                 slide_folder = self.dataset_handler.check_user_folder(
                     folder_name = 'FUSION Annotation Sessions',
                     subfolder = user_store_data['current_ann_session']['name'],
-                    sub_sub_folder = self.wsi.slide_name
+                    sub_sub_folder = slide_info_store['slide_info']['name']
                 )
                 if slide_folder is None:
                     # Creating slide folder in current_ann_session
                     new_folder = self.dataset_handler.create_user_folder(
                         parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}',
-                        folder_name = self.wsi.slide_name
+                        folder_name = slide_info_store['slide_info']['name']
                     )
                     new_folder = self.dataset_handler.create_user_folder(
-                        parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}',
+                        parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{slide_info_store["slide_info"]["name"]}',
                         folder_name = 'Images'
                     )
 
                 # Saving data
-                self.dataset_handler.save_to_user_folder(ftu_content,user_store_data,output_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}/Images')
+                self.dataset_handler.save_to_user_folder(ftu_content,user_store_data,output_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{slide_info_store["slide_info"]["name"]}/Images')
                 
                 # Updating image labels
                 image_labels = ['']*len(ctx.outputs_list[3])
@@ -7933,17 +7776,19 @@ class FUSION:
 
             # Grab the first member of the clicked ftu
             if not 'Manual' in clicked_ftu_name and not 'Marked' in clicked_ftu_name:
-                intersecting_ftu_props, intersecting_ftu_polys = self.wsi.find_intersecting_ftu(
+                intersecting_ftu_props, intersecting_ftu_polys = self.slide_handler.find_intersecting_ftu(
                     viewport_store_data['current_slide_bounds'],
-                    clicked_ftu_name
+                    clicked_ftu_name,
+                    slide_info_store
                 )
             elif 'Manual' in clicked_ftu_name:
                 manual_idx = int(clicked_ftu_name.split(':')[-1])
-                intersecting_ftu_polys = [shape(self.wsi.manual_rois[manual_idx]['geojson'])]
+                intersecting_ftu_polys = [shape(slide_info_store['manual_ROIs'][manual_idx]['geojson'])]
             elif 'Marked' in clicked_ftu_name:
-                intersecting_ftu_polys = [shape(i['geojson']) for i in self.wsi.marked_ftus]
+                intersecting_ftu_polys = [shape(i['geojson']) for i in slide_info_store['marked_FTUs']]
 
             ftu_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
+            #TODO: Remove reference to self.wsi
             ftu_coords = np.array(self.wsi.convert_map_coords(ftu_coords))
             ftu_bbox = [np.min(ftu_coords[:,0])-50,np.min(ftu_coords[:,1])-50,np.max(ftu_coords[:,0])+50,np.max(ftu_coords[:,1])+50]
             height = int(ftu_bbox[3]-ftu_bbox[1])
@@ -7964,7 +7809,13 @@ class FUSION:
                         combined_mask[:,:,annotation_colors_list.index(mask_class)] += 255*mask
             
             # Now saving both image and mask to the annotation session folder
-            ftu_image = np.array(self.dataset_handler.get_image_region(self.wsi.item_id,user_store_data,[int(i) for i in ftu_bbox]))
+            ftu_image = np.array(
+                self.dataset_handler.get_image_region(
+                    slide_info_store['slide_info']['_id'],
+                    user_store_data,
+                    [int(i) for i in ftu_bbox]
+                )
+            )
             
             mask_image = np.uint8(combined_mask)
 
@@ -7998,26 +7849,26 @@ class FUSION:
                 folder_name = 'FUSION Annotation Sessions',
                 user_info = user_store_data,
                 subfolder = user_store_data["current_ann_session"]['name'],
-                sub_sub_folder = self.wsi.slide_name
+                sub_sub_folder = slide_info_store['slide_info']['name']
             )
             if slide_folder is None:
                 # Creating slide folder in current_ann_session
                 new_folder = self.dataset_handler.create_user_folder(
                     parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}',
-                    folder_name = self.wsi.slide_name
+                    folder_name = slide_info_store['slide_info']['name']
                 )
                 new_folder = self.dataset_handler.create_user_folder(
-                    parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}',
+                    parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{slide_info_store["slide_info"]["name"]}',
                     folder_name = 'Images'
                 )
                 new_folder = self.dataset_handler.create_user_folder(
-                    parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}',
+                    parent_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{slide_info_store["slide_info"]["name"]}',
                     folder_name = 'Masks'
                 )
 
             # Saving data
-            self.dataset_handler.save_to_user_folder(ftu_content,user_store_data,output_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}/Images')
-            self.dataset_handler.save_to_user_folder(mask_content,user_store_data,output_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{self.wsi.slide_name}/Masks')
+            self.dataset_handler.save_to_user_folder(ftu_content,user_store_data,output_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{slide_info_store["slide_info"]["name"]}/Images')
+            self.dataset_handler.save_to_user_folder(mask_content,user_store_data,output_path = f'/user/{user_store_data["login"]}/Public/FUSION Annotation Sessions/{user_store_data["current_ann_session"]["name"]}/{slide_info_store["slide_info"]["name"]}/Masks')
 
             save_button_style = ['success']
 
@@ -8199,10 +8050,7 @@ class FUSION:
 
         return [patched_list]
 
-
-
-        return [patched_list]
-
+    """
     def add_cell_subtypes(self,butt_click,main_cell_types,anchor_uploads):
         """
         Extracting subtypes for a given "Main Cell Type" and adding those as a visualizable property for overlaid heatmaps
@@ -8253,6 +8101,8 @@ class FUSION:
             print(cell_groups.columns.tolist())
 
         return new_cell_droptions, new_cell_subtype_dropue
+    """
+
 
     def download_annotation_session_log(self,butt_click,new_interval,user_data_store,is_open):
         """

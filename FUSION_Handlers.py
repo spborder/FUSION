@@ -1766,13 +1766,16 @@ class LayoutHandler:
 
         return dbc.Row(usability_children)
 
-    def gen_special_overlay_opts(self, wsi):
+    def gen_special_overlay_opts(self, slide_info):
         """
         Generate special overlay components depending on the WSI spatial omics type and properties
         """
+        slide_type = slide_info['slide_type']
+
         special_overlays_opts = []
-        if wsi.spatial_omics_type=='Visium':
-            
+        if slide_type=='Visium':
+            pass
+            """
             if any(['Main_Cell_Types' in i for i in wsi.properties_list]):
                 disable_sub_types = False
             else:
@@ -1807,8 +1810,9 @@ class LayoutHandler:
                     )
                 ])
             ])
+            """
 
-        elif wsi.spatial_omics_type in ['CODEX']:
+        elif slide_type in ['CODEX']:
 
             special_overlays_opts.extend([
                 html.H6('Select Additional Channel Overlay(s)'),
@@ -1819,8 +1823,8 @@ class LayoutHandler:
                         {
                             'label': i, 'value': i
                         }
-                        for i in wsi.channel_names
-                        if not i=='Histology (H&E)'
+                        for i in slide_info['tiles_metadata']['frames']
+                        if not i in ['Histology (H&E)','red','green','blue']
                     ],
                     value = [],
                     multi = True,
@@ -1839,7 +1843,7 @@ class LayoutHandler:
                 )
             ])
         
-        elif wsi.spatial_omics_type in ['Xenium']:
+        elif slide_type in ['Xenium']:
             # Upload cell anchors/labels
             special_overlay_opts.extend([
                 html.H6('Upload cell group labels here'),
@@ -3686,7 +3690,7 @@ class GirderHandler:
         Get all available annotation id's and associated info for an item
         """
         try:
-            annotation_info = self.gc.get(f'/annotation',parameters= {'itemId':item_id,'limit':10000})
+            annotation_info = self.gc.get(f'/annotation',parameters= {'itemId':item_id,'limit':0})
         except girder_client.HttpError:
             annotation_info = None
         

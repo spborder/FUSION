@@ -50,7 +50,6 @@ def extract_overlay_value(structure_list,overlay_prop):
     Aggregated str properties end up with a count per-value which is different from non-aggregated structures
     e.g.: Non-aggregated: {'Cell Type': 'POD'} whereas aggregated: {'Cell Type': {'POD': 6, 'EC': 10, etc.}}
     """
-    print(overlay_prop)
     raw_values_list = []
     if not overlay_prop['name'] is None:
         for st in structure_list:
@@ -246,12 +245,9 @@ def path_to_mask(path, shape):
     mask = ndimage.binary_fill_holes(mask)
     return mask
 
-def make_marker_geojson(bbox_list,convert_coords = True, wsi = None):
+def make_marker_geojson(bbox_list):
     """
     Make GeoJSON-formatted markers where the coordinates are equal to the center point of the bounding boxes
-    
-    use convert_coords = True and provide WSI if giving bounding boxes in terms of slide coordinates as the
-    GeoJSON has to be rendered in map coordinates
 
     bounding boxes should be in [minx, miny, maxx, maxy] format 
     """
@@ -263,11 +259,6 @@ def make_marker_geojson(bbox_list,convert_coords = True, wsi = None):
     marker_list = []
 
     for bbox in bbox_list:
-
-        # Converting the original coordinates (if using map)
-        #if convert_coords:
-        #    bbox = wsi.convert_slide_coords([[bbox[0],bbox[1]],[bbox[2],bbox[3]]])
-        #    bbox = [bbox[0][0],bbox[0][1],bbox[1][0],bbox[1][1]]
 
         # Finding average of extrema
         bbox_center = [(bbox[0]+bbox[2])/2, (bbox[1]+bbox[3])/2]
