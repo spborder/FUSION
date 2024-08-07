@@ -1823,7 +1823,7 @@ class LayoutHandler:
                         {
                             'label': i, 'value': i
                         }
-                        for i in slide_info['tiles_metadata']['frames']
+                        for i in slide_info['frame_names']
                         if not i in ['Histology (H&E)','red','green','blue']
                     ],
                     value = [],

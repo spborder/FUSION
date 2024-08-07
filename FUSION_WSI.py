@@ -112,12 +112,12 @@ class SlideHandler:
         # Getting initial tile url(s)
         frame_names = []
         if 'Spatial Omics Type' in item_info['meta']:
-            if not item_info['meta']=='CODEX':
+            if not item_info['meta']['Spatial Omics Type']=='CODEX':
                 if not 'frames' in tile_metadata:
                     tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+user_info['token']
                 else:
                     # This is for 3-channel RGB images (.ome.tif)
-                    tile_url = self.girder_handler.gc.urlBase+f'item/{self.item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+self.user_token+'&style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
+                    tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+user_info['token']+'&style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
             else:
                 # For CODEX items there are multiple tile_urls possible
                 if 'frames' in tile_metadata:
@@ -147,12 +147,13 @@ class SlideHandler:
                         if not name=='Histology (H&E)' else rgb_url
                         for idx, name in enumerate(frame_names) 
                     ]
+
         else:
             tile_url = self.girder_handler.gc.urlBase+f'item/{item_id}'+'/tiles/zxy/{z}/{x}/{y}?token='+user_info['token']
 
         # This should be all the needed information to generate TileLayers
         return_dict = {
-            'tile_metadata': tile_metadata,
+            'tiles_metadata': tile_metadata,
             'scale': [x_scale,y_scale],
             'zoom_levels': zoom_levels,
             'tile_dims': tile_dims,
@@ -228,47 +229,11 @@ class SlideHandler:
                 scaled_annotation = None
         
         if not scaled_annotation is None and len(scaled_annotation['features'])>0:
-            # What visualizable properties are there in this annotation?
-            vis_props = []
-            for f in scaled_annotation['features']:
-                f_props = list(f['properties']['user'].keys())
-                for p in f_props:
-                    if p in self.visualization_properties:
-                        if type(f['properties']['user'][p])==dict:
-                            for s_p in list(f['properties']['user'][p].keys()):
-                                if not f'{p} --> {s_p}' in vis_props:
-                                    vis_props.append(f'{p} --> {s_p}')
-                        elif p not in vis_props:
-                            vis_props.append(p)
-            
-            if any(['Main_Cell_Types' in i for i in vis_props]):
-                vis_props.append('Max Cell Type')
-            
-            map_dict = {
-                'id': {'type': 'ftu-bounds','index': idx},
-                'url': save_path,
-                'popup_id': {'type': 'ftu-popup','index': idx},
-                'color': '',
-                'hover_color': '#9caf00'
-            }
-
             # Saving geojson locally
             if not os.path.exists(save_path):
                 with open(save_path,'w') as f:
                     geojson.dump(scaled_annotation,f)
-
                     f.close()
-        else:
-            vis_props = []
-            map_dict = {
-                'id': None,
-                'url': None,
-                'popup_id': None,
-                'color': None,
-                'hover_color': None
-            }
-
-        return vis_props, map_dict
 
     def find_intersecting_ftu(self, query_poly: Union[list,Polygon], ftu: Union[str,list], slide_info:dict):
         """
@@ -298,7 +263,6 @@ class SlideHandler:
                 # Reading GeoJSON
                 with open(f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/{ann_id}.json') as g:
                     geojson_data = json.load(g)
-
                     g.close()
                 
                 geo_df = geopandas.GeoDataFrame.from_features(geojson_data['features'])
@@ -343,8 +307,8 @@ class SlideHandler:
         """
 
         # Getting shape properties for the polygon itself:
-        x_scale = slide_info['scales'][0]
-        y_scale = slide_info['scales'][1]
+        x_scale = slide_info['scale'][0]
+        y_scale = slide_info['scale'][1]
         polygon_properties = {
             'Area (pixels)': round(agg_polygon.area * 1/(x_scale * -(y_scale)))
         }
@@ -354,10 +318,10 @@ class SlideHandler:
                           'x_tsne','y_tsne','x_umap','y_umap']
         
         categorical_columns = ['Cluster']
-
+        ftu_names = [i['annotation']['name'] for i in slide_info['annotations']]
         # Step 1: Find intersecting structures with polygon
         aggregated_properties = {}
-        for ftu_idx, ftu in enumerate(self.ftu_names):
+        for ftu_idx, ftu in enumerate(ftu_names):
             overlap_properties, overlap_polys = self.find_intersecting_ftu(agg_polygon, ftu, slide_info)
 
             overlap_area = [(i.intersection(agg_polygon).area)/(agg_polygon.area) for i in overlap_polys]
@@ -437,7 +401,7 @@ class SlideHandler:
 
         return aggregated_properties, polygon_properties
 
-    def intersecting_frame_intensity(self, box_poly: Union[list,Polygon], frame_list: Union[list,str]):
+    def intersecting_frame_intensity(self, box_poly: Union[list,Polygon], frame_list: Union[list,str], slide_info:dict):
         """
         Finding intensity distribution of each frame within a specified region
         """
@@ -445,9 +409,10 @@ class SlideHandler:
             box_poly = box(*box_poly)
 
         if frame_list=='all':
-            frame_list = [i for i in self.wsi.channel_names if not i=='Histology (H&E)']
+            frame_list = [i for i in slide_info['frame_names'] if not i=='Histology (H&E)']
 
-        box_coordinates = np.array(self.convert_map_coords(list(box_poly.exterior.coords)))
+        #TODO: Get rid of convert map coords thing
+        box_coordinates = np.array(self.convert_map_coords(list(box_poly.exterior.coords), slide_info))
         min_x = int(np.min(box_coordinates[:,0]))
         min_y = int(np.min(box_coordinates[:,1]))
         max_x = int(np.max(box_coordinates[:,0]))
@@ -457,7 +422,7 @@ class SlideHandler:
         box_size = (max_x-min_x)*(max_y-min_y)
         # Or probably also by multiplying some scale factors by box_poly.area
         # Pulling out those regions of the image
-        frame_indices = [self.channel_names.index(i) for i in frame_list]
+        frame_indices = [slide_info['frame_names'].index(i) for i in frame_list]
 
         # Slide coordinates list should be [minx,miny,maxx,maxy]
         slide_coords_list = [min_x,min_y,max_x,max_y]
@@ -465,7 +430,7 @@ class SlideHandler:
         for frame in frame_indices:
             # Get the image region associated with that frame
             # Or just get the histogram for that channel? not sure if this can be for a specific image region
-            image_histogram = self.girder_handler.gc.get(f'/item/{self.item_id}/tiles/histogram',
+            image_histogram = self.girder_handler.gc.get(f'/item/{slide_info["slide_info"]["_id"]}/tiles/histogram',
                                                          parameters = {
                                                             'top': min_y,
                                                             'left': min_x,
@@ -480,18 +445,21 @@ class SlideHandler:
                                                         )
 
             # Fraction of total intensity (maximum intensity = every pixel is 255 for uint8)
-            frame_properties[self.channel_names[frame]] = image_histogram[0]
+            frame_properties[slide_info['frame_names'][frame]] = image_histogram[0]
 
         
         return frame_properties
 
-    def pathway_expression_histogram(self, pathway_expression_df: pd.DataFrame):
+    def pathway_expression_histogram(self, pathway_expression_df: pd.DataFrame, f_values:Union[None,list]):
         """
         Create a histogram from a dataframe containing different columns for each pathway represented
         """
 
         pathway_hist_df = pd.DataFrame()
-        for path in pathway_expression_df.columns.tolist():
+        if f_values is None:
+            f_values = [pathway_expression_df.columns.tolist()[0]]
+
+        for path in f_values:
 
             path_data = pathway_expression_df[path].values
 
@@ -599,6 +567,7 @@ class SlideHandler:
             f_label = None
         
         possible_values = []
+        disable_label_drop = True
 
         if not view_type['name']=='channel_hist':
 
@@ -613,7 +582,7 @@ class SlideHandler:
                 intersecting_ftus[f'Marked FTUs: {n_idx+1}'] = [i['properties']['user'] for i in n_ftu['geojson']['features']]
 
         else:
-            intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,view_type['frame_list'][0])
+            intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,view_type['frame_list'][0],slide_info)
 
         if len(list(intersecting_ftus.keys()))>0:
             tab_list = []
@@ -663,13 +632,10 @@ class SlideHandler:
                                             structure_dict['label'] = 'Unlabeled'
                                 
                                 elif view_type['name']=='Pathway Expression':
-
-                                    possible_values.extend(list(set(possible_values)-set(list(st[view_type['name']].keys()))))
-                                    if not f_values is None:
-                                        for path in f_values:
-                                            path_name = list(st[view_type['name']].keys())
-                                            structure_dict[path_name] = st[view_type['name']][path_name[path]]
-
+                                    possible_values = list(set(possible_values) | set(list(st[view_type['name']].keys())))
+                                    for path in list(st[view_type['name']].keys()):
+                                        structure_dict[path] = st[view_type['name']][path]
+                                    
                                 elif view_type['name']=='Cell Type':
                                     # this will be a count for each cell type that is present
                                     structure_dict[view_type['name']] = st[view_type['name']]
@@ -706,7 +672,8 @@ class SlideHandler:
                                     else:
                                         structure_dict['label'] = 'Unlabeled'
 
-                            structure_data.append(structure_dict)
+                            if len(list(structure_dict.keys()))>0:
+                                structure_data.append(structure_dict)
 
                     if len(structure_data)>0:
                         structure_data_df = pd.DataFrame.from_records(structure_data)
@@ -737,6 +704,9 @@ class SlideHandler:
                     viewport_data[f]['data'] = structure_data
                     viewport_data[f]['count'] = 1
 
+                if len(viewport_data[f]['data'])==0:
+                    continue
+
                 # Generating plot based on assembled data
                 if view_type['name']=='channel_hist':
                     chart_label = 'Channel Intensity Histogram'
@@ -749,18 +719,15 @@ class SlideHandler:
 
                 elif view_type['name']=='Pathway Expression':
                     chart_label = 'Pathway Expression Histogram'
-                    print(f)
-                    print(len(viewport_data[f]['data']))
-                    print(possible_values)
                     if len(viewport_data[f]['data'])>0:
-                        pathway_histogram_df = self.pathway_expression_histogram(pd.DataFrame.from_records(viewport_data[f]['data']))
-                        print(pathway_histogram_df)
+                        pathway_histogram_df = self.pathway_expression_histogram(pd.DataFrame.from_records(viewport_data[f]['data']),f_values)
                         f_tab_plot = px.bar(
                             data_frame = pathway_histogram_df,
                             x = 'Expression',
                             y = 'Frequency',
                             color = 'Pathway'
                         )
+                        f_values = [possible_values.index(i) for i in pathway_histogram_df['Pathway'].unique().tolist()]
                     else:
                         f_tab_plot = None
                 
@@ -852,6 +819,7 @@ class SlideHandler:
                         })
                     elif n_features==2:
                         f_names = [i for i in structure_data_df if not i=='Hidden']
+                        disable_label_drop = False
 
                         f_tab_plot = px.scatter(
                             data_frame = structure_data_df,
@@ -874,7 +842,8 @@ class SlideHandler:
                             }
                         })
                     elif n_features>2:
-
+                        
+                        disable_label_drop = False
                         f_umap_data = gen_umap(
                             feature_data = structure_data_df,
                             feature_cols = [i for i in structure_data_df if not i=='Hidden'],
@@ -930,7 +899,7 @@ class SlideHandler:
                                 options = [{'label':i,'value': idx} for idx,i in enumerate(possible_values)],
                                 value = f_label,
                                 id = {'type': 'viewport-label-drop','index': f_idx},
-                                disabled = True if len(possible_values)==0 else False
+                                disabled = disable_label_drop
                             )
                         )
                     ]),
@@ -1065,7 +1034,6 @@ class SlideHandler:
 
         slide_annotation_dir = f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/'
         structures = [i for i in os.listdir(slide_annotation_dir) if 'json' in i]
-
         overlay_children = []
         if len(slide_info['frame_names'])>0:
             for frame, f_url in zip(slide_info['frame_names'],slide_info['tile_url']):
@@ -1189,7 +1157,10 @@ class SlideHandler:
                         else:
                             sub_props = [p]
                     
-                        property_list.extend(list(set(sub_props) - set(property_list)))
+                        property_list = list(set(sub_props) | set(property_list))
+
+        if any(['Main_Cell_Types' in i for i in property_list]):
+            property_list.append('Max Cell Type')
 
         return property_list
 
@@ -1231,5 +1202,29 @@ class SlideHandler:
 
 
         pass
+
+    def convert_map_coords(self, coord_list:list,slide_info:dict):
+        """
+        Converting map coordinates to slide coordinates (pixels)
+        coord list in x,y format
+        """
+        return_coords = []
+        for i in coord_list:
+            return_coords.append([i[0]/slide_info['scale'][0], i[1]/slide_info['scale'][1]])
+
+        return return_coords
+
+    def convert_slide_coords(self, coord_list:list, slide_info:dict):
+        """
+        Converting slide coordinates to map coordinates (lat,lng)
+        coord list in x,y format
+        """        
+        return_coords = []
+        for i in coord_list:
+            return_coords.append([i[0]*slide_info['scale'][0],i[1]*slide_info['scale'][1]])
+
+        return return_coords
+
+
 
 

@@ -998,7 +998,7 @@ class FUSION:
             Input({'type':'channel-overlay-butt','index':ALL},'n_clicks'),
             [State({'type':'overlay-channel-color','index':ALL},'value'),
             State({'type':'overlay-channel-tab','index':ALL},'label'),
-            State('slide-info-store','data')],
+            State('slide-info-store','data'), State('user-store','data')],
             prevent_initial_call = True
         )(self.add_channel_overlay)
 
@@ -1837,7 +1837,6 @@ class FUSION:
         """
         user_data_store = json.loads(user_data_store)
         slide_info_store = json.loads(slide_info_store)
-        #print(f'slide_info_store in update_viewport_data: {slide_info_store}')
         
         if not len(get_pattern_matching_value(current_data))==0:
             viewport_store_data = json.loads(get_pattern_matching_value(current_data))
@@ -1871,7 +1870,7 @@ class FUSION:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
                 if slide_info_store['slide_type']=='CODEX':
                     if frame_list is None or len(frame_list)==0:
-                        frame_list = [[slide_info_store['tiles_metadata']['frames'][0]]]
+                        frame_list = [[slide_info_store['frame_names'][0]]]
                     
                     if frame_label is None or len(frame_list)==0:
                         frame_label = [None]
@@ -3312,6 +3311,8 @@ class FUSION:
 
             if 'Spatial Omics Type' in slide_info['meta']:
                 slide_type = slide_info['meta']['Spatial Omics Type']
+            else:
+                slide_type = 'Regular'
 
             # Storing some info in a data store component (erases upon refresh)
             slide_annotation_info = {
@@ -3320,7 +3321,7 @@ class FUSION:
                 'overlay_prop': None,
                 'cell_vis_val': 0.5,
                 'filter_vals': None,
-                'current_channels': None,
+                'current_channels': {}
             }
 
             slide_annotation_info = slide_annotation_info | self.slide_handler.get_slide_map_data(slide_id,user_data_store)
@@ -5022,8 +5023,7 @@ class FUSION:
             cli_results = 'Click "Run Job!" to do the thing!'
 
             # Getting current image region:
-            #TODO: switch conversion here to not reference self.wsi or self.current_slide_bounds
-            wsi_coords = np.array(self.wsi.convert_map_coords(list(self.current_slide_bounds.exterior.coords)))
+            wsi_coords = np.array(self.slide_handler.convert_map_coords(list(self.current_slide_bounds.exterior.coords)),slide_info_store)
             min_x = np.min(wsi_coords[:,0])
             min_y = np.min(wsi_coords[:,1])
             max_x = np.max(wsi_coords[:,0])
@@ -7149,8 +7149,7 @@ class FUSION:
 
         # Creating a new color selector thing for overlaid channels?
         #TODO: get_pattern_matching_value test here
-
-        if not channel_opts is None:
+        if not channel_opts is None and len(channel_opts)>0:
             slide_info_store = json.loads(slide_info_store)
             current_channels = slide_info_store['current_channels']
             if type(channel_opts)==list:
@@ -7220,13 +7219,14 @@ class FUSION:
 
             return [],[False], slide_info_store
     
-    def add_channel_overlay(self,butt_click,channel_colors,channels, slide_info_store):
+    def add_channel_overlay(self,butt_click,channel_colors,channels, slide_info_store, user_info_store):
 
         # Adding an overlay for channel with a TileLayer containing stylized grayscale info
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
         
         slide_info_store = json.loads(slide_info_store)
+        user_info_store = json.loads(user_info_store)
         current_channels = slide_info_store['current_channels']
         # self.current_channels contains a list of all the currently overlaid channels
         # Updating the color for this channel
@@ -7255,11 +7255,11 @@ class FUSION:
                         for band in self.wsi.rgb_style_dict['bands']
                     }
 
-                new_url = self.slide_handler.update_url_style(base_style | update_style)
+                new_url = self.slide_handler.update_url_style(base_style | update_style, user_info_store, slide_info_store)
 
             else:
 
-                new_url = self.slide_handler.update_url_style(update_style)
+                new_url = self.slide_handler.update_url_style(update_style, user_info_store, slide_info_store)
 
             updated_urls.append(new_url)
 
@@ -7409,7 +7409,6 @@ class FUSION:
             
         return patched_list
 
-        
     def add_filter_slider(self, filter_drop,slide_info):
 
         slide_info = json.loads(slide_info)
@@ -7647,8 +7646,7 @@ class FUSION:
 
             ftu_bbox_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
             
-            #TODO: Remove reference to self.wsi
-            ftu_bbox = np.array(self.wsi.convert_map_coords(ftu_bbox_coords))
+            ftu_bbox = np.array(self.slide_handler.convert_map_coords(ftu_bbox_coords,slide_info_store))
             ftu_bbox = [np.min(ftu_bbox[:,0])-50,np.min(ftu_bbox[:,1])-50,np.max(ftu_bbox[:,0])+50,np.max(ftu_bbox[:,1])+50]
             #TODO: This method only grabs histology images that are single frame or multi-frame with RGB at 0,1,2
             ftu_image = self.dataset_handler.get_image_region(
@@ -7709,8 +7707,7 @@ class FUSION:
                     intersecting_ftu_polys = [shape(i['geojson']) for i in slide_info_store['marked_FTUs']]
 
                 ftu_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
-                #TODO: Remove reference to self.wsi
-                ftu_coords = np.array(self.wsi.convert_map_coords(ftu_coords))
+                ftu_coords = np.array(self.slide_handler.convert_map_coords(ftu_coords, slide_info_store))
                 ftu_bbox = [np.min(ftu_coords[:,0])-50,np.min(ftu_coords[:,1])-50,np.max(ftu_coords[:,0])+50,np.max(ftu_coords[:,1])+50]
 
                 # Now saving image with label in metadata
@@ -7771,8 +7768,7 @@ class FUSION:
                 intersecting_ftu_polys = [shape(i['geojson']) for i in slide_info_store['marked_FTUs']]
 
             ftu_coords = list(intersecting_ftu_polys[ftu_idx].exterior.coords)
-            #TODO: Remove reference to self.wsi
-            ftu_coords = np.array(self.wsi.convert_map_coords(ftu_coords))
+            ftu_coords = np.array(self.slide_handler.convert_map_coords(ftu_coords,slide_info_store))
             ftu_bbox = [np.min(ftu_coords[:,0])-50,np.min(ftu_coords[:,1])-50,np.max(ftu_coords[:,0])+50,np.max(ftu_coords[:,1])+50]
             height = int(ftu_bbox[3]-ftu_bbox[1])
             width = int(ftu_bbox[2]-ftu_bbox[0])
