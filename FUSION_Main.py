@@ -1114,22 +1114,6 @@ class FUSION:
             prevent_initial_call = True
         )(self.update_current_annotation)
 
-        # Adding cell subtypes to current annotations based on contents of molecular data file
-        self.app.callback(
-            [
-                Output('cell-drop','options'),
-                Output({'type':'cell-subtype-drop','index':ALL},'value')
-            ],
-            [
-                Input({'type':'cell-subtype-butt','index':ALL},'n_clicks'),
-                Input({'type':'upload-anchors','index':ALL},'contents')
-            ],
-            [
-                State({'type':'cell-subtype-drop','index':ALL},'value')
-            ],
-            prevent_initial_call = True
-        )(self.add_cell_subtypes)
-
         # Downloading annotation session data with modal and progress indicator
         self.app.callback(
             [
@@ -1853,7 +1837,7 @@ class FUSION:
         """
         user_data_store = json.loads(user_data_store)
         slide_info_store = json.loads(slide_info_store)
-        print(f'slide_info_store in update_viewport_data: {slide_info_store}')
+        #print(f'slide_info_store in update_viewport_data: {slide_info_store}')
         
         if not len(get_pattern_matching_value(current_data))==0:
             viewport_store_data = json.loads(get_pattern_matching_value(current_data))
@@ -1988,7 +1972,6 @@ class FUSION:
         View cell state proportions for clicked main cell type
         
         """
-
         if not cell_click is None:
             pie_cell = cell_click['points'][0]['label']
             viewport_data_store = json.loads(get_pattern_matching_value(viewport_data_store))
@@ -1996,8 +1979,10 @@ class FUSION:
             current_ftu_data = viewport_data_store['data']
             pie_ftu = list(current_ftu_data.keys())[ctx.triggered_id['index']]
 
-            pct_states = pd.DataFrame.from_records(current_ftu_data[pie_ftu]['states'][pie_cell])
-
+            pct_states = pd.DataFrame.from_records([i['states'][pie_cell] for i in current_ftu_data[pie_ftu]['data'] if 'states' in i]).sum(axis=0).to_frame()
+            pct_states = pct_states.reset_index()
+            pct_states.columns = ['Cell State','Proportion']
+            pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
             if pie_cell in self.cell_graphics_key:
                 cell_title = self.cell_graphics_key[pie_cell]["full"]
             else:
@@ -2072,8 +2057,8 @@ class FUSION:
             ftu_filter_vals = None
 
         if slide_info_store['slide_type']=='Visium':
-            gene_info_style = [{'display':'none'}]
-            gene_info_components = [[]]
+            gene_info_style = [{'display':'none'}]*len(ctx.outputs_list[6])
+            gene_info_components = [[]]*len(ctx.outputs_list[7])
         else:
             gene_info_style = []
             gene_info_components = []
@@ -2491,7 +2476,7 @@ class FUSION:
                 'color_key':hex_color_key,
                 'overlay_prop':overlay_prop,
                 'fillOpacity': cell_vis_val,
-                'ftu_colors': self.ftu_colors,
+                'ftu_colors': slide_info_store['ftu_colors'],
                 'filter_vals': ftu_filter_vals
             }
             for i in range(0,n_layers)
@@ -3339,6 +3324,7 @@ class FUSION:
             }
 
             slide_annotation_info = slide_annotation_info | self.slide_handler.get_slide_map_data(slide_id,user_data_store)
+
             annotation_info = slide_annotation_info['annotations']
             slide_annotation_info['ftu_colors'] = {
                 i['annotation']['name']: '#%02x%02x%02x' % (random.randint(0,255),random.randint(0,255),random.randint(0,255))
@@ -3542,7 +3528,7 @@ class FUSION:
             # Populating FTU boundary options:
             combined_colors_dict = {}
             for f in slide_info_store['ftu_colors']:
-                combined_colors_dict[f] = {'color':slide_info_store[f]}
+                combined_colors_dict[f] = {'color':slide_info_store['ftu_colors'][f]}
             
             boundary_options_children = [
                 dbc.Tab(
@@ -4713,8 +4699,8 @@ class FUSION:
                 current_selected_hidden = [feature_data['Hidden'].tolist()[i] for i in current_selected_samples]
                 marker_bboxes = [i['Bounding_Box'] for i in current_selected_hidden if i['Slide_Id']==slide_info_store['slide_info']['_id']]
                 
-                slide_x_scale = slide_info_store['scales'][0]
-                slide_y_scale = slide_info_store['scales'][1]
+                slide_x_scale = slide_info_store['scale'][0]
+                slide_y_scale = slide_info_store['scale'][1]
                 marker_map_coords = [
                     [
                         [i[0]*slide_x_scale,i[1]*slide_y_scale],
@@ -4747,8 +4733,8 @@ class FUSION:
                 # Add marker for a specific sample
                 mark_geojson = {'type':'FeatureCollection','features':[]}
 
-                slide_x_scale = slide_info_store['scales'][0]
-                slide_y_scale = slide_info_store['scales'][1]
+                slide_x_scale = slide_info_store['scale'][0]
+                slide_y_scale = slide_info_store['scale'][1]
 
                 # Pulling out one specific sample
                 selected_bbox = feature_data['Hidden'].tolist()[current_selected_samples[ctx.triggered_id['index']-1]]['Bounding_Box']
@@ -8046,60 +8032,6 @@ class FUSION:
             raise exceptions.PreventUpdate
 
         return [patched_list]
-
-    """
-    def add_cell_subtypes(self,butt_click,main_cell_types,anchor_uploads):
-        """
-        Extracting subtypes for a given "Main Cell Type" and adding those as a visualizable property for overlaid heatmaps
-        """
-
-        main_cell_types = get_pattern_matching_value(main_cell_types)
-        anchor_uploads = get_pattern_matching_value(anchor_uploads)
-        if not ctx.triggered:
-            raise exceptions.PreventUpdate
-        if main_cell_types is None:
-            raise exceptions.PreventUpdate
-        if len(main_cell_types)==0 or anchor_uploads is None:
-            raise exceptions.PreventUpdate
-        
-        if ctx.triggered_id['type']=='cell-subtype-butt':
-            new_cell_droptions = no_update
-            new_cell_subtype_dropue = [no_update]
-
-            if not main_cell_types is None:
-                # Running change-level plugin with these options
-                job_id = self.wsi.run_change_level(main_cell_types)        
-                job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
-                # Checking progress of the job
-                while not job_status==3 and not job_status==4:
-                    time.sleep(1)
-                    job_status,most_recent_log = self.dataset_handler.get_job_status(job_id)
-                    print(f'change_level job status: {job_status}')
-
-                if job_status==4:
-                    raise exceptions.PreventUpdate
-                
-                # Grabbing from user "Supplemental_Annotations" folder
-                updated_annotations_file = f'{self.wsi.item_id}.json'
-                updated_annotations = self.dataset_handler.grab_from_user_folder(updated_annotations_file,'Supplemental_Annotations')
-
-                self.wsi.update_ftu_props(updated_annotations)
-                self.wsi.update_annotation_geojson(updated_annotations)
-
-                new_cell_droptions = self.wsi.properties_list
-                new_cell_subtype_dropue= ['']
-
-        elif ctx.triggered_id['type']=='upload-anchors':
-            
-            new_cell_droptions = no_update
-            new_cell_subtype_dropue = [no_update]
-
-            cell_groups = pd.read_csv(BytesIO(anchor_uploads))
-            print(cell_groups.columns.tolist())
-
-        return new_cell_droptions, new_cell_subtype_dropue
-    """
-
 
     def download_annotation_session_log(self,butt_click,new_interval,user_data_store,is_open):
         """

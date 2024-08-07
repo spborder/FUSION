@@ -159,7 +159,9 @@ class SlideHandler:
             'map_bounds': map_bounds,
             'tile_url': tile_url,
             'annotations': annotation_ids,
-            'frame_names': frame_names
+            'frame_names': frame_names,
+            'manual_ROIs': [],
+            'marked_FTUs': []
         }
         
         return return_dict
@@ -206,8 +208,8 @@ class SlideHandler:
                     ]
                 }
 
-            x_scale = slide_info['scales'][0]
-            y_scale = slide_info['scales'][1]
+            x_scale = slide_info['scale'][0]
+            y_scale = slide_info['scale'][1]
             scaled_annotation = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale, c[2]), g), annotation_geojson)
 
             if len(scaled_annotation["features"])>0:
@@ -523,22 +525,6 @@ class SlideHandler:
         viewport_data_components = []
         viewport_data = {}
 
-        intersecting_ftus = {}
-        intersecting_ftu_polys = {}
-
-        pie_chart_views = [
-            'Main_Cell_Types',
-            'Cell_Subtypes',
-            'Cell Type'
-        ]
-
-        bar_chart_views = [
-            'channel_hist',
-            'Pathway Expression'
-        ]
-
-        ftu_names = [i['annotation']['name'] for i in slide_info['annotations']]
-
         if slide_info['slide_type']=='Visium':
             available_views = [
                 {'label': 'Main Cell Types','value': 'Main_Cell_Types'},
@@ -562,6 +548,46 @@ class SlideHandler:
                 {'label': 'Features','value': 'features','disabled': True}
             ]
 
+
+        if view_type['name'] is None:
+            # Returning default options:
+            viewport_data_components = html.Div([
+                dbc.Row([
+                    dbc.Col(
+                        children = [
+                            dbc.Label('Select View Type: ')
+                        ],
+                        md = 4
+                    ),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = available_views,
+                            value = view_type['name'],
+                            multi = False,
+                            id = {'type': 'roi-view-data','index': 0}
+                        )
+                    )
+                ])
+            ],style = {'height': '30vh'})
+
+            return viewport_data_components, viewport_data
+
+        intersecting_ftus = {}
+        intersecting_ftu_polys = {}
+
+        pie_chart_views = [
+            'Main_Cell_Types',
+            'Cell_Subtypes',
+            'Cell Type'
+        ]
+
+        bar_chart_views = [
+            'channel_hist',
+            'Pathway Expression'
+        ]
+
+        ftu_names = [i['annotation']['name'] for i in slide_info['annotations']]
+
         if 'values' in view_type:
             f_values = view_type['values']
         else:
@@ -579,11 +605,11 @@ class SlideHandler:
             for ftu in ftu_names:
                 intersecting_ftus[ftu], intersecting_ftu_polys[ftu] = self.find_intersecting_ftu(bounds_box, ftu, slide_info)
 
-            for m_idx, m_ftu in enumerate(slide_info['manual_rois']):
+            for m_idx, m_ftu in enumerate(slide_info['manual_ROIs']):
                 for int_ftu in m_ftu['geojson']['features'][0]['properties']['user']:
                     intersecting_ftus[f'Manual ROI: {m_idx+1}, {int_ftu}'] = [m_ftu['geojson']['features'][0]['properties']['user'][int_ftu]]
 
-            for n_idx, n_ftu in enumerate(slide_info['marked_ftus']):
+            for n_idx, n_ftu in enumerate(slide_info['marked_FTUs']):
                 intersecting_ftus[f'Marked FTUs: {n_idx+1}'] = [i['properties']['user'] for i in n_ftu['geojson']['features']]
 
         else:
@@ -593,6 +619,7 @@ class SlideHandler:
             tab_list = []
 
             for f_idx, f in enumerate(list(intersecting_ftus.keys())):
+                viewport_data[f] = {}
                 if len(intersecting_ftus[f])==0:
                     continue
                 
@@ -620,7 +647,7 @@ class SlideHandler:
                                     else:
                                         structure_dict['label'] = "Unlabeled"
 
-                            # For spatially aggregated values, Main_Cell_Types, and Cell_Subtypes
+                            # For spatially aggregated values, Pathway Expression, Main_Cell_Types, and Cell_Subtypes
                             elif type(st[view_type['name']])==dict:
                                 if view_type['name']=='Channel Means':
                                     if not f_values is None:
@@ -636,6 +663,8 @@ class SlideHandler:
                                             structure_dict['label'] = 'Unlabeled'
                                 
                                 elif view_type['name']=='Pathway Expression':
+
+                                    possible_values.extend(list(set(possible_values)-set(list(st[view_type['name']].keys()))))
                                     if not f_values is None:
                                         for path in f_values:
                                             path_name = list(st[view_type['name']].keys())
@@ -646,13 +675,23 @@ class SlideHandler:
                                     structure_dict[view_type['name']] = st[view_type['name']]
 
                                 elif view_type['name'] in ['Main_Cell_Types','Cell_Subtypes']:
-                                    structure_dict[view_type['name']] = st[view_type['name']]
                                     
                                     if view_type['name']=='Main_Cell_Types':
+                                        structure_dict[view_type['name']] = st[view_type['name']]
+
                                         if "Cell_States" in st:
-                                            structure_dict['states'] = st['Cell States']
+                                            structure_dict['states'] = st['Cell_States']
                                         else:
                                             structure_dict['states'] = {}
+
+                                    elif view_type['name']=='Cell_Subtypes':
+                                        main_types = list(st[view_type['name']].keys())
+                                        sub_type_dict = {}
+                                        for m in main_types:
+                                            for s_t in st[view_type['name']][m]:
+                                                sub_type_dict[s_t] = st[view_type['name']][m][s_t] * st['Main_Cell_Types'][m]
+                                        
+                                        structure_dict[view_type['name']] = sub_type_dict
 
                             elif type(st[view_type['name']])==str:
                                 structure_dict[view_type['name']] = {st[view_type['name']]: 1}
@@ -667,7 +706,7 @@ class SlideHandler:
                                     else:
                                         structure_dict['label'] = 'Unlabeled'
 
-                        structure_data.append(structure_dict)
+                            structure_data.append(structure_dict)
 
                     if len(structure_data)>0:
                         structure_data_df = pd.DataFrame.from_records(structure_data)
@@ -710,21 +749,41 @@ class SlideHandler:
 
                 elif view_type['name']=='Pathway Expression':
                     chart_label = 'Pathway Expression Histogram'
-                    pathway_histogram_df = self.pathway_expression_histogram(pd.DataFrame.from_records(viewport_data[f]['data']))
-                    
-                    f_tab_plot = px.bar(
-                        data_frame = pathway_histogram_df,
-                        x = 'Expression',
-                        y = 'Frequency',
-                        color = 'Pathway'
-                    )
+                    print(f)
+                    print(len(viewport_data[f]['data']))
+                    print(possible_values)
+                    if len(viewport_data[f]['data'])>0:
+                        pathway_histogram_df = self.pathway_expression_histogram(pd.DataFrame.from_records(viewport_data[f]['data']))
+                        print(pathway_histogram_df)
+                        f_tab_plot = px.bar(
+                            data_frame = pathway_histogram_df,
+                            x = 'Expression',
+                            y = 'Frequency',
+                            color = 'Pathway'
+                        )
+                    else:
+                        f_tab_plot = None
                 
                 elif view_type['name'] in pie_chart_views:
                     
                     chart_label = view_type['name'].replace('_',' ')
 
                     # Getting the counts for each element in each structure
-                    column_sum = pd.DataFrame.from_records(viewport_data[f]['data']).sum().to_dict()
+                    data_df = pd.DataFrame.from_records(viewport_data[f]['data'])
+                    if view_type['name'] in data_df:
+                        if data_df[view_type['name']].dtype=='object':
+                            column_sum = pd.DataFrame.from_records(data_df[view_type['name']].tolist()).sum().to_dict()
+                        elif data_df[view_type['name']].dtype==np.number:
+                            column_sum = data_df.select_dtypes(exclude='object').sum().to_dict()
+                        elif data_df[view_type['name']].dtype==str:
+                            column_sum = data_df.select_dtypes(exclude='object').value_counts().to_dict()
+                        else:
+                            column_sum = {}
+                    else:
+                        column_sum = {}
+
+                    if len(list(column_sum.keys()))==0:
+                        continue
 
                     pie_chart_data = []
                     for key,val in column_sum.items():
@@ -747,7 +806,7 @@ class SlideHandler:
 
                     if view_type['name']=='Main_Cell_Types':
                         # Getting the cell state information
-                        top_cell = list(viewport_data[f]['data'][0].keys())[0]
+                        top_cell = list(viewport_data[f]['data'][0]['Main_Cell_Types'].keys())[0]
                         second_chart_label = f'{top_cell} Cell States Proportions'
                         
                         pct_states = pd.DataFrame.from_records([i['states'][top_cell] for i in viewport_data[f]['data'] if top_cell in i['states']]).sum(axis=0).to_frame()
@@ -845,7 +904,7 @@ class SlideHandler:
                                 value = f_values,
                                 multi = True,
                                 id = {'type': 'viewport-values-drop','index': f_idx},
-                                disabled = True if f_values is None else False
+                                disabled = True if len(possible_values)==0 else False
                             ),
                             md = 6, align = 'center'
                         ),
@@ -856,7 +915,7 @@ class SlideHandler:
                                 n_clicks = 0,
                                 style = {'width': '100%'},
                                 id = {'type': 'viewport-plot-butt','index': f_idx},
-                                disabled = True if f_values is None else False
+                                disabled = True if len(possible_values)==0 else False
                             ),
                             md = 3
                         )
@@ -883,7 +942,7 @@ class SlideHandler:
                                     id = {'type': 'ftu-cell-pie','index': f_idx},
                                     figure = go.Figure(f_tab_plot)
                                 )
-                            ]) 
+                            ],style = {'display': 'none'} if f_tab_plot is None else {'display': 'inline-block'}) 
                         ] if not view_type['name'] == 'Main_Cell_Types' else
                         [
                             dbc.Col([
@@ -892,14 +951,14 @@ class SlideHandler:
                                     id = {'type': 'ftu-cell-pie','index': f_idx},
                                     figure = go.Figure(f_tab_plot)
                                 )
-                            ],md=6),
+                            ],md=6,style = {'display': 'none'} if f_tab_plot is None else {'display': 'inline-block'}),
                             dbc.Col([
                                 dbc.Label(second_chart_label),
                                 dcc.Graph(
                                     id = {'type': 'ftu-state-bar','index': f_idx},
                                     figure = go.Figure(state_bar)
                                 )
-                            ],md=6)
+                            ],md=6,style = {'display': 'none'} if state_bar is None else {'display': 'inline-block'})
                         ]
                     )
                 ], label = f+f' ({viewport_data[f]["count"]})', tab_id = f'tab_{len(tab_list)}')
@@ -1027,7 +1086,7 @@ class SlideHandler:
         if len(structures)>0:
             for st_idx, st in enumerate(structures):
 
-                structure_name = [i for i in slide_info['annotations'] if i['_id']==st][0]['name']
+                structure_name = [i for i in slide_info['annotations'] if i['_id']+'.json'==st][0]['annotation']['name']
                 overlay_children.append(
                     dl.Overlay(
                         dl.LayerGroup(
@@ -1058,9 +1117,9 @@ class SlideHandler:
                                         id = {'type': 'ftu-popup','index': st_idx}
                                     )
                                 ]
-                            ),
-                            name = structure_name, checked = True, id = st.replace('.json','')
-                        )
+                            )
+                        ),
+                        name = structure_name, checked = True, id = st.replace('.json','')
                     )
                 )
 
@@ -1095,9 +1154,9 @@ class SlideHandler:
                                         id = {'type': 'ftu-popup','index': len(overlay_children)}
                                     )
                                 ]
-                            ),
-                            name = f'Manual ROI {m_idx+1}', checked = True, id = slide_info["slide_info"]["_id"]+f'_manual_roi{m_idx}'
-                        )
+                            )
+                        ),
+                        name = f'Manual ROI {m_idx+1}', checked = True, id = slide_info["slide_info"]["_id"]+f'_manual_roi{m_idx}'
                     )
                 )
 
@@ -1130,7 +1189,7 @@ class SlideHandler:
                         else:
                             sub_props = [p]
                     
-                    property_list.extend(list(set(sub_props) - set(property_list)))
+                        property_list.extend(list(set(sub_props) - set(property_list)))
 
         return property_list
 

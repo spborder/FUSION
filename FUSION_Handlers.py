@@ -1845,11 +1845,11 @@ class LayoutHandler:
         
         elif slide_type in ['Xenium']:
             # Upload cell anchors/labels
-            special_overlay_opts.extend([
+            special_overlays_opts.extend([
                 html.H6('Upload cell group labels here'),
                 self.gen_info_button('Upload a csv file where one column is "cell_id" and the others are labels you want to apply to the matching cell'),
                 html.Div([
-                    dcc.Upload(
+                    html.A(dcc.Upload(
                         id={'type':'upload-anchors','index':0},
                         children=html.Div([
                             'Drag and Drop or ',
@@ -1862,13 +1862,13 @@ class LayoutHandler:
                             'borderRadius': '5px',
                             'textAlign': 'center',
                         }
-                    ),
+                    )),
                     html.Div(id={'type':'uploaded-anchors-output','index':0}),
                 ])
             ])
         
         else:
-            special_overlay_opts = []
+            special_overlays_opts = []
 
         return special_overlays_opts
 
@@ -3833,14 +3833,6 @@ class GirderHandler:
         annotations_path = './assets/slide_annotations/'
         if os.path.exists(annotations_path):
             item_annotations = os.listdir(annotations_path)
-            for it in item_annotations:
-                item_rock_path = f'{annotations_path}{it}/rock.txt'
-
-                # What time was this rock put there?
-                rock_time = os.stat(item_rock_path).st_atime
-                # 86400 seconds in one day times number of days
-                if time() - rock_time > (days*86400):
-                    shutil.rmtree(f'{annotations_path}{it}')
 
     def set_default_slides(self,default_slide_list):
         # Setting default slides with name and item information
