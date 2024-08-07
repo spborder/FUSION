@@ -2777,8 +2777,6 @@ class FUSION:
                 ],title = 'Other Properties')
             )
 
-            #print(f'len of nested_prop_list: {len(nested_prop_list)}')
-            #print(nested_prop_list)
             if len(nested_prop_list)>0:
 
                 # Start from the bottom and go up as opposed to top-down
@@ -3002,7 +3000,6 @@ class FUSION:
                                         title = l['name']
                                     )
                                 )
-
 
             if 'unique_index' in ftu_click['properties']['user']:
                 #TODO: Store these user ftu labels somewhere else
