@@ -2467,17 +2467,13 @@ class LayoutHandler:
         # Table with metadata for each dataset in dataset_handler
         combined_dataset_dict = []
 
-        print('generating builder_layout')
         # Accessing the folder structure saved in dataset_handler     
         if current_slide_dataset is None:
-            print('getting new slide dataset')
             slide_datasets = dataset_handler.update_slide_datasets(user_info)
         else:
             if current_slide_dataset['userId']==user_info['_id']:
                 slide_datasets = current_slide_dataset
-                print('using cached slide dataset')
             else:
-                print('getting new slide dataset')
                 slide_datasets = dataset_handler.update_slide_datasets(user_info)
 
         for f in slide_datasets['slide_dataset']:

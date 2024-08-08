@@ -375,7 +375,6 @@ class FUSION:
     def update_page(self,pathname, user_data, vis_sess_store, available_datasets_store):
         
         vis_sess_store = json.loads(vis_sess_store)
-        print(available_datasets_store)
         if len(available_datasets_store)>0:
             available_datasets_store = json.loads(get_pattern_matching_value(available_datasets_store))
         else:
@@ -1539,8 +1538,6 @@ class FUSION:
         else:
             dataset_store = {}
         
-        print([list(i.keys()) for i in vis_sess_store])
-
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
 

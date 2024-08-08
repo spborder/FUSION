@@ -463,10 +463,13 @@ class SlideHandler:
         """
 
         pathway_hist_df = pd.DataFrame()
-        if all([f is None for f in f_values]):
+        if type(f_values)==list:
+            if all([f is None for f in f_values]):
+                f_values = [pathway_expression_df.columns.tolist()[0]]
+            else:
+                f_values = [pathway_expression_df.columns.tolist()[i] for i in f_values]
+        elif f_values is None:
             f_values = [pathway_expression_df.columns.tolist()[0]]
-        else:
-            f_values = [pathway_expression_df.columns.tolist()[i] for i in f_values]
 
         for path in f_values:
             if not path is None:
@@ -919,7 +922,7 @@ class SlideHandler:
                         disable_label_drop = False
                         f_umap_data = gen_umap(
                             feature_data = structure_data_df,
-                            feature_cols = [i for i in structure_data_df if not i=='Hidden'],
+                            feature_cols = [i for i in structure_data_df if not i in ['Hidden','label']],
                             label_and_custom_cols = [i for i in structure_data_df if i in ['Hidden','label']]
                         )
 
