@@ -128,7 +128,7 @@ def gen_violin_plot(feature_data, label_col, label_name, feature_col, custom_col
                     label_name,
                     width=15
                 )
-            ),
+            ) if not label_name is None else 'Group',
             font = dict(size = 10)
         ),
         margin = {'r':0,'b':25}

@@ -348,7 +348,9 @@ class SlideHandler:
             agg_object_props = agg_prop_df.select_dtypes(include='object')
             # Adding categorical properties
             if any([i in categorical_columns for i in agg_prop_df.columns.tolist()]):
-                agg_object_props = pd.concat([agg_object_props,agg_prop_df[:,[i for i in categorical_columns if i in agg_prop_df.columns.tolist()]]],axis=1)
+                combined_column_names = agg_object_props.columns.tolist()+[i for i in categorical_columns if i in agg_prop_df and not i in agg_object_props]
+                agg_object_props = pd.concat([agg_object_props,agg_prop_df.iloc[:,[i for i in range(len(categorical_columns)) if categorical_columns[i] in agg_prop_df and categorical_columns[i] not in agg_object_props]]],axis=1,ignore_index=True)
+                agg_object_props.columns = combined_column_names
             for col_idx, col_name in enumerate(agg_object_props.columns.tolist()):
                 col_values = agg_object_props[col_name].tolist()
                 col_vals_dict = {col_name: {}}
@@ -358,7 +360,7 @@ class SlideHandler:
                     # Test for single nested dictionary
                     sub_values = list(col_values[0].keys())
                     if not type(col_values[0][sub_values[0]])==dict:
-                        col_df = pd.DataFrame.from_records(col_values).astype(float)
+                        col_df = pd.DataFrame.from_records([i for i in col_values if isinstance(i,dict)]).astype(float)
 
                         # Scaling by intersection area
                         for row_idx, area in enumerate(overlap_area):
@@ -372,7 +374,7 @@ class SlideHandler:
                     else:
                         for sub_val in sub_values:
                             if type(col_values[0][sub_val])==dict:
-                                col_df = pd.DataFrame.from_records([i[sub_val] for i in col_values]).astype(float)
+                                col_df = pd.DataFrame.from_records([i[sub_val] for i in col_values if isinstance(i[sub_val],dict)]).astype(float)
                                 
                                 # Scaling by intersection area
                                 for row_idx, area in enumerate(overlap_area):
@@ -409,7 +411,10 @@ class SlideHandler:
             box_poly = box(*box_poly)
 
         if frame_list=='all':
-            frame_list = [i for i in slide_info['frame_names'] if not i=='Histology (H&E)']
+            frame_list = list(range(len([i for i in slide_info['frame_names'] if not i=='Histology (H&E)'])))
+
+        print(box_poly)
+        print(frame_list)
 
         #TODO: Get rid of convert map coords thing
         box_coordinates = np.array(self.convert_map_coords(list(box_poly.exterior.coords), slide_info))
@@ -422,12 +427,13 @@ class SlideHandler:
         box_size = (max_x-min_x)*(max_y-min_y)
         # Or probably also by multiplying some scale factors by box_poly.area
         # Pulling out those regions of the image
-        frame_indices = [slide_info['frame_names'].index(i) for i in frame_list]
 
         # Slide coordinates list should be [minx,miny,maxx,maxy]
         slide_coords_list = [min_x,min_y,max_x,max_y]
+
+        print(slide_coords_list)
         frame_properties = {}
-        for frame in frame_indices:
+        for frame in frame_list:
             # Get the image region associated with that frame
             # Or just get the histogram for that channel? not sure if this can be for a specific image region
             image_histogram = self.girder_handler.gc.get(f'/item/{slide_info["slide_info"]["_id"]}/tiles/histogram',
@@ -438,15 +444,16 @@ class SlideHandler:
                                                             'right': max_x,
                                                             'frame': frame,
                                                             'bins':100,
-                                                            'rangeMax':255,
+                                                            #'rangeMax':255,
                                                             'roundRange': True, 
-                                                            #'density': True
+                                                            'density': True
                                                             }
                                                         )
 
             # Fraction of total intensity (maximum intensity = every pixel is 255 for uint8)
             frame_properties[slide_info['frame_names'][frame]] = image_histogram[0]
 
+        print(frame_properties)
         
         return frame_properties
 
@@ -456,28 +463,30 @@ class SlideHandler:
         """
 
         pathway_hist_df = pd.DataFrame()
-        if f_values is None:
+        if all([f is None for f in f_values]):
             f_values = [pathway_expression_df.columns.tolist()[0]]
+        else:
+            f_values = [pathway_expression_df.columns.tolist()[i] for i in f_values]
 
         for path in f_values:
+            if not path is None:
+                path_data = pathway_expression_df[path].values
 
-            path_data = pathway_expression_df[path].values
+                hist, bin_edges = np.histogram(path_data,bins = 50,density = False)
 
-            hist, bin_edges = np.histogram(path_data,bins = 50,density = False)
+                path_data_list = [
+                    {
+                    'Frequency': i,
+                    'Expression': j,
+                    'Pathway': path
+                    }
+                    for i,j in zip([0]+hist,bin_edges)
+                ]
 
-            path_data_list = [
-                {
-                'Frequency': i,
-                'Expression': j,
-                'Pathway': path
-                }
-                for i,j in zip([0]+hist,bin_edges)
-            ]
-
-            if pathway_hist_df.empty:
-                pathway_hist_df = pd.DataFrame.from_records(path_data_list)
-            else:
-                pathway_hist_df = pd.concat([pathway_hist_df,pd.DataFrame.from_records(path_data_list)],axis=0,ignore_index=True)
+                if pathway_hist_df.empty:
+                    pathway_hist_df = pd.DataFrame.from_records(path_data_list)
+                else:
+                    pathway_hist_df = pd.concat([pathway_hist_df,pd.DataFrame.from_records(path_data_list)],axis=0,ignore_index=True)
 
         return pathway_hist_df
 
@@ -582,7 +591,65 @@ class SlideHandler:
                 intersecting_ftus[f'Marked FTUs: {n_idx+1}'] = [i['properties']['user'] for i in n_ftu['geojson']['features']]
 
         else:
-            intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,view_type['frame_list'][0],slide_info)
+            print(view_type)
+            if all([i is None for i in view_type['values']]):
+                # Returning default options:
+                viewport_data_components = html.Div([
+                    dbc.Row([
+                        dbc.Col(
+                            children = [
+                                dbc.Label('Select View Type: ')
+                            ],
+                            md = 4
+                        ),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = available_views,
+                                value = view_type['name'],
+                                multi = False,
+                                id = {'type': 'roi-view-data','index': 0}
+                            )
+                        )
+                    ]),
+                    dbc.Row([
+                        dbc.Tabs(
+                            dbc.Tab([
+                                dbc.Row([
+                                    dbc.Col(
+                                        dbc.Label('Select additional values: ',html_for = {'type': 'viewport-values-drop','index': 0}),
+                                        md = 3, align = 'center'
+                                    ),
+                                    dbc.Col(
+                                        dcc.Dropdown(
+                                            options = [{'label': i, 'value': idx} for idx,i in enumerate(slide_info['frame_names']) if not i in ['Histology (H&E)','red','green','blue']],
+                                            value = None,
+                                            multi = True,
+                                            id = {'type': 'viewport-values-drop','index': 0},
+                                            disabled = False
+                                        ),
+                                        md = 6, align = 'center'
+                                    ),
+                                    dbc.Col(
+                                        dbc.Button(
+                                            'Plot it!',
+                                            className = 'd-grid col-12 mx-auto',
+                                            n_clicks = 0,
+                                            style = {'width': '100%'},
+                                            id = {'type': 'viewport-plot-butt','index': f_idx},
+                                            disabled = False
+                                        ),
+                                        md = 3
+                                    )
+                                ])
+                            ])
+                        )
+                    ])
+                ],style = {'height': '30vh'})
+
+                return viewport_data_components, viewport_data
+
+            intersecting_ftus['Tissue'] = self.intersecting_frame_intensity(bounds_box,view_type['values'],slide_info)
+
 
         if len(list(intersecting_ftus.keys()))>0:
             tab_list = []
@@ -602,34 +669,38 @@ class SlideHandler:
                             if type(st[view_type['name']])==list:
 
                                 possible_values = [i['Channel'] for i in slide_info['tiles_metadata']['frames']]
-                                if not f_values is None:
-                                    for frame in f_values:
+                                for frame in f_values:
+                                    if not frame is None:
                                         frame_name = slide_info['tiles_metadata']['frames'][frame]['Channel']
                                         structure_dict[frame_name] = st[view_type['name']][frame]
                                     
-                                    # Adding bounding box info
-                                    structure_dict['Hidden'] = {'Slide_Id': slide_info['slide_info']["_id"],'Bounding_Box':list(intersecting_ftu_polys[f][st_idx].bounds)}
+                                # Adding bounding box info
+                                structure_dict['Hidden'] = {'Slide_Id': slide_info['slide_info']["_id"],'Bounding_Box':list(intersecting_ftu_polys[f][st_idx].bounds)}
 
                                 if not f_label is None:
                                     if f_label<len(st[view_type['name']]):
                                         structure_dict['label'] = st[view_type['name']][f_label]
                                     else:
                                         structure_dict['label'] = "Unlabeled"
+                                else:
+                                    structure_dict['label'] = 'Unlabeled'
 
                             # For spatially aggregated values, Pathway Expression, Main_Cell_Types, and Cell_Subtypes
                             elif type(st[view_type['name']])==dict:
                                 if view_type['name']=='Channel Means':
-                                    if not f_values is None:
-                                        for frame in f_values:
-                                            frame_name = slide_info['tiles_metadata']['frames'][frame]
+                                    for frame in f_values:
+                                        if not frame is None:
+                                            frame_name = slide_info['frame_names'][frame]
                                             structure_dict[frame_name] = st[view_type['name']][frame_name]
 
                                     if not f_label is None:
-                                        frame_label = slide_info['tiles_metadata']['frames'][f_label]
+                                        frame_label = slide_info['frame_names'][f_label]
                                         if frame_label in st[view_type['name']]:
                                             structure_dict['label'] = st[view_type['name']][slide_info['tiles_metadata']['frames'][f_label]]
                                         else:
                                             structure_dict['label'] = 'Unlabeled'
+                                    else:
+                                        structure_dict['label'] = 'Unlabeled'
                                 
                                 elif view_type['name']=='Pathway Expression':
                                     possible_values = list(set(possible_values) | set(list(st[view_type['name']].keys())))
@@ -671,6 +742,8 @@ class SlideHandler:
                                         structure_dict['label'] = st[f_label]
                                     else:
                                         structure_dict['label'] = 'Unlabeled'
+                                else:
+                                    structure_dict['label'] = 'Unlabeled'
 
                             if len(list(structure_dict.keys()))>0:
                                 structure_data.append(structure_dict)
@@ -683,13 +756,11 @@ class SlideHandler:
 
                     viewport_data[f]['count'] = len(structure_data)
                 else:
-                    
-                    possible_values = [i['Channel'] for i in slide_info['tiles_metadata']['frames']]
-
+                    possible_values = [i for i in slide_info['frame_names'] if not i in ['Histology (H&E)','red','green','blue']]
                     structure_data = []
-                    if not f_values is None:
-                        for frame in f_values:
-                            frame_name = slide_info['tiles_metadata']['frames'][frame]
+                    for frame in f_values:
+                        if not frame is None:
+                            frame_name = slide_info['frame_names'][frame]
                             frame_data = intersecting_ftus[f][frame_name]
                             
                             frame_data_list = [
@@ -701,6 +772,7 @@ class SlideHandler:
                                 for i,j in zip([0]+frame_data['hist'],frame_data['bin_edges'])
                             ]
                             structure_data.extend(frame_data_list)
+
                     viewport_data[f]['data'] = structure_data
                     viewport_data[f]['count'] = 1
 
@@ -710,12 +782,16 @@ class SlideHandler:
                 # Generating plot based on assembled data
                 if view_type['name']=='channel_hist':
                     chart_label = 'Channel Intensity Histogram'
+                    histogram_df = pd.DataFrame.from_records(viewport_data[f]['data'])
+                    histogram_df = histogram_df[histogram_df['Frequency']>=0.01]
+                    #bar_width = (1/100)*(histogram_df['Intensity'].max() - histogram_df['Intensity'].min())
                     f_tab_plot = px.bar(
-                        data_frame = pd.DataFrame.from_records(viewport_data[f]['data']),
+                        data_frame = histogram_df,
                         x = 'Intensity',
                         y = 'Frequency',
                         color = 'Channel'
                     )
+                    #f_tab_plot.update_traces(width = bar_width)
 
                 elif view_type['name']=='Pathway Expression':
                     chart_label = 'Pathway Expression Histogram'
@@ -793,16 +869,13 @@ class SlideHandler:
 
                     # These are feature plots. Either a violin plot (single feature), scatter plot (2 features), or UMAP (3+ features)
                     structure_data_df = pd.DataFrame.from_records(viewport_data[f]['data'])
-                    if 'Hidden' in structure_data_df.columns.tolist():
-                        n_features = structure_data_df.shape[1] - 1
-                    else:
-                        n_features = structure_data_df.shape[1]
+                    n_features = len([i for i in structure_data_df.columns.tolist() if not i in ['label','Hidden']])
 
                     if n_features==1:
                         f_tab_plot = gen_violin_plot(
                             feature_data = structure_data_df,
-                            label_col = None,
-                            label_name = None,
+                            label_col = 'label',
+                            label_name = f_label,
                             feature_col = structure_data_df.columns.tolist()[0],
                             custom_col = 'Hidden' if 'Hidden' in structure_data_df else None
                         )
@@ -1082,7 +1155,9 @@ class SlideHandler:
                                 zoomToBounds = False,
                                 children = [
                                     dl.Popup(
-                                        id = {'type': 'ftu-popup','index': st_idx}
+                                        id = {'type': 'ftu-popup','index': st_idx},
+                                        autoPan = False,
+                                        #maxHeight = 800
                                     )
                                 ]
                             )
@@ -1119,7 +1194,9 @@ class SlideHandler:
                                 ),
                                 children = [
                                     dl.Popup(
-                                        id = {'type': 'ftu-popup','index': len(overlay_children)}
+                                        id = {'type': 'ftu-popup','index': len(overlay_children)},
+                                        autoPan = False,
+                                        #maxHeight=800
                                     )
                                 ]
                             )

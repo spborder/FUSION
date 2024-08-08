@@ -372,9 +372,14 @@ class FUSION:
             return not is_open
         return is_open
 
-    def update_page(self,pathname, user_data, vis_sess_store):
+    def update_page(self,pathname, user_data, vis_sess_store, available_datasets_store):
         
         vis_sess_store = json.loads(vis_sess_store)
+        print(available_datasets_store)
+        if len(available_datasets_store)>0:
+            available_datasets_store = json.loads(get_pattern_matching_value(available_datasets_store))
+        else:
+            available_datasets_store = None
         user_data = json.loads(user_data)
         pathname = pathname[1:]
         print(f'Navigating to {pathname}')
@@ -385,8 +390,6 @@ class FUSION:
         self.dataset_handler.update_usability()
         #TODO: Currently this method does not remove old annotations as expected
         self.dataset_handler.clean_old_annotations()
-
-
 
         if pathname in self.layout_handler.layout_dict:
             if not pathname=='vis':
@@ -400,7 +403,7 @@ class FUSION:
                 else:
                     # Checking if there was any new slides added via uploader (or just added externally)
                     #self.dataset_handler.update_folder_structure(user_data['login'])
-                    self.layout_handler.gen_builder_layout(self.dataset_handler,user_data)
+                    self.layout_handler.gen_builder_layout(self.dataset_handler,user_data,available_datasets_store)
                     container_content = self.layout_handler.layout_dict[pathname]
 
             else:
@@ -434,9 +437,9 @@ class FUSION:
         # Clearing slide_info_store and updating vis_sess_store
         slide_info_store = json.dumps({})
         vis_sess_store = json.dumps(vis_sess_store)
+        available_datasets_store = [json.dumps(available_datasets_store)]*len(ctx.outputs_list[5])
 
-
-        return container_content, slide_style, slide_select_value, json.dumps(vis_sess_store), slide_info_store
+        return container_content, slide_style, slide_select_value, vis_sess_store, slide_info_store, available_datasets_store
 
     def open_nav_collapse(self,n,is_open):
         if n:
@@ -524,10 +527,12 @@ class FUSION:
              Output('slide-select-card','style'),
              Output('slide-select','value'),
              Output('visualization-session-store','data'),
-             Output('slide-info-store','data')],
+             Output('slide-info-store','data'),
+             Output({'type': 'available-datasets-store','index': ALL},'data')],
              Input('url','pathname'),
              [State('user-store','data'),
-              State('visualization-session-store','data')],
+              State('visualization-session-store','data'),
+              State({'type':'available-datasets-store','index': ALL},'data')],
              prevent_initial_call = True
         )(self.update_page)
 
@@ -713,12 +718,12 @@ class FUSION:
              ],
             [Input('slide-map','bounds'),
              Input({'type':'roi-view-data','index':ALL},'value'),
-             Input({'type':'frame-data-butt','index':ALL},'n_clicks'),
+             Input({'type':'viewport-plot-butt','index':ALL},'n_clicks'),
              ],
             [State('tools-tabs','active_tab'),
              State('viewport-data-update','checked'),
-             State({'type':'frame-histogram-drop','index':ALL},'value'),
-             State({'type':'frame-label-drop','index':ALL},'value'),
+             State({'type':'viewport-values-drop','index':ALL},'value'),
+             State({'type':'viewport-label-drop','index':ALL},'value'),
              State({'type':'viewport-store-data','index':ALL},'data'),
              State('user-store','data'),
              State('slide-info-store','data')
@@ -1431,12 +1436,12 @@ class FUSION:
 
             # Pulling dataset metadata
             # Dataset name in this case is associated with a folder or collection
-            metadata_available = list(dataset_store[d]['Aggregated_Metadata'].keys())
+            metadata_available = list(dataset_store['slide_dataset'][d]['Aggregated_Metadata'].keys())
             # This will store metadata, id, name, etc. for every slide in that dataset
-            slides_list = self.dataset_handler.get_folder_slides(dataset_store[d]["_id"])
+            slides_list = self.dataset_handler.get_folder_slides(dataset_store['slide_dataset'][d]["_id"])
             full_slides_list.extend(slides_list)
 
-            slide_dataset_dict.extend([{'Slide Names':s['name'],'Dataset':d} for s in slides_list])
+            slide_dataset_dict.extend([{'Slide Names':s['name'],'Dataset':dataset_store['slide_dataset'][d]['name']} for s in slides_list])
 
             # Grabbing dataset-level metadata
             metadata_available += ['FTU Expression Statistics', 'FTU Morphometrics']
@@ -1533,6 +1538,8 @@ class FUSION:
             dataset_store = json.loads(get_pattern_matching_value(dataset_store))
         else:
             dataset_store = {}
+        
+        print([list(i.keys()) for i in vis_sess_store])
 
         if not ctx.triggered[0]['value']:
             raise exceptions.PreventUpdate
@@ -1572,42 +1579,26 @@ class FUSION:
             cell_types_options = (no_update,no_update,no_update)
 
         current_slide_count, slide_select_options, vis_sess_store = self.update_current_slides(slide_rows,vis_sess_store)
-        #TODO: get_pattern_matching_value test here
-        """
-        if type(new_meta)==list:
-            if len(new_meta)>0:
-                new_meta = new_meta[0]
-        """
-        new_meta = get_pattern_matching_value(new_meta)
 
-        #TODO: get_pattern_matching_value test here
-        """
-        if type(group_type)==list:
-            if len(group_type)>0:
-                group_type = group_type[0]
-        """
+        new_meta = get_pattern_matching_value(new_meta)
         group_type = get_pattern_matching_value(group_type)
 
-        #TODO: get_pattern_matching_value test here
         if not new_meta is None:
             if not len(new_meta)==0:
                 # Filtering out de-selected slides
-                present_slides = [s['name'] for s in vis_sess_store]
-                included_slides = [t for t in present_slides if vis_sess_store]                    
-
+                included_datasets = [f for f in dataset_store['slide_dataset'] if any([f["_id"]==j['folderId'] and j['included'] for j in vis_sess_store])]
                 dataset_metadata = []
-                for dataset in dataset_store:
-                    slide_data = self.dataset_handler.get_folder_slides(dataset["_id"])
-                    dataset_name = self.dataset_handler.get_folder_name(dataset["_id"])
-                    d_include = [s for s in slide_data if s['name'] in included_slides]
+                for dataset in included_datasets:
+                    dataset_name = dataset['name']
+                    slide_data = [s for s in vis_sess_store if s['included'] and s['folderId']==dataset['_id']]
 
-                    if len(d_include)>0:
+                    if len(slide_data)>0:
                         
                         # Adding new_meta value to dataset dictionary
                         if not new_meta=='FTU Expression Statistics' and not new_meta=='FTU Morphometrics':
                             d_dict = {'Dataset':[],'Slide Name':[],new_meta:[]}
 
-                            for s in d_include:
+                            for s in slide_data:
                                 if new_meta in s['meta']:
                                     d_dict['Dataset'].append(dataset_name)
                                     d_dict['Slide Name'].append(s['name'])
@@ -1649,7 +1640,7 @@ class FUSION:
                                     if sub_meta[0]=='Cell States':
                                         d_dict['State'] = []
 
-                                    for d_i in d_include:
+                                    for d_i in slide_data:
                                         slide_meta = d_i['meta']
                                         slide_name = d_i['name']
                                         ftu_expressions = [i for i in list(slide_meta.keys()) if 'Expression' in i]
@@ -1680,7 +1671,7 @@ class FUSION:
                                     # Getting FTU Specific expression values
                                     d_dict = {'Dataset':[],'Slide Name':[],'FTU':[],new_meta:[]}
                                     
-                                    for d_i in d_include:
+                                    for d_i in slide_data:
                                         slide_meta = d_i['meta']
                                         slide_name = d_i['name']
                                         ftu_morphometrics = [i for i in list(slide_meta.keys()) if 'Morphometrics' in i]
@@ -1714,7 +1705,6 @@ class FUSION:
                     # This is dumb, c'mon pandas
                     if plot_data[new_meta].dtype.kind in 'biufc':
                         if group_bar == 'Dataset':
-                            print('Generating violin plot')
                             if not new_meta == 'FTU Expression Statistics':
                                 fig = go.Figure(px.violin(plot_data,points = 'all', x=group_bar,y=new_meta,hover_data=['Slide Name']))
                             else:
@@ -1723,7 +1713,6 @@ class FUSION:
                                 else:
                                     fig = go.Figure(px.violin(plot_data,points = 'all', x=group_bar,y=new_meta,hover_data=['Slide Name','State'],color='FTU'))
                         else:
-                            print('Generating bar plot')
                             if not new_meta=='FTU Expression Statistics' and not new_meta=='FTU Morphometrics':
                                 fig = go.Figure(px.bar(plot_data,x=group_bar,y=new_meta,hover_data = ['Dataset']))
                             else:
@@ -1732,7 +1721,6 @@ class FUSION:
                                 else:
                                     fig = go.Figure(px.bar(plot_data,x=group_bar,y=new_meta,hover_data=['Dataset','State'],color='FTU'))
                     else:
-                        print(f'Generating bar plot')
                         groups_present = plot_data[group_bar].unique()
                         count_df = pd.DataFrame()
                         for g in groups_present:
@@ -1868,17 +1856,16 @@ class FUSION:
         if current_tab=='cell-compositions-tab':
             if not len(list(slide_info_store.keys()))==0:
                 # Getting a dictionary containing all the intersecting spots with this current ROI
+                frame_list = get_pattern_matching_value(frame_list)
+                frame_label = get_pattern_matching_value(frame_label)
                 if slide_info_store['slide_type']=='CODEX':
                     if frame_list is None or len(frame_list)==0:
-                        frame_list = [[slide_info_store['frame_names'][0]]]
-                    
-                    if frame_label is None or len(frame_list)==0:
-                        frame_label = [None]
+                        frame_list = [0]
 
                     view_type_dict = {
                         'name': cell_view_type,
-                        'frame_list': frame_list if type(frame_list[0])==list else [frame_list],
-                        'frame_label': frame_label
+                        'values': frame_list if type(frame_list)==list else [frame_list],
+                        'label': frame_label
                     }
                 else:
                     view_type_dict = {
@@ -2667,6 +2654,7 @@ class FUSION:
                     ],
                     layout = {
                         'margin': {'t': 0, 'b': 0, 'l': 0,'r': 0},
+                        'width': 300,
                         'uniformtext_minsize': 12,
                         'uniformtext_mode': 'hide',
                         'showlegend': False
@@ -2828,8 +2816,7 @@ class FUSION:
                             o_prop_data = o_prop_data[o_prop_data['Value']>0]
                             #print(o_prop_data)
                             if not o_prop_data.empty:
-                                print(f'o_sub: {o_n_prop["sub_name"]}')
-
+                                #print(f'o_sub: {o_n_prop["sub_name"]}')
                                 sub_accordion_list.append(
                                     dbc.AccordionItem(
                                         html.Div(
@@ -3012,7 +2999,7 @@ class FUSION:
                 dbc.Accordion(
                     children = accordion_children
                 )
-            ],style={'height':'300px','width':'300px','display':'inline-block'})
+            ],style={'display':'inline-block'})
 
             return popup_div
 
@@ -7148,9 +7135,9 @@ class FUSION:
     def add_channel_color_select(self,channel_opts, slide_info_store):
 
         # Creating a new color selector thing for overlaid channels?
-        #TODO: get_pattern_matching_value test here
+        slide_info_store = json.loads(slide_info_store)
+
         if not channel_opts is None and len(channel_opts)>0:
-            slide_info_store = json.loads(slide_info_store)
             current_channels = slide_info_store['current_channels']
             if type(channel_opts)==list:
                 if len(channel_opts[0])>0:
@@ -8210,11 +8197,13 @@ def app(*args):
         dbc.icons.FONT_AWESOME
         ]
 
+    slide_dataset = dataset_handler.update_slide_datasets(initial_user_info)
+
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
-    layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides)
+    layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides, slide_dataset)
     layout_handler.gen_vis_layout(wsi,GeneHandler(),cli_list)
-    layout_handler.gen_builder_layout(dataset_handler,initial_user_info)
+    layout_handler.gen_builder_layout(dataset_handler,initial_user_info, None)
     layout_handler.gen_uploader_layout()
 
     download_handler = DownloadHandler(dataset_handler)

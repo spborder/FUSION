@@ -2449,7 +2449,7 @@ class LayoutHandler:
 
         return user_ftu_labels_children
 
-    def gen_builder_layout(self, dataset_handler, user_info):
+    def gen_builder_layout(self, dataset_handler, user_info, current_slide_dataset = None):
 
         # This builds the layout for the Dataset Builder functionality, 
         # allowing users to select which datasets/slides are incorporated into their 
@@ -2469,9 +2469,18 @@ class LayoutHandler:
 
         print('generating builder_layout')
         # Accessing the folder structure saved in dataset_handler     
-        slide_datasets = dataset_handler.update_slide_datasets(user_info)
+        if current_slide_dataset is None:
+            print('getting new slide dataset')
+            slide_datasets = dataset_handler.update_slide_datasets(user_info)
+        else:
+            if current_slide_dataset['userId']==user_info['_id']:
+                slide_datasets = current_slide_dataset
+                print('using cached slide dataset')
+            else:
+                print('getting new slide dataset')
+                slide_datasets = dataset_handler.update_slide_datasets(user_info)
 
-        for f in slide_datasets:
+        for f in slide_datasets['slide_dataset']:
             folder_dict = {}
             if 'name' in f:
                 folder_dict['Name'] = f['name']
@@ -2522,15 +2531,7 @@ class LayoutHandler:
                     html.H3('Select a Dataset to add slides to current session'),
                     html.Hr(),
                     self.gen_info_button('Click on one of the circles in the far left of the table to load metadata for that dataset. You can also filter/sort the rows using the arrow icons in the column names and the text input in the first row'),
-                    html.Div(
-                        children = [
-                            dcc.Store(
-                                id = {'type': 'available-datasets-store','index':0},
-                                data = json.dumps(slide_datasets),
-                                storage_type='memory'
-                            )
-                        ]
-                    ),
+
                     table_layout,
                     html.B(),
                     html.H3('Select Slides to include in current session'),
@@ -3103,7 +3104,7 @@ class LayoutHandler:
         self.layout_dict['welcome'] = welcome_layout
         self.description_dict['welcome'] = welcome_description
 
-    def gen_initial_layout(self,slide_names,initial_user,default_slides):
+    def gen_initial_layout(self,slide_names,initial_user,default_slides,available_datasets):
 
         # welcome layout after initialization and information and buttons to go to other areas
         # Header
@@ -3291,7 +3292,16 @@ class LayoutHandler:
                                 )
                             )
                         ),id={'type':'collapse-content','index':0},is_open=False
-                    )
+                    ),
+                    html.Div(
+                        children = [
+                            dcc.Store(
+                                id = {'type': 'available-datasets-store','index':0},
+                                data = json.dumps(available_datasets),
+                                storage_type='memory'
+                            )
+                        ]
+                    ),
                 ]),
                 dbc.CardFooter([
                     dbc.Collapse(
@@ -3736,7 +3746,7 @@ class GirderHandler:
 
         return cli
 
-    def update_slide_datasets(self,user_info, current_set = None):
+    def update_slide_datasets(self,user_info):
         """
         Grabbing available collections as well as user public folders
         outputs list of accessible folders' info (folders that are immediate parents of slides)
@@ -3745,7 +3755,7 @@ class GirderHandler:
         slide_datasets = []
         
         # This is all collections in the DSA instance
-        all_collections = self.gc.get('/collection',parameters={'limit': 1000})
+        all_collections = self.gc.get('/collection',parameters={'limit': 0})
 
         # Checking user access (only include public collections)
         all_collections = [i for i in all_collections if i['public']]
@@ -3797,7 +3807,12 @@ class GirderHandler:
                 slide_datasets.append(f)
 
 
-        return slide_datasets
+        return_dict = {
+            'userId': user_info["_id"],
+            'slide_dataset': slide_datasets
+        }
+
+        return return_dict
 
     def get_folder_slides(self,folder_id):
         """
