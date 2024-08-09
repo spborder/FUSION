@@ -47,7 +47,7 @@ import dash_treeview_antd as dta
 import dash_draggable as drag
 
 from dash_extensions.enrich import html
-from dash_extensions.javascript import arrow_function
+from dash_extensions.javascript import arrow_function, assign
 
 import girder_client
 from tqdm import tqdm
@@ -199,6 +199,15 @@ class LayoutHandler:
             ),
             #dl.EasyButton(icon='fa-solid fa-user-doctor', title='Ask Fusey!',id='fusey-button',position='bottomright'),
             #html.Div(id='ask-fusey-box',style={'visibility':'hidden','position':'absolute','top':'50px','right':'10px','zIndex':'1000'}),
+            dl.EasyButton(
+                icon = 'fa-solid fa-arrows-to-dot',
+                title = 'Re-Center Map',
+                id = 'center-map',
+                position = 'top-left',
+                eventHandlers = {
+                    'click': assign('function(e,ctx){ctx.map.flyTo(['+str(center_point[0])+','+str(center_point[1])+'],0);}')
+                }
+            ),
             html.Div(id='marker-add-div',children = []),
             html.Div(
                 id = 'dummy-div-user-annotations',
@@ -214,6 +223,7 @@ class LayoutHandler:
             center = center_point, zoom = 0, minZoom = 0, crs='Simple',
             style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
+            zoomDelta = 0.5,
             preferCanvas=True,
             children = map_children
         )

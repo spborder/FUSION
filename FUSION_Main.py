@@ -779,7 +779,8 @@ class FUSION:
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children'),
-             Output('cell-annotation-tab','disabled')],
+             Output('cell-annotation-tab','disabled'),
+             Output('center-map','eventHandlers')],
             Input('slide-load-interval','disabled'),
             State('slide-info-store','data'),
             prevent_initial_call=True,
@@ -3487,12 +3488,14 @@ class FUSION:
                     )
                 ]
 
-            center_point = [2.0*(slide_info_store['map_bounds'][0][0]+slide_info_store['map_bounds'][1][0]),1.0*(slide_info_store['map_bounds'][0][1]+slide_info_store['map_bounds'][1][1])]
-
             map_center = {
-                'center': center_point,
+                'center': slide_info_store['map_bounds'],
                 'zoom': 3,
                 'transition':'flyTo'
+            }
+
+            new_center_handler = {
+                'click': assign('function(e,ctx){ctx.map.flyTo(['+str(slide_info_store['map_bounds'][0])+','+str(slide_info_store['map_bounds'][1])+'],3);}')
             }
 
             # Adding the layers to be a property for the edit_control callback
@@ -3540,7 +3543,7 @@ class FUSION:
                 children = current_overlays
             )
 
-            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, visualizable_properties_list, boundary_options_children, special_overlays_opts, cell_annotation_tab_disable
+            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, visualizable_properties_list, boundary_options_children, special_overlays_opts, cell_annotation_tab_disable, new_center_handler
         else:
             raise exceptions.PreventUpdate
 

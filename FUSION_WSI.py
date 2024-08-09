@@ -104,7 +104,7 @@ class SlideHandler:
         y_scale = -(base_dims[1]/image_dims[1])
 
         #TODO: figure out how to actually set the map bounds (lat,lng)
-        map_bounds = [[0,image_dims[1]*x_scale],[0,image_dims[0]*y_scale]]
+        map_bounds = [image_dims[1]*x_scale, image_dims[0]*y_scale]
         
         # Grabbing available annotation ids for current item
         annotation_ids = self.girder_handler.get_available_annotation_ids(item_id)
