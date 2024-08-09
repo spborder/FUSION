@@ -664,7 +664,7 @@ class SlideHandler:
                             # For CODEX Channel names:
                             if type(st[view_type['name']])==list:
 
-                                possible_values = [i['Channel'] for i in slide_info['tiles_metadata']['frames']]
+                                possible_values = [i for i in slide_info['frame_names'] if not i in ['Histology (H&E)','red','green','blue']]
                                 for frame in f_values:
                                     if not frame is None:
                                         frame_name = slide_info['tiles_metadata']['frames'][frame]['Channel']
