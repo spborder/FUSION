@@ -104,7 +104,7 @@ class SlideHandler:
         y_scale = -(base_dims[1]/image_dims[1])
 
         #TODO: figure out how to actually set the map bounds (lat,lng)
-        map_bounds = [image_dims[1]*x_scale, image_dims[0]*y_scale]
+        map_bounds = [-tile_dims[0], tile_dims[1]]
         
         # Grabbing available annotation ids for current item
         annotation_ids = self.girder_handler.get_available_annotation_ids(item_id)
@@ -594,7 +594,6 @@ class SlideHandler:
                 intersecting_ftus[f'Marked FTUs: {n_idx+1}'] = [i['properties']['user'] for i in n_ftu['geojson']['features']]
 
         else:
-            print(view_type)
             if all([i is None for i in view_type['values']]):
                 # Returning default options:
                 viewport_data_components = html.Div([
@@ -1119,7 +1118,8 @@ class SlideHandler:
                             url = f_url,
                             tileSize = slide_info['tile_dims'][0],
                             maxNativeZoom = slide_info['zoom_levels']-1,
-                            id = {'type':'codex-tile-layer','index': random.randint(0,1000)}
+                            id = {'type':'codex-tile-layer','index': random.randint(0,1000)},
+                            bounds = [[0,0],slide_info['map_bounds']]
                         ),
                         name = frame,
                         checked = frame==slide_info['frame_names'][0],

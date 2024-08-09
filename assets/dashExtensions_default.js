@@ -1,9 +1,12 @@
 window.dashExtensions = Object.assign({}, window.dashExtensions, {
     default: {
         function0: function(e, ctx) {
-            ctx.map.flyTo([0.0, 240.0], 0);
+            ctx.map.flyTo([-120, 120], 1);
         },
-        function1: function(feature, context) {
+        function1: function(e, ctx) {
+            console.log(`Clicked coordinates: ${e.latlng}, map center: ${ctx.map.getCenter()}`);
+        },
+        function2: function(feature, context) {
                 const {
                     color_key,
                     overlay_prop,
@@ -88,7 +91,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             }
 
             ,
-        function2: function(feature, context) {
+        function3: function(feature, context) {
                 const {
                     color_key,
                     overlay_prop,
@@ -159,21 +162,14 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             }
 
             ,
-        function3: function(feature, latlng, context) {
-                const p = feature.properties;
-                if (p.type === 'marker') {
-                    return L.marker(latlng);
-                } else {
-                    return true;
-                }
+        function4: function(feature, latlng, context) {
+            const p = feature.properties;
+            if (p.type === 'marker') {
+                return L.marker(latlng);
+            } else {
+                return true;
             }
-
-            ,
-        function4: function(e, ctx) {
-            ctx.map.flyTo([168.4765625, -172.046875], 0);
-        },
-        function5: function(e, ctx) {
-            ctx.map.flyTo([168.46875, -172.2109375], 0);
         }
+
     }
 });

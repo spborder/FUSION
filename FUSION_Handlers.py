@@ -104,7 +104,7 @@ class LayoutHandler:
 
         return info_button
 
-    def gen_vis_layout(self, wsi, gene_handler, cli_list = None):
+    def gen_vis_layout(self, gene_handler, cli_list = None):
 
         #cell_types, zoom_levels, map_dict, spot_dict, slide_properties, tile_size, map_bounds,
         # Main visualization layout, used in initialization and when switching to the viewer
@@ -119,42 +119,16 @@ class LayoutHandler:
             html.P('Happy fusing!')         
         ]
 
-        if not wsi is None:
-            print(f'Generating initial overlays for WSI')
-            # View of WSI
-            combined_colors_dict = {}
-            for f in wsi.map_dict['FTUs']:
-                combined_colors_dict[f] = {'color':wsi.map_dict['FTUs'][f]['color']}
-            
-            self.initial_overlays = [
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(url=f'./assets/slide_annotations/{struct}.json', id = wsi.map_dict['FTUs'][struct]['id'], options = {'style':{'color':combined_colors_dict[struct]}},
-                            hideout = dict(color_key = {},current_cell = '',fillOpacity=0.5,ftu_colors = combined_colors_dict,filter_vals = [0,1]), hoverStyle = arrow_function(dict(weight=5, color = wsi.map_dict['FTUs'][struct]['hover_color'], dashArray = '')),
-                            zoomToBounds=True,children=[dl.Popup(id = wsi.map_dict['FTUs'][struct]['popup_id'])])),
-                    name = struct, checked = True, id = struct)
-            for struct in wsi.map_dict['FTUs']
-            ] 
-            
-            map_url = wsi.map_dict['url']
-            tile_size = wsi.tile_dims[0]
-            slide_properties = wsi.properties_list
-            zoom_levels = wsi.zoom_levels
-            map_bounds = wsi.map_bounds
-
-        else:
-            self.initial_overlays = []
-
-            # This is just to populate these components. This part should never be visible
-            #map_url = 'https://placekitten.com/240/240?image={z}'
-            map_url = './assets/Initial tiletest.png'
-            tile_size = 240
-            slide_properties = []
-            combined_colors_dict = {}
-            zoom_levels = 3
-            map_bounds = [[0,240],[0,240]]
+        # This is just to populate these components. This part should never be visible
+        #map_url = 'https://placekitten.com/240/240?image={z}'
+        map_url = './assets/Initial tiletest.png'
+        tile_size = 240
+        slide_properties = []
+        combined_colors_dict = {}
+        zoom_levels = 3
+        map_bounds = [tile_size,tile_size]
         
-        center_point = [0.5*(map_bounds[0][0]+map_bounds[1][0]),0.5*(map_bounds[0][1]+map_bounds[1][1])]
+        center_point = [-tile_size,tile_size]
 
         map_children = [
             html.Div(
@@ -184,16 +158,16 @@ class LayoutHandler:
                     )
                 ]
             ),
-            html.Div(id='colorbar-div',
-                     children = [
-                         dl.Colorbar(id='map-colorbar')
-                         ]),
+            html.Div(
+                id='colorbar-div',
+                children = []
+            ),
             html.Div(
                 id = 'layer-control-holder',
                 children = [
                     dl.LayersControl(
                         id='layer-control',
-                        children = self.initial_overlays
+                        children = []
                         )
                     ]
             ),
@@ -205,7 +179,7 @@ class LayoutHandler:
                 id = 'center-map',
                 position = 'top-left',
                 eventHandlers = {
-                    'click': assign('function(e,ctx){ctx.map.flyTo(['+str(center_point[0])+','+str(center_point[1])+'],0);}')
+                    'click': assign('function(e,ctx){ctx.map.flyTo([-120,120],1);}')
                 }
             ),
             html.Div(id='marker-add-div',children = []),
@@ -223,9 +197,12 @@ class LayoutHandler:
             center = center_point, zoom = 0, minZoom = 0, crs='Simple',
             style = {'width':'100%','height':'90vh','margin':'auto','display':'inline-block'},
             id = 'slide-map',
-            zoomDelta = 0.5,
+            zoomDelta = 0.25,
             preferCanvas=True,
-            children = map_children
+            children = map_children,
+            eventHandlers={
+                'contextmenu': assign('function(e,ctx){console.log(`Clicked coordinates: ${e.latlng}, map center: ${ctx.map.getCenter()}`);}')
+            }
         )
 
         wsi_view = dbc.Card([

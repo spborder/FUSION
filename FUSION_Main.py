@@ -81,7 +81,6 @@ class FUSION:
         self.current_page = 'welcome'
 
         self.dataset_handler = dataset_handler
-        self.current_overlays = self.layout_handler.initial_overlays
 
         self.download_handler = download_handler
         self.prep_handler = prep_handler
@@ -409,7 +408,6 @@ class FUSION:
 
                 # Generating visualization layout with empty clustering data, default filter vals, and no WSI
                 self.layout_handler.gen_vis_layout(
-                    None,
                     self.gene_handler
                 )
 
@@ -667,7 +665,7 @@ class FUSION:
              Input({'type':'cell-sub-drop','index':ALL},'value')],
             [State({'type':'ftu-bound-color','index':ALL},'value'),
              State({'type':'added-filter-slider-div','index':ALL},'style'),
-             State('slide-info-store','data')],
+             State('slide-info-store','data'),State('cell-drop','options')],
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -779,8 +777,7 @@ class FUSION:
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children'),
-             Output('cell-annotation-tab','disabled'),
-             Output('center-map','eventHandlers')],
+             Output('cell-annotation-tab','disabled')],
             Input('slide-load-interval','disabled'),
             State('slide-info-store','data'),
             prevent_initial_call=True,
@@ -905,6 +902,7 @@ class FUSION:
              Output('cli-current-image','children'),
              Output('cli-results','children'),
              Output('cli-results-followup','children')],
+            State('slide-info-store','data'),
              prevent_initial_call = True
         )(self.run_analysis)
         """
@@ -2018,7 +2016,7 @@ class FUSION:
 
         return hex_color_key
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style, slide_info_store):
+    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style, slide_info_store, all_overlay_options):
         """
         Updating overlay hideout property in GeoJSON layer used in self.ftu_style_handle        
         """
@@ -2053,7 +2051,7 @@ class FUSION:
             'background':'rgba(255,255,255,0.8)',
             'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
             'border-radius':'10px',
-            'width':'',
+            'width':'30vw',
             'padding':'0px 0px 0px 25px'
         }
 
@@ -2143,13 +2141,6 @@ class FUSION:
                         'sub_value': cell_sub_val
                     }
                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
-                color_bar_style['width'] = '350px'
-
-                color_bar = dl.Colorbar(
-                    colorscale = list(hex_color_key.values()),
-                    width=300,height=10,position='bottomleft',
-                    id=f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style)
 
                 if len(list(hex_color_key.keys()))>0:
                     filter_min_val = np.min(list(hex_color_key.keys()))
@@ -2208,14 +2199,6 @@ class FUSION:
                     }
                 
                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
-                color_bar_style['width'] = '350px'
-
-                color_bar = dl.Colorbar(
-                    colorscale = list(hex_color_key.values()),
-                    width = 300,height = 10,position = 'bottomleft',
-                    id = f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style
-                )
 
                 if len(list(hex_color_key.keys()))==0:
                     filter_min_val = 0.0
@@ -2235,14 +2218,7 @@ class FUSION:
                 }
 
                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
-                color_bar_style['width'] = '350px'
 
-                color_bar = dl.Colorbar(
-                    colorscale = list(hex_color_key.values()),
-                    width=300,height=10,position='bottomleft',
-                    id=f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style)
-                
                 filter_min_val = np.min(list(hex_color_key.keys()))
                 filter_max_val = np.max(list(hex_color_key.keys()))
                 filter_disable = False
@@ -2255,17 +2231,8 @@ class FUSION:
                     'sub_value': None
                 }
                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
-                color_bar_style['width'] = '650px'
 
                 cell_sub_select_children = []
-
-                cell_types = sorted(list(self.cell_graphics_key.keys()))
-                color_bar = dlx.categorical_colorbar(
-                    categories = cell_types,
-                    colorscale = list(hex_color_key.values()),
-                    width=600,height=10,position='bottomleft',
-                    id=f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style)
 
                 filter_min_val = 0.0
                 filter_max_val = 1.0
@@ -2280,14 +2247,6 @@ class FUSION:
                 }
                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
-                cluster_labels = sorted(list(hex_color_key.keys()))
-                color_bar = dlx.categorical_colorbar(
-                    categories = cluster_labels,
-                    colorscale = list(hex_color_key.values()),
-                    width = 600, height = 10, position = 'bottomleft',
-                    id = f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style
-                )
                 cell_sub_select_children = []
 
                 filter_min_val = 0.0
@@ -2303,15 +2262,6 @@ class FUSION:
                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                 cell_sub_select_children = []
-
-                ftu_types = list(hex_color_key.keys())
-                color_bar = dlx.categorical_colorbar(
-                    categories = ftu_types,
-                    colorscale = list(hex_color_key.values()),
-                    width = 600, height = 10, position = 'bottom left',
-                    id = f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style
-                )
 
                 filter_min_val = 0.0
                 filter_max_val = 1.0
@@ -2339,9 +2289,10 @@ class FUSION:
 
                 color_bar = dl.Colorbar(
                     colorscale = list(hex_color_key.values()),
-                    width=300,height=10,position='bottomleft',
+                    position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style)
+                    style = color_bar_style,
+                    tooltip=True)
 
                 if len(list(hex_color_key.keys()))>0:
                     filter_min_val = np.min(list(hex_color_key.keys()))
@@ -2361,12 +2312,6 @@ class FUSION:
                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                 cell_sub_select_children = []
-
-                color_bar = dl.Colorbar(
-                    colorscale = list(hex_color_key.values()),
-                    width=300,height=10,position='bottomleft',
-                    id=f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style)
 
                 filter_min_val = np.min(list(hex_color_key.keys()))
                 filter_max_val = np.max(list(hex_color_key.keys()))
@@ -2388,22 +2333,6 @@ class FUSION:
                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                 cell_sub_select_children = []
-
-
-                if all([not type(i)==str for i in list(hex_color_key.keys())]):
-                    color_bar = dl.Colorbar(
-                        colorscale = list(hex_color_key.values()),
-                        width=300,height=10,position='bottomleft',
-                        id=f'colorbar{random.randint(0,100)}',
-                        style = color_bar_style)
-                else:
-                    color_bar = dlx.categorical_colorbar(
-                        categories = sorted(list(hex_color_key.keys())),
-                        colorscale = list(hex_color_key.values()),
-                        width = 600, height = 10, position = 'bottomleft',
-                        id = f'colorbar{random.randint(0,100)}',
-                        style = color_bar_style
-                    )
 
                 if not len(list(hex_color_key.keys()))==0:
                     if all([not type(i)==str for i in list(hex_color_key.keys())]):
@@ -2454,6 +2383,31 @@ class FUSION:
 
         cell_vis_val = vis_val/100
         n_layers = len(callback_context.outputs_list[0])
+
+        if all([not type(i)==str for i in list(hex_color_key.keys())]) and not overlay_prop['value']=='max':
+            color_bar = dl.Colorbar(
+                colorscale = list(hex_color_key.values()),
+                width = 700,
+                position='bottomleft',
+                id=f'colorbar{random.randint(0,100)}',
+                style = color_bar_style,
+                tooltip=True)
+        else:
+            
+            if overlay_prop['value']=='max':
+                categories = [i['label'].split(' --> ')[-1] for i in all_overlay_options if overlay_prop['name'] in i['label']]
+            else:
+                categories = list(hex_color_key.keys())
+                
+            color_bar = dlx.categorical_colorbar(
+                categories = sorted(categories),
+                colorscale = list(hex_color_key.values()),
+                width = 700,
+                position = 'bottomleft',
+                id = f'colorbar{random.randint(0,100)}',
+                style = color_bar_style,
+                tooltip = True
+            )
 
         geojson_hideout = [
             {
@@ -3484,7 +3438,8 @@ class FUSION:
                         id = f'slide-tile{np.random.randint(0,100)}',
                         url = slide_info_store['tile_url'],
                         tileSize = slide_info_store['tile_dims'][0],
-                        maxNativeZoom = slide_info_store['zoom_levels']-1
+                        maxNativeZoom = slide_info_store['zoom_levels']-1,
+                        bounds = [[0,0],slide_info_store['map_bounds']]
                     )
                 ]
 
@@ -3492,10 +3447,6 @@ class FUSION:
                 'center': slide_info_store['map_bounds'],
                 'zoom': 3,
                 'transition':'flyTo'
-            }
-
-            new_center_handler = {
-                'click': assign('function(e,ctx){ctx.map.flyTo(['+str(slide_info_store['map_bounds'][0])+','+str(slide_info_store['map_bounds'][1])+'],3);}')
             }
 
             # Adding the layers to be a property for the edit_control callback
@@ -3543,7 +3494,7 @@ class FUSION:
                 children = current_overlays
             )
 
-            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, visualizable_properties_list, boundary_options_children, special_overlays_opts, cell_annotation_tab_disable, new_center_handler
+            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, visualizable_properties_list, boundary_options_children, special_overlays_opts, cell_annotation_tab_disable
         else:
             raise exceptions.PreventUpdate
 
@@ -4992,7 +4943,7 @@ class FUSION:
             # Or just make this tab not enabled
             raise exceptions.PreventUpdate
 
-    def run_analysis(self,cli_name,cli_butt):
+    def run_analysis(self,cli_name,cli_butt,slide_info_store):
 
         cli_dict = [i for i in self.dataset_handler.cli_dict_list if i['name']==cli_name][0]
         cli_description = dcc.Markdown(cli_dict['description'])
@@ -7143,10 +7094,10 @@ class FUSION:
                 if len(channel_opts[0])>0:
                     channel_opts = channel_opts[0]
                     active_tab = channel_opts[0]
-                    disable_butt = False
+                    disable_butt = [False]
                 else:
                     active_tab = None
-                    disable_butt = False
+                    disable_butt = [False]
                     channel_opts = channel_opts[0]
             
             # Removing any channels which aren't included from self.current_channels
@@ -7196,15 +7147,16 @@ class FUSION:
             slide_info_store['current_channels'] = current_channels
             slide_info_store = json.dumps(slide_info_store)
 
-            return [channel_tabs],[disable_butt], slide_info_store
+            return [channel_tabs],disable_butt, slide_info_store
         else:
             current_channels = {}
 
             slide_info_store['current_channels'] = current_channels
 
             slide_info_store = json.dumps(slide_info_store)
+            disable_butt = [False]*len(ctx.outputs_list[1])
 
-            return [],[False], slide_info_store
+            return [],disable_butt, slide_info_store
     
     def add_channel_overlay(self,butt_click,channel_colors,channels, slide_info_store, user_info_store):
 
@@ -8202,7 +8154,7 @@ def app(*args):
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides, slide_dataset)
-    layout_handler.gen_vis_layout(wsi,GeneHandler(),cli_list)
+    layout_handler.gen_vis_layout(GeneHandler(),cli_list)
     layout_handler.gen_builder_layout(dataset_handler,initial_user_info, None)
     layout_handler.gen_uploader_layout()
 
