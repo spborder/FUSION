@@ -413,9 +413,6 @@ class SlideHandler:
         if frame_list=='all':
             frame_list = list(range(len([i for i in slide_info['frame_names'] if not i=='Histology (H&E)'])))
 
-        print(box_poly)
-        print(frame_list)
-
         #TODO: Get rid of convert map coords thing
         box_coordinates = np.array(self.convert_map_coords(list(box_poly.exterior.coords), slide_info))
         min_x = int(np.min(box_coordinates[:,0]))
@@ -431,7 +428,6 @@ class SlideHandler:
         # Slide coordinates list should be [minx,miny,maxx,maxy]
         slide_coords_list = [min_x,min_y,max_x,max_y]
 
-        print(slide_coords_list)
         frame_properties = {}
         for frame in frame_list:
             # Get the image region associated with that frame
@@ -452,8 +448,6 @@ class SlideHandler:
 
             # Fraction of total intensity (maximum intensity = every pixel is 255 for uint8)
             frame_properties[slide_info['frame_names'][frame]] = image_histogram[0]
-
-        print(frame_properties)
         
         return frame_properties
 
@@ -1058,6 +1052,25 @@ class SlideHandler:
         styled_url = self.girder_handler.gc.urlBase+f'item/{slide_info["slide_info"]["_id"]}/tiles/zxy/'+'/{z}/{x}/{y}?token='+user_info["token"]+'&style='+json.dumps(style_dict)
 
         return styled_url
+    
+    def get_rgb_url(self, slide_info, user_info):
+        """
+        Getting the RGB         
+        """
+        all_frames = [i['Channel'] for i in slide_info['tiles_metadata']['frames']]
+        rgb_style_dict = {
+            "bands": [
+                {
+                    "palette": ["rgba(0,0,0,0)",'rgba('+','.join(['255' if i==c_idx else '0' for i in range(3)]+['0'])+')'],
+                    "framedelta": all_frames.index(c)
+                }
+                for c_idx,c in enumerate(['red','green','blue'])
+            ]
+        }
+
+        rgb_url = self.girder_handler.gc.urlBase+f'item/{slide_info["slide_info"]["_id"]}/tiles/zxy/'+'/{z}/{x}/{y}?token='+user_info["token"]+'&style='+json.dumps(rgb_style_dict)
+
+        return rgb_style_dict, rgb_url
 
     def populate_cell_annotation(self, region_selection, current_data):
         """

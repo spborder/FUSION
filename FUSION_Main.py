@@ -2398,15 +2398,14 @@ class FUSION:
                 categories = [i['label'].split(' --> ')[-1] for i in all_overlay_options if overlay_prop['name'] in i['label']]
             else:
                 categories = list(hex_color_key.keys())
-                
+
             color_bar = dlx.categorical_colorbar(
                 categories = sorted(categories),
                 colorscale = list(hex_color_key.values()),
                 width = 700,
                 position = 'bottomleft',
                 id = f'colorbar{random.randint(0,100)}',
-                style = color_bar_style,
-                tooltip = True
+                style = color_bar_style
             )
 
         geojson_hideout = [
@@ -7189,9 +7188,10 @@ class FUSION:
                     }
                 else:
                     #TODO: Add a method to get the RGB style dict from slide_handler
+                    rgb_dict, _ = self.slide_handler.get_rgb_url(slide_info_store, user_info_store)
                     base_style = {
                         band['framedelta']: band['palette'][-1]
-                        for band in self.wsi.rgb_style_dict['bands']
+                        for band in rgb_dict['bands']
                     }
 
                 new_url = self.slide_handler.update_url_style(base_style | update_style, user_info_store, slide_info_store)
