@@ -38,7 +38,7 @@ from math import pi
 
 from tqdm import tqdm
 
-import matplotlib.pyplot as plt
+from typing_extensions import Union
 
 from io import StringIO, BytesIO
 
@@ -99,6 +99,78 @@ class Prepper:
             }
         ]
 
+    def get_plugin_list(self)->list:
+        """
+        Return list of current plugins and info
+        """
+
+        plugin_list = self.girder_handler.gc.get('/slicer_cli_web/cli')
+
+        return plugin_list
+
+    def add_plugin(self,plugin_info:Union[list,dict],user_info:dict):
+        """
+        Adding new analysis/preprocessing plugin to available list
+        """
+
+        # Check if present already and delete old version
+        if type(plugin_info)==dict:
+            plugin_info = [plugin_info]
+
+        self.delete_plugin(plugin_info)
+
+        for p_info in plugin_info:
+            put_response = self.girder_handler.gc.put(
+                '/slicer_cli_web/docker_image',
+                parameters = {
+                    'name': p_info['image']
+                }
+            )
+
+    def delete_plugin(self,plugin_info:Union[list,dict],user_info:dict):
+        """
+        Removing analysis/preprocessing plugin from available options        
+        """
+
+        current_clis = self.get_plugin_list()
+
+        if type(plugin_info)==dict:
+            plugin_info = [plugin_info]
+
+        for p_info in plugin_info:
+            overlap_cli = [i for i in current_clis if i['image']==p_info['image']]
+
+            if len(overlap_cli)>0:
+                cli_id = overlap_cli[0]['_id']
+
+                del_cli = self.girder_handler.gc.delete(f'/slicer_cli_web/cli/{cli_id}')
+                del_image = self.girder_handler.gc.delete(
+                    '/slicer_cli_web/docker_image',
+                    parameters = {
+                        'name': p_info['image'],
+                        'delete_from_local_repo': True
+                    })
+
+    def run_plugin(self,plugin_args: Union[list,dict],user_info:dict) -> list:
+        """
+        Running plugin with provided arguments
+        """
+        
+        if type(plugin_args)==dict:
+            plugin_args = [plugin_args]
+        
+        job_responses = []
+        for p_args in plugin_args:
+            
+            # plugin_args only has to contain plugin specific arguments. Merged with girderApiUrl and girderToken here
+            p_job = self.girder_handler.gc.post(
+                f'/slicer_cli_web/{p_args["plugin_name"]}/run',
+                parameters = p_args['arguments'] | {'girderApiUrl': self.girder_handler.gc.apiUrl} | {'girderToken': user_info['token']}
+            )
+            job_responses.append(p_job)
+
+        return job_responses
+
     def get_annotation_image_mask(self,item_id,user_info,annotations,layer_idx,ann_idx):
 
         # Codes taken from Annotaterator
@@ -118,7 +190,15 @@ class Prepper:
             max_y = np.max(coordinates[:,1])+self.padding_pixels
 
             # Getting image and mask
-            image = np.uint8(np.array(self.girder_handler.get_image_region(item_id,user_info,[min_x,min_y,max_x,max_y])))
+            image = np.uint8(
+                np.array(
+                    self.girder_handler.get_image_region(
+                        item_id,
+                        user_info,
+                        [min_x,min_y,max_x,max_y]
+                    )
+                )
+            )
             
             # Scaling coordinates to fit within bounding box
             scaled_coordinates = coordinates.tolist()

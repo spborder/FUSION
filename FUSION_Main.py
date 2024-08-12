@@ -147,7 +147,9 @@ class FUSION:
         self.morphometrics_names = self.dataset_handler.morpho_names
 
         # Load clustering data
+        #TODO: Get rid of self.filter_labels, potential for user overlap
         self.filter_labels = []
+        #TODO: get rid of self.reports_generated, potential for user overlap
         self.reports_generated = {}
 
         # Number of main cell types to include in pie-charts (currently set to all cell types)
@@ -1015,7 +1017,8 @@ class FUSION:
             ],
             [
                 State({'type':'cell-checkbox','index':ALL},'value'),
-                State({'type':'ftu-cell-pie','index':ALL},'selectedData')
+                State({'type':'ftu-cell-pie','index':ALL},'selectedData'),
+                State('slide-info-store','data')
             ],
             prevent_initial_call = True
         )(self.cell_labeling_initialize)
@@ -1897,7 +1900,8 @@ class FUSION:
                 
                 # Getting intersecting FTU information
                 intersecting_ftus = {}
-                for ftu in self.current_ftu_layers:
+                current_ftu_names = [i['annotation']['name'] for i in slide_info_store['annotations']]
+                for ftu in current_ftu_names:
                     if not ftu=='Spots' and not ftu=='Cells':
                         intersecting_ftus[ftu], _ = self.slide_handler.find_intersecting_ftu(
                             viewport_store_data['current_slide_bounds'],
@@ -3625,7 +3629,7 @@ class FUSION:
             clustering_data = None
 
         if ctx.triggered_id=='gen-plot-butt':
-
+            #TODO: get rid of self.reports_generated, potential for user overlap
             self.reports_generated = {}
             report_active_tab = 'feat-summ-tab'
 
@@ -4017,6 +4021,7 @@ class FUSION:
             return figure, label_options, label_info_children, filter_info_children, report_active_tab, download_plot_disable, json.dumps(cluster_data_store)
         
         elif ctx.triggered_id=='label-select':
+            #TODO: get rid of self.reports_generated, potential for user overlap
             self.reports_generated = {}
             report_active_tab = 'feat-summ-tab'
 
@@ -6588,12 +6593,15 @@ class FUSION:
         # Return the contents of the plot report tab according to selection
         report_tab_children = dbc.Alert('Generate a plot first!',color = 'warning')
         if not cluster_data_store['feature_data'] is None:
+            #TODO: get rid of self.reports_generated, potential for user overlap
             if report_tab in self.reports_generated:
                 # Report already generated, return the report
+                #TODO: get rid of self.reports_generated, potential for user overlap
                 report_tab_children = self.reports_generated[report_tab]
             else:
                 # Report hasn't been generated yet, generate it
                 report_tab_children = self.layout_handler.gen_report_child(cluster_data_store['feature_data'],report_tab)
+                #TODO: get rid of self.reports_generated, potential for user overlap
                 self.reports_generated[report_tab] = report_tab_children
             
         return report_tab_children
@@ -6762,6 +6770,7 @@ class FUSION:
                     )
                 ]
             
+            #TODO: get rid of self.reports_generated, potential for user overlap
             self.reports_generated['feat-cluster-tab'] = cluster_log_children
 
             return [marker_interval_disable], [cluster_log_children]
@@ -7187,7 +7196,6 @@ class FUSION:
                         c_idx: "rgba(255,255,255,255)"
                     }
                 else:
-                    #TODO: Add a method to get the RGB style dict from slide_handler
                     rgb_dict, _ = self.slide_handler.get_rgb_url(slide_info_store, user_info_store)
                     base_style = {
                         band['framedelta']: band['palette'][-1]
@@ -7373,13 +7381,15 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def cell_labeling_initialize(self, selectedData, checked_cells, current_selectedData):
+    def cell_labeling_initialize(self, selectedData, checked_cells, current_selectedData,slide_info_store):
         """
         Takes as input some selected cells, a frame to plot their distribution of intensities, and then a Set button that labels those cells
         """
 
         if ctx.triggered_id is None:
             raise exceptions.PreventUpdate
+        
+        slide_info_store = json.loads(slide_info_store)
             
         if ctx.triggered_id['type'] in ['ftu-cell-pie', 'cell-labeling-channel-drop']:
             
@@ -7395,7 +7405,7 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types, user_data_store):
+    def update_annotation_session(self, session_tab, new_session, new_session_name, new_session_description, new_session_users, current_session_names, annotation_classes, annotation_colors, annotation_labels, annotation_users, annotation_user_types, user_data_store,slide_info_store):
         """
         Populating annotation station tab with necessary information
         """
@@ -7403,6 +7413,7 @@ class FUSION:
         new_annotation_tab_group = [no_update]
 
         user_data_store = json.loads(user_data_store)
+        slide_info_store = json.loads(slide_info_store)
 
         session_tab = get_pattern_matching_value(session_tab)
 
@@ -7439,7 +7450,8 @@ class FUSION:
             )
 
             #TODO: Find some way to share this with indicated users
-            updated_tabs,first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler, self.current_ftus, user_data_store)
+            current_ftu_names = [i['annotation']['name'] for i in slide_info_store['annotations']]
+            updated_tabs,first_tab, first_session = self.layout_handler.gen_annotation_card(self.dataset_handler, current_ftu_names, user_data_store)
             session_progress, current_ann_session = self.dataset_handler.get_annotation_session_progress(first_session['name'], user_data_store)
 
             user_data_store['current_ann_session'] = current_ann_session
@@ -7470,10 +7482,12 @@ class FUSION:
                     }
                 }
 
-                first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = self.current_ftus, )
+                current_ftu_names = [i['annotation']['name'] for i in slide_info_store['annotations']]
+                first_tab = self.layout_handler.gen_annotation_content(new = True, current_ftus = current_ftu_names, classes = current_ann_session['Annotations'], labels = current_ann_session['Labels'], ann_progress = session_progress, user_type = current_ann_session['user_type'])
             else:
                 session_progress, current_ann_session = self.dataset_handler.get_annotation_session_progress(session_name,user_data_store)
-                first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = self.current_ftus, classes = current_ann_session['Annotations'], labels = current_ann_session['Labels'], ann_progress = session_progress, user_type = current_ann_session['user_type'])
+                current_ftu_names = [i['annotation']['name'] for i in slide_info_store['annotations']]
+                first_tab = self.layout_handler.gen_annotation_content(new = False, current_ftus = current_ftu_names, classes = current_ann_session['Annotations'], labels = current_ann_session['Labels'], ann_progress = session_progress, user_type = current_ann_session['user_type'])
 
                 user_data_store['current_ann_session'] = current_ann_session
                 user_data_store['current_ann_session']['session_progress'] = session_progress

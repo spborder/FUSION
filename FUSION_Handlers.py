@@ -77,7 +77,7 @@ class LayoutHandler:
         neph_figure.update_traces(hoverinfo='none',hovertemplate=None)
         neph_figure.update_xaxes(showticklabels=False, showgrid=False)
         neph_figure.update_yaxes(showticklabels=False, showgrid=False)
-        neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0})
+        neph_figure.update_layout(margin={'l':0,'b':0,'r':0,'t':0},autosize=True)
 
         self.neph_figure = neph_figure
 
@@ -294,8 +294,8 @@ class LayoutHandler:
                             html.Img(
                                 id = 'cell-graphic',
                                 src = './assets/cell_graphics/default_cell_graphic.png',
-                                height = '100%',
-                                width = '100%'
+                                height = '80%',
+                                width = '80%'
                             )
                         ]
                     )
@@ -370,12 +370,16 @@ class LayoutHandler:
                     dbc.Col([
                         html.Div([
                             dbc.Row([
-                            html.H2('Nephron Diagram')
+                                dbc.Col(html.H3('Nephron Diagram'),md=12)
                             ]),
-                            dbc.Row([
-                                dcc.Graph(id='neph-img',figure=self.neph_figure),
-                                dcc.Tooltip(id='neph-tooltip',loading_text='')
-                            ])
+                            dbc.Row(
+                                dbc.Col([
+                                    html.Div([
+                                        dcc.Graph(id='neph-img',figure=self.neph_figure,style={'width':'95%'}),
+                                        dcc.Tooltip(id='neph-tooltip',loading_text='')
+                                    ])
+                                ],md=12)
+                            )
                         ], id = 'nephron-diagram'),
                         html.Div(
                             id = 'organ-hierarchy-cell-select-div',
@@ -394,8 +398,7 @@ class LayoutHandler:
                             ],
                             style = {'display': 'none'}
                         )
-                    ],md=5),
-
+                    ],md=5,align='center'),
                     dbc.Col([
                         dbc.Tabs([
                             dbc.Tab(cell_graphic_tab, label = 'Cell Graphic',tab_id = 'cell-graphic-tab'),
@@ -987,7 +990,7 @@ class LayoutHandler:
             ]
 
         else:
-                        vis_content = [
+            vis_content = [
                 dbc.Row(
                     id="app-content",
                     children=[
