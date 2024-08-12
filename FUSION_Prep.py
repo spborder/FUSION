@@ -171,12 +171,10 @@ class Prepper:
 
         return job_responses
 
-    def get_annotation_image_mask(self,item_id,user_info,annotations,layer_idx,ann_idx):
-
-        # Codes taken from Annotaterator
-        print(f'item_id: {item_id}')
-        print(f'layer_idx: {layer_idx}')
-        print(f'ann_idx: {ann_idx}')
+    def get_annotation_image_mask(self,item_id: str, user_info: dict, annotations: list, layer_idx: int, ann_idx: int):
+        """
+        Pulling image region and returning boundary mask and image within bounding box + padding
+        """
         filtered_annotations = [i for i in annotations if 'annotation' in i]
         current_item = filtered_annotations[layer_idx]['annotation']['elements'][ann_idx]
 
@@ -216,7 +214,7 @@ class Prepper:
 
             return image, mask
 
-    def segment_image(self,item_id,structure_types):
+    def segment_image(self,item_id: str,structure_types: list):
 
         # Get folder id from item id
         item_info = self.girder_handler.gc.get(f'/item/{item_id}')
@@ -273,7 +271,7 @@ class Prepper:
                                 
         return job_responses
 
-    def sub_segment_image(self,image,mask,seg_params,view_method,transparency_val):
+    def sub_segment_image(self,image:np.ndarray,mask:np.ndarray,seg_params:list,view_method:str,transparency_val:float):
         
         # Sub-compartment segmentation
         sub_comp_image = np.zeros((np.shape(image)[0],np.shape(image)[1],3))
@@ -353,7 +351,7 @@ class Prepper:
 
         return sub_comp_image
 
-    def gen_feat_extract_card(self,ftu_names):
+    def gen_feat_extract_card(self,ftu_names:list):
 
         # Generating layout of feature extraction card
         card_children = [
@@ -429,7 +427,7 @@ class Prepper:
 
         return card_children
 
-    def run_feature_extraction(self,image_id,sub_seg_params,feature_cats,ignore_anns):
+    def run_feature_extraction(self,image_id:str,sub_seg_params:list,feature_cats:list,ignore_anns:list):
 
         # Have to pass the file id to feature extraction
         file_id = self.girder_handler.gc.get(f'/item/{image_id}/files')[0]['_id']
@@ -455,7 +453,7 @@ class Prepper:
                                         })
         return job_response
     
-    def process_uploaded_anns(self, filename, annotation_str,item_id, alignment = None):
+    def process_uploaded_anns(self, filename:str, annotation_str:str,item_id:str, alignment = None):
 
         annotation_names = []
         annotation_str = base64.b64decode(annotation_str.split(',')[-1])
@@ -626,7 +624,7 @@ class Prepper:
 
         return annotation_info
 
-    def post_segmentation(self, upload_wsi_id, upload_annotations):
+    def post_segmentation(self, upload_wsi_id:str, upload_annotations:list):
 
         # What to do after segmentation for a Regular upload
 

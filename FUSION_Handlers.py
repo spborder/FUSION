@@ -45,6 +45,7 @@ import dash_leaflet as dl
 import dash_mantine_components as dmc
 import dash_treeview_antd as dta
 import dash_draggable as drag
+import dash_breakpoints as dbp
 
 from dash_extensions.enrich import html
 from dash_extensions.javascript import arrow_function, assign
@@ -3366,12 +3367,10 @@ class LayoutHandler:
                     dcc.Location(id='url'),
                     html.Div(id='ga-invisible-div', style={'display': 'none'}),
                     html.Div(
-                        id = 'fusion-store-div',
+                        id = 'window-size-div',
                         children = [
-                            dcc.Store(
-                                id = 'fusion-store',
-                                data = {},
-                                storage_type = 'memory'
+                            dbp.WindowBreakpoints(
+                                id = 'window-size'
                             )
                         ]
                     ),
@@ -5200,7 +5199,6 @@ class GeneHandler:
             headers={'Accept':'application/json','Content-type':'application/json'}
         )
 
-        print(request_response)
         if request_response.ok:
             print(request_response.content)
             return pd.DataFrame(request_response.content)

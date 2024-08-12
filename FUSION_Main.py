@@ -328,6 +328,7 @@ class FUSION:
         }
         """)
 
+
         # Adding callbacks to app
         self.ga_callbacks()
         self.vis_callbacks()
@@ -336,8 +337,7 @@ class FUSION:
         self.welcome_callbacks()
         self.upload_callbacks()
 
-        # Running server
-        #self.app.run_server(host = '0.0.0.0',debug=False,use_reloader=False,port=8000)
+        # Running server (waitress)
         serve(self.app.server,host='0.0.0.0',port=8000,threads = 10)
 
     def view_instructions(self,n,n2,is_open,user_data_store):
@@ -667,7 +667,8 @@ class FUSION:
              Input({'type':'cell-sub-drop','index':ALL},'value')],
             [State({'type':'ftu-bound-color','index':ALL},'value'),
              State({'type':'added-filter-slider-div','index':ALL},'style'),
-             State('slide-info-store','data'),State('cell-drop','options')],
+             State('slide-info-store','data'),State('cell-drop','options'),
+             State('window-size','width')],
             prevent_initial_call = True
         )(self.update_overlays)
 
@@ -2020,7 +2021,7 @@ class FUSION:
 
         return hex_color_key
 
-    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style, slide_info_store, all_overlay_options):
+    def update_overlays(self,cell_val,vis_val,filter_vals,added_filter_slider,added_filter_keys,ftu_color_butt,cell_sub_val,ftu_bound_color, added_slide_style, slide_info_store, all_overlay_options,window_width):
         """
         Updating overlay hideout property in GeoJSON layer used in self.ftu_style_handle        
         """
@@ -2029,7 +2030,7 @@ class FUSION:
         cell_sub_select_children = no_update
         slide_info_store = json.loads(slide_info_store)
 
-        if len(list(slide_info_store.keys()))==0:
+        if len(list(slide_info_store.keys()))==0 or all([i['value'] is None for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         if 'overlay_prop' in slide_info_store:
@@ -2055,7 +2056,7 @@ class FUSION:
             'background':'rgba(255,255,255,0.8)',
             'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
             'border-radius':'10px',
-            'width':'30vw',
+            'width': f'{round(0.3*window_width)}px',
             'padding':'0px 0px 0px 25px'
         }
 
@@ -2291,13 +2292,6 @@ class FUSION:
 
                 cell_sub_select_children = []
 
-                color_bar = dl.Colorbar(
-                    colorscale = list(hex_color_key.values()),
-                    position='bottomleft',
-                    id=f'colorbar{random.randint(0,100)}',
-                    style = color_bar_style,
-                    tooltip=True)
-
                 if len(list(hex_color_key.keys()))>0:
                     filter_min_val = np.min(list(hex_color_key.keys()))
                     filter_max_val = np.max(list(hex_color_key.keys()))
@@ -2388,30 +2382,33 @@ class FUSION:
         cell_vis_val = vis_val/100
         n_layers = len(callback_context.outputs_list[0])
 
+        color_bar_width = round(0.25*window_width)
         if all([not type(i)==str for i in list(hex_color_key.keys())]) and not overlay_prop['value']=='max':
             color_bar = dl.Colorbar(
                 colorscale = list(hex_color_key.values()),
-                width = 700,
+                width = color_bar_width,
                 position='bottomleft',
                 id=f'colorbar{random.randint(0,100)}',
                 style = color_bar_style,
                 tooltip=True)
+        
+        elif len(list(hex_color_key.values()))==0:
+            color_bar = no_update
         else:
-            
             if overlay_prop['value']=='max':
-                categories = [i['label'].split(' --> ')[-1] for i in all_overlay_options if overlay_prop['name'] in i['label']]
+                categories = [i.split(' --> ')[-1] for i in all_overlay_options if overlay_prop['name'] in i]
             else:
                 categories = list(hex_color_key.keys())
 
             color_bar = dlx.categorical_colorbar(
                 categories = sorted(categories),
                 colorscale = list(hex_color_key.values()),
-                width = 700,
+                width = color_bar_width,
                 position = 'bottomleft',
                 id = f'colorbar{random.randint(0,100)}',
                 style = color_bar_style
             )
-
+    
         geojson_hideout = [
             {
                 'color_key':hex_color_key,
@@ -3134,7 +3131,6 @@ class FUSION:
                     for g_idx,g_col in enumerate(gene_col_vals):
                         gene_label = genes[g_col].tolist()[0]
                         if not gene_label in unique_genes:
-                            print(gene_label)
                             unique_genes.append(gene_label)
 
                             # Adding new gene node to cytoscape
@@ -3172,9 +3168,7 @@ class FUSION:
         if not clicked is None:
             
             organ_store = json.loads(organ_store)
-
             table = pd.DataFrame.from_records(organ_store['table'])
-
             if organ_store['organ']=='kidney':
                 if 'CT' in clicked['col']:
                     if not clicked['id']=='Main_Cell':
@@ -8093,38 +8087,41 @@ def app(*args):
         print(f'Be sure to set an initial user dummy!')
 
     # Initializing GirderHandler
-    dataset_handler = GirderHandler(apiUrl=dsa_url,username=username,password=p_word)
+    dataset_handler = GirderHandler(
+        apiUrl=dsa_url,
+        username=username,
+        password=p_word
+    )
     initial_user_info = dataset_handler.user_details
 
-    # Initial collection
-    #TODO: initial collection can be added as an environment variable
-    initial_collection = ['/collection/10X_Visium']
-    path_type = ['collection','collection']
-    print(f'initial collection: {initial_collection}')
-
-    if isinstance(initial_collection,str):
-        initial_collection_id = [dataset_handler.gc.get('resource/lookup',parameters={'path':initial_collection})]
-    elif isinstance(initial_collection,list):
-        initial_collection_id = [dataset_handler.gc.get('resource/lookup',parameters={'path':i}) for i in initial_collection]
-
-    print(f'loading initial slide(s)')
-    # Contents of folder (used for testing to initialize with one slide)
-    initial_collection_contents = []
-    for p_type,i in zip(path_type,initial_collection_id):
-        initial_collection_contents.extend(dataset_handler.gc.get(f'resource/{i["_id"]}/items',parameters={'type':p_type}))
-    initial_collection_contents = [i for i in initial_collection_contents if 'largeImage' in i]
-
-    # For testing, setting initial slide
-    # Avoiding image with elbow (permeabilization artifact present)
-    default_images = ['XY04_IU-21-020F.svs','XY03_IU-21-019F.svs']
-    initial_collection_contents = [i for i in initial_collection_contents if i['name'] in default_images]
+    # Initial collection: can be specified as a single or multiple collections which will automatically be loaded into the visualization session
+    try:
+        default_items = os.environ.get('FUSION_INITIAL_ITEMS')
+        default_items = default_items.split(',')
+    except:
+        # Can be one or more items
+        default_items = [
+            '6495a4e03e6ae3107da10dc5',
+            '6495a4df3e6ae3107da10dc2'
+        ]
     
+    default_item_info = [dataset_handler.get_item_info(i) for i in default_items]
+
     # Saving & organizing relevant id's in GirderHandler
     print('Getting initial items metadata')
-    dataset_handler.set_default_slides(initial_collection_contents)
-    #dataset_handler.initialize_folder_structure(username,initial_collection,path_type)
+    dataset_handler.set_default_slides(default_item_info)
 
-    # Getting graphics_reference.json from the FUSION Assets folder
+    # Going through fusion_configs.json, adding plugins to Prepper, initializing user studies
+    # Step 1: Check for presence of required plugins
+    # Step 2: Pull missing ones specified in fusion_configs.json
+    # Step 3: If any user studies are specified:
+    #   Step 3a: Create a collection called "FUSION User Studies"
+    #   Step 3b: Create a separate item for each study containing a JSON file with questions, admins, and users (with user_type, name, and responses)
+    #   Step 3c: Create a new group for each user study and add users who already have accounts to that group to enable edit access to responses file
+    #   Step 3d: Specify location of associated study materials (if we want to continue to host those on FUSION (PowerPoint slides, etc.))
+
+    # Getting usability study information
+    #TODO: Generalize for other types of user studies
     print(f'Getting asset items')
     assets_path = '/collection/FUSION Assets/'
     dataset_handler.get_asset_items(assets_path)
@@ -8132,30 +8129,10 @@ def app(*args):
     # Getting the slide data for DSASlide()
     slide_names = [
         {'label': i['name'],'value':i['_id']}
-        for i in initial_collection_contents
+        for i in default_item_info
     ]
 
-    # Starting off with no WSI, don't load annotations until on the /vis page
-    wsi = None
-
-    # Getting list of available CLIs in DSA instance
-    # This dict will contain all the info for the CLI's, have to reduce it to names
-    cli_dict_list = dataset_handler.get_cli_list()
-    cli_list = []
-    for c in cli_dict_list:
-        cli_dict = {'label':c['name'],'value':c['name']}
-
-        # Constraining to only the dsarchive ones just for convenience:
-        if 'dsarchive' in c['image']:
-            cli_dict['disabled'] = False
-        else:
-            cli_dict['disabled'] = True
-        
-        cli_list.append(cli_dict)
-
-    # Adding functionality that is specifically implemented in FUSION
-    #fusion_cli = ['Segment Anything Model (SAM)','Contrastive Language-Image Pre-training (CLIP)']
-
+    # Required for Dash layouts, themes, and icons
     external_stylesheets = [
         dbc.themes.LUX,
         dbc.themes.BOOTSTRAP,
@@ -8163,12 +8140,13 @@ def app(*args):
         dbc.icons.FONT_AWESOME
         ]
 
+    # Initializing slide datasets with public collections (edge parent folders of image items) and user upload folders
     slide_dataset = dataset_handler.update_slide_datasets(initial_user_info)
 
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides, slide_dataset)
-    layout_handler.gen_vis_layout(GeneHandler(),cli_list)
+    layout_handler.gen_vis_layout(GeneHandler(),None)
     layout_handler.gen_builder_layout(dataset_handler,initial_user_info, None)
     layout_handler.gen_uploader_layout()
 
@@ -8177,20 +8155,22 @@ def app(*args):
     prep_handler = Prepper(dataset_handler)
     
     print('Ready to rumble!')
-    main_app = DashProxy(__name__,
-                         external_stylesheets=external_stylesheets,
-                         transforms = [MultiplexerTransform()],
-                         )
+    main_app = DashProxy(
+        __name__,
+        external_stylesheets=external_stylesheets,
+        transforms = [MultiplexerTransform()]
+    )
     
+    # Passing main handlers to application object
     vis_app = FUSION(
         main_app,
         layout_handler,
         dataset_handler,
         download_handler,
         prep_handler
-        )
+    )
 
 
-# Comment this portion out for web running
 if __name__=='__main__':
+    #TODO: Can add path to configs here as an input argument
     app()
