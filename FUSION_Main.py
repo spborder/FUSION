@@ -2125,7 +2125,7 @@ class FUSION:
 
                 if cell_sub_val is None:
 
-                    overlap_prop = {
+                    overlay_prop = {
                         'name': m_prop,
                         'value': cell_name,
                         'sub_value': cell_sub_val
@@ -2384,16 +2384,26 @@ class FUSION:
 
         color_bar_width = round(0.25*window_width)
         if all([not type(i)==str for i in list(hex_color_key.keys())]) and not overlay_prop['value']=='max':
-            color_bar = dl.Colorbar(
-                colorscale = list(hex_color_key.values()),
-                width = color_bar_width,
-                position='bottomleft',
-                id=f'colorbar{random.randint(0,100)}',
-                style = color_bar_style,
-                tooltip=True)
         
-        elif len(list(hex_color_key.values()))==0:
-            color_bar = no_update
+            if len(list(hex_color_key.values()))>0:
+                color_bar = dl.Colorbar(
+                    colorscale = list(hex_color_key.values()),
+                    width = color_bar_width,
+                    position='bottomleft',
+                    id=f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style,
+                    tooltip=True)
+                
+            else:
+                # This is actually unreachable because the value of cell-drop is None and is the only trigger, leading to exceptions.PreventUpdate in line 2034
+                color_bar = dlx.categorical_colorbar(
+                    categories = list(slide_info_store['ftu_colors'].keys()),
+                    colorscale=list(slide_info_store['ftu_colors'].values()),
+                    width = color_bar_width,
+                    position = 'bottomleft',
+                    id = f'colorbar{random.randint(0,100)}',
+                    style = color_bar_style
+                )
         else:
             if overlay_prop['value']=='max':
                 categories = [i.split(' --> ')[-1] for i in all_overlay_options if overlay_prop['name'] in i]
