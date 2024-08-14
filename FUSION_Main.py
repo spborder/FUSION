@@ -1024,6 +1024,17 @@ class FUSION:
             prevent_initial_call = True
         )(self.cell_labeling_initialize)
 
+        # Removing cell labeling marker
+        self.app.callback(
+            [
+                Output('marker-add-div','children'),
+            ],
+            [
+                Input({'type':'cell-marker-butt','index': ALL},'n_clicks')
+            ],
+            prevent_initial_call = True
+        )(self.remove_cell_label)
+
         # Populating tabs for each annotation session in Annotation Station
         self.app.callback(
             [
@@ -2389,10 +2400,12 @@ class FUSION:
                 color_bar = dl.Colorbar(
                     colorscale = list(hex_color_key.values()),
                     width = color_bar_width,
+                    height = 15,
                     position='bottomleft',
                     id=f'colorbar{random.randint(0,100)}',
                     style = color_bar_style,
-                    tooltip=True)
+                    tooltip=True
+                )
                 
             else:
                 # This is actually unreachable because the value of cell-drop is None and is the only trigger, leading to exceptions.PreventUpdate in line 2034
@@ -2400,6 +2413,7 @@ class FUSION:
                     categories = list(slide_info_store['ftu_colors'].keys()),
                     colorscale=list(slide_info_store['ftu_colors'].values()),
                     width = color_bar_width,
+                    height = 15,
                     position = 'bottomleft',
                     id = f'colorbar{random.randint(0,100)}',
                     style = color_bar_style
@@ -2571,10 +2585,10 @@ class FUSION:
         """
 
         pie_chart_features = [
-            'Main_Cell_Types','Cell_States', 'Cell Type', 'Channel Means', 'Channel Stds','Cell_Subtypes'
+            'Main_Cell_Types','Cell_States', 'Cell Type', 'Channel Means', 'Channel Stds','Cell_Subtypes', 'All_Subtypes'
         ]
 
-        def make_dash_table(df):
+        def make_dash_table(df:pd.DataFrame):
             """
             Populate dash_table.DataTable
             """
@@ -2601,10 +2615,14 @@ class FUSION:
 
             return return_table
     
-        def make_pie_chart(df):
+        def make_pie_chart(df:pd.DataFrame, top_n = 10):
             """
             Simple pie chart with provided dataframe
+            change top_n as needed to only show top_n slices
             """
+            df = df.sort_values(by = 'Value',ascending = False)
+            df = df.iloc[0:top_n+1,:]
+
             simple_pie = dcc.Graph(
                 figure = go.Figure(
                     data = [
@@ -2715,24 +2733,23 @@ class FUSION:
 
                 # Start from the bottom and go up as opposed to top-down
                 trunk_props = [i for i in nested_prop_list if not i['sub_sub_name'] is None]
-                #print(f'len(trunk_props): {len(trunk_props)}')
                 if len(trunk_props)>0:
                     unique_names = np.unique([i['name'] for  i in trunk_props]).tolist()
                     for u_n in unique_names:
-                        #print(f'u_n: {u_n}')
                         shared_name_trunk = [i for i in trunk_props if i['name']==u_n]
 
                         shared_name_sub = np.unique([i['sub_name'] for i in shared_name_trunk]).tolist()
-                        #print(f'shared_name_sub: {shared_name_sub}')
                         sub_accordion_list = []
                         for u_sub in shared_name_sub:
-                            #print(f'u_sub: {u_sub}')
-
+                            print(u_sub)
                             sub_prop_data = [i for i in shared_name_trunk if i['sub_name']==u_sub]
                             sub_tab_list = []
                             for sub_tab in sub_prop_data:
                                 sub_tab_data = sub_tab['table']
-                                sub_tab_data = sub_tab_data[sub_tab_data['Value']>0]
+                                print(sub_tab_data)
+                                sub_tab_data = sub_tab_data[sub_tab_data['Value']!=0]
+                                print(sub_tab_data)
+
                                 if not sub_tab_data.empty:
                                     sub_tab_list.append(
                                         dbc.Tab(
@@ -2745,12 +2762,10 @@ class FUSION:
 
                             # Checking if any other features are in this sub_name
                             other_sub_name_props = [i for i in nested_prop_list if i['sub_name']==u_sub and i['sub_sub_name'] is None]
-                            #print(f'other_sub_name_props: {other_sub_name_props}')
                             for o_sub in other_sub_name_props:
                                 o_sub_data = o_sub['table']
-                                o_sub_data = o_sub_data[o_sub_data['Value']>0]
+                                o_sub_data = o_sub_data[o_sub_data['Value']!=0]
                                 if not o_sub_data.empty:
-
                                     sub_accordion_list.append(
                                         dbc.AccordionItem(
                                             html.Div(
@@ -2772,13 +2787,10 @@ class FUSION:
                         
                         # Getting shared name props the no sub_sub_name
                         other_name_props = [i for i in nested_prop_list if i['name']==u_n and i['sub_sub_name'] is None and not i['sub_name'] is None]
-                        #print(f'other_name_props: {other_name_props}')
                         for o_n_prop in other_name_props:
                             o_prop_data = o_n_prop['table']
-                            o_prop_data = o_prop_data[o_prop_data['Value']>0]
-                            #print(o_prop_data)
+                            o_prop_data = o_prop_data[o_prop_data['Value']!=0]
                             if not o_prop_data.empty:
-                                #print(f'o_sub: {o_n_prop["sub_name"]}')
                                 sub_accordion_list.append(
                                     dbc.AccordionItem(
                                         html.Div(
@@ -2795,7 +2807,7 @@ class FUSION:
                             for l_idx,l in enumerate(l_props):
                                 # Not sure which properties will actually fall under here but need to make sure everything is gotten prior to adding to the accordion_children list
                                 l_data = l['table']
-                                l_data = l_data[l_data['Value']>0]
+                                l_data = l_data[l_data['Value']!=0]
                                 if not l_data.empty:
                                     other_data_tab_list.append(
                                         dbc.Tab(
@@ -2831,7 +2843,7 @@ class FUSION:
                     if len(remainder_props)>0:
                         for r in remainder_props:
                             r_data = r['table']
-                            r_data = r_data[r_data['Value']>0]
+                            r_data = r_data[r_data['Value']!=0]
                             if not r_data.empty:
                                 accordion_children.append(
                                     dbc.AccordionItem([
@@ -2852,7 +2864,7 @@ class FUSION:
                             sub_tab_list = []
                             for s_u_n in u_n_list:
                                 s_u_n_data = s_u_n['table']
-                                s_u_n_data = s_u_n_data[s_u_n_data['Value']>0]
+                                s_u_n_data = s_u_n_data[s_u_n_data['Value']!=0]
                                 if not s_u_n_data.empty:
                                     sub_tab_list.append(
                                         dbc.Tab(
@@ -2869,7 +2881,7 @@ class FUSION:
                                 other_data_tab_list = []
                                 for l_idx,l in enumerate(l_props):
                                     l_data = l['table']
-                                    l_data = l_data[l_data['Value']>0]
+                                    l_data = l_data[l_data['Value']!=0]
                                     if not l_data.empty:
                                         other_data_tab_list.append(
                                             dbc.Tab(
@@ -2908,7 +2920,7 @@ class FUSION:
                         if len(remainder_props)>0:
                             for r in remainder_props:
                                 r_data = r['table']
-                                r_data = r_data[r_data['Value']>0]
+                                r_data = r_data[r_data['Value']!=0]
                                 if not r_data.empty:
                                     accordion_children.append(
                                         dbc.AccordionItem([
@@ -2923,7 +2935,7 @@ class FUSION:
                         # Only has main props
                         for l in nested_prop_list:
                             l_data = l['table']
-                            l_data = l_data[l_data['Value']>0]
+                            l_data = l_data[l_data['Value']!=0]
                             if not l_data.empty:
                                 accordion_children.append(
                                     dbc.AccordionItem(
@@ -3220,11 +3232,11 @@ class FUSION:
 
                 if f'{clicked["col"]}/NOTES' in table_data.columns.tolist():
                     notes = table_data[f'{clicked["col"]}/NOTES'].tolist()[0]
+                    if np.isnan(notes):
+                        notes = 'No notes.'
                 else:
                     notes = 'No notes.'
             else:
-                if clicked['col']+'/LABEL' in table.columns.tolist():
-                    print(table[clicked['col']+'/LABEL'].tolist())
                 raise exceptions.PreventUpdate
 
         else:
@@ -4632,8 +4644,6 @@ class FUSION:
         # Adding marker(s) from graph returning geojson
         # index = 0 == mark all the samples in the current slide
         # index != 0 == mark a specific sample in the current slide
-        print(ctx.triggered)
-        print(ctx.triggered_id)
 
         if ctx.triggered[0]['value']:
             
@@ -7402,8 +7412,10 @@ class FUSION:
                 if not sD is None:
                     # Pulling customdata from each point object
                     labeling_cells = [i['customdata'] for i in sD['points']]
-
-                    updated_cell_geojson, cell_markers = make_marker_geojson([i[0]['Bounding_Box'] if type(i)==list else i['Bounding_Box'] for i in labeling_cells])
+                    updated_cell_geojson, cell_markers = make_marker_geojson(
+                        [i[0]['Bounding_Box'] if type(i)==list else i['Bounding_Box'] for i in labeling_cells],
+                        None
+                    )
                     all_cell_markers.extend(cell_markers)
             return all_cell_markers
         else:
@@ -7502,6 +7514,25 @@ class FUSION:
         
         return return_div, new_annotation_tab_group, json.dumps(user_data_store)
     
+    def remove_cell_label(self,cell_marker_click):
+        """
+        Removing marked cell prior to assigning specific cell type label
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        patched_list = Patch()
+        values_to_remove = []
+        for i,val in enumerate(cell_marker_click):
+            if val:
+                values_to_remove.insert(0,i)
+
+        for v in values_to_remove:
+            del patched_list[v]
+
+        return patched_list
+
     def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data, viewport_store_data, slide_info_store):
         """
         Getting current annotation data (text or image) and saving to annotation session folder on the server

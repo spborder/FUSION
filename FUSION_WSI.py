@@ -315,7 +315,7 @@ class SlideHandler:
 
         ignore_columns = ['unique_index','name','structure','ftu_name','image_id','ftu_type',
                           'Min_x_coord','Max_x_coord','Min_y_coord','Max_y_coord',
-                          'x_tsne','y_tsne','x_umap','y_umap']
+                          'x_tsne','y_tsne','x_umap','y_umap','Cell Id']
         
         categorical_columns = ['Cluster']
         ftu_names = [i['annotation']['name'] for i in slide_info['annotations']]
@@ -351,8 +351,10 @@ class SlideHandler:
                 combined_column_names = agg_object_props.columns.tolist()+[i for i in categorical_columns if i in agg_prop_df and not i in agg_object_props]
                 agg_object_props = pd.concat([agg_object_props,agg_prop_df.iloc[:,[i for i in range(len(categorical_columns)) if categorical_columns[i] in agg_prop_df and categorical_columns[i] not in agg_object_props]]],axis=1,ignore_index=True)
                 agg_object_props.columns = combined_column_names
+
             for col_idx, col_name in enumerate(agg_object_props.columns.tolist()):
-                col_values = agg_object_props[col_name].tolist()
+
+                col_values = agg_object_props.dropna(subset=[col_name])[col_name].tolist()
                 col_vals_dict = {col_name: {}}
                 
                 if type(col_values[0])==dict:
@@ -360,30 +362,59 @@ class SlideHandler:
                     # Test for single nested dictionary
                     sub_values = list(col_values[0].keys())
                     if not type(col_values[0][sub_values[0]])==dict:
-                        col_df = pd.DataFrame.from_records([i for i in col_values if isinstance(i,dict)]).astype(float)
+                        if len(sub_values)>1:
+                            feature_idxes = [i for i in range(len(col_values)) if isinstance(col_values[i],dict)]
+                            col_df = pd.DataFrame.from_records([col_values[i] for i in feature_idxes]).astype(float)
+                            # Scaling by intersection area
+                            for row_idx, area in enumerate([overlap_area[i] for i in feature_idxes]):
+                                col_df.iloc[row_idx,:] *= area
 
-                        # Scaling by intersection area
-                        for row_idx, area in enumerate(overlap_area):
-                            col_df.iloc[row_idx,:] *= area
-
-                        col_df_norm = col_df.sum(axis=0).to_frame()
-                        col_df_norm = (col_df_norm/col_df_norm.sum()).fillna(0.000).round(decimals=18)
-                        col_df_norm[0] = col_df_norm[0].map('{:.19f}'.format)
-                        col_vals_dict[col_name] = col_df_norm.astype(float).to_dict()[0]
+                            col_df_norm = col_df.sum(axis=0).to_frame()
+                            col_df_norm = (col_df_norm/col_df_norm.sum()).fillna(0.000).round(decimals=18)
+                            col_df_norm[0] = col_df_norm[0].map('{:.19f}'.format)
+                            col_vals_dict[col_name] = col_df_norm.astype(float).to_dict()[0]
+                        elif len(sub_values)==1:
+                            feature_idxes = [i for i in range(len(col_values)) if isinstance(col_values[i],dict)]
+                            col_df = pd.DataFrame.from_records([col_values[i] for i in feature_idxes]).astype(float)
+                            col_vals_dict[col_name] = col_df.astype(float).mean().to_dict()
                     
                     else:
                         for sub_val in sub_values:
                             if type(col_values[0][sub_val])==dict:
-                                col_df = pd.DataFrame.from_records([i[sub_val] for i in col_values if isinstance(i[sub_val],dict)]).astype(float)
+
+                                feature_pre_idxes = [i for i in range(len(col_values)) if sub_val in col_values[i]]
+                                feature_idxes = [i for i in feature_pre_idxes if isinstance(col_values[i][sub_val],dict)]
+                                col_df = pd.DataFrame.from_records([col_values[i][sub_val] for i in feature_idxes]).astype(float)
                                 
                                 # Scaling by intersection area
-                                for row_idx, area in enumerate(overlap_area):
+                                for row_idx, area in enumerate([overlap_area[i] for i in feature_idxes]):
                                     col_df.iloc[row_idx,:] *= area
 
                                 col_df_norm = col_df.sum(axis=0).to_frame()
                                 col_df_norm = (col_df_norm/col_df_norm.sum()).fillna(0.000).round(decimals=18)
                                 col_df_norm[0] = col_df_norm[0].map('{:.19f}'.format)
                                 col_vals_dict[col_name][sub_val] = col_df_norm.astype(float).to_dict()[0]
+
+                            elif type(col_values[0][sub_val])==str:
+                                print(f'{col_name} {sub_val} has str count aggregation')
+                                all_str_sub_vals = [i[sub_val] for i in col_values]
+                                col_vals_dict[col_name] = {
+                                    i: all_str_sub_vals.count(i)
+                                    for i in np.unique(all_str_sub_vals).tolist()
+                                }
+                            
+                            elif type(col_values[0][sub_val]) in [int,float]:
+                                # Taking the mean of numerical sub values
+                                print(f'{col_name} {sub_val} has numeric mean aggregation')
+                                col_vals_dict[col_name][sub_val] = np.mean(np.array([i[sub_val] for i in col_values]))
+                            
+                            elif type(col_values[0][sub_val])==list:
+                                print(f'{col_name} {sub_val} has list mean aggregation')
+                                mean_list_vals = np.mean(np.array([i[sub_val] for i in col_values]),axis=0)
+                                col_vals_dict[col_name] = {
+                                    f'Value {i}': j
+                                    for i,j in enumerate(mean_list_vals.tolist())
+                                }
                     
                 elif type(col_values[0])==str:
                     # Just getting the count of each unique value here
@@ -398,7 +429,7 @@ class SlideHandler:
                         for i,j in enumerate(mean_list_vals.tolist())
                     }
 
-
+                
                 aggregated_properties[ftu] = aggregated_properties[ftu] | col_vals_dict
 
         return aggregated_properties, polygon_properties

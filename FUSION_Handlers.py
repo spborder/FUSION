@@ -412,7 +412,12 @@ class LayoutHandler:
                 dbc.Row([
                     dbc.Col([
                         html.Div([
-                            dcc.Link('Derived from ASCT+B Kidney v1.2',href='https://docs.google.com/spreadsheets/d/1NMfu1bEGNFcTYTFT-jCao_lSbFD8n0ti630iIpRj-hw/edit#gid=949267305',target = '_blank')
+                            dcc.Link(
+                                'Derived from ASCT+B Kidney v1.2',
+                                href='https://docs.google.com/spreadsheets/d/1NMfu1bEGNFcTYTFT-jCao_lSbFD8n0ti630iIpRj-hw/edit#gid=949267305',
+                                target = '_blank',
+                                id = 'asct-b-link'
+                            )
                         ])
                     ])
                 ])

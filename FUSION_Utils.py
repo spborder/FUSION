@@ -15,11 +15,13 @@ import plotly.express as px
 import textwrap
 
 import dash_leaflet as dl
+import dash_bootstrap_components as dbc
 
 from skimage import draw
 from scipy import ndimage
 
 from sklearn.cluster import DBSCAN
+from typing_extensions import Union
 
 from umap import UMAP
 
@@ -245,7 +247,7 @@ def path_to_mask(path, shape):
     mask = ndimage.binary_fill_holes(mask)
     return mask
 
-def make_marker_geojson(bbox_list):
+def make_marker_geojson(bbox_list:list,prop_list:Union[list,None]):
     """
     Make GeoJSON-formatted markers where the coordinates are equal to the center point of the bounding boxes
 
@@ -258,19 +260,38 @@ def make_marker_geojson(bbox_list):
     }
     marker_list = []
 
-    for bbox in bbox_list:
+    for idx,bbox in enumerate(bbox_list):
 
         # Finding average of extrema
         bbox_center = [(bbox[0]+bbox[2])/2, (bbox[1]+bbox[3])/2]
 
         marker_geojson['features'].append({
             'type': 'Feature',
-            'properties':{'type':'marker'},
-            'geometry':{'type':'Point','coordinates': bbox_center}
+            'properties':{
+                'type':'marker'
+            } | prop_list[idx] if not prop_list is None else {'type': 'marker'},
+            'geometry':{
+                'type':'Point',
+                'coordinates': bbox_center
+            }
         })
         
         marker_list.append(
-            dl.Marker(position = bbox_center[::-1])
+            dl.Marker(
+                position = bbox_center[::-1],
+                children = [
+                    dl.Popup(
+                        dbc.Button(
+                            'Clear Marker',
+                            color = 'danger',
+                            n_clicks = 0,
+                            id = {'type':'cell-marker-butt','index':idx}
+                        ),
+                        id = {'type':'cell-marker-popup','index': idx}
+                    )
+                ],
+                id = {'type': 'cell-marker','index': idx}
+            )
         )
 
     return marker_geojson, marker_list
