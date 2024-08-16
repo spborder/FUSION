@@ -195,13 +195,11 @@ class FUSION:
                                 // Finding max represented sub-value
                                 var overlay_value = Number.Nan;
                                 var test_value = 0.0;
-                                var overlay_idx = -1.0;
                                 for (var key in feature.properties.user[overlay_prop.name]) {
                                     var tester = feature.properties.user[overlay_prop.name][key];
-                                    overlay_idx += 1.0;
                                     if (tester > test_value) {
                                         test_value = tester;
-                                        overlay_value = overlay_idx;
+                                        overlay_value = key;
                                     }
                                 } 
                             } else {
@@ -708,25 +706,28 @@ class FUSION:
             prevent_initial_call = True
         )(self.add_filter_slider)
 
-        # Updating Cell Composition pie charts
+        # Updating viewport data components
         self.app.callback(
-            [Output('roi-pie-holder','children'),
-             Output('annotation-session-div','children'),
-             Output('cell-annotation-div','children'),
-             Output({'type':'viewport-store-data','index':ALL},'data'),
-             Output('user-store','data')
+            [
+                Output('roi-pie-holder','children'),
+                Output('annotation-session-div','children'),
+                Output('cell-annotation-div','children'),
+                Output({'type':'viewport-store-data','index':ALL},'data'),
+                Output('user-store','data')
              ],
-            [Input('slide-map','bounds'),
-             Input({'type':'roi-view-data','index':ALL},'value'),
-             Input({'type':'viewport-plot-butt','index':ALL},'n_clicks'),
+            [
+                Input('slide-map','bounds'),
+                Input({'type':'roi-view-data','index':ALL},'value'),
+                Input({'type':'viewport-plot-butt','index':ALL},'n_clicks'),
              ],
-            [State('tools-tabs','active_tab'),
-             State('viewport-data-update','checked'),
-             State({'type':'viewport-values-drop','index':ALL},'value'),
-             State({'type':'viewport-label-drop','index':ALL},'value'),
-             State({'type':'viewport-store-data','index':ALL},'data'),
-             State('user-store','data'),
-             State('slide-info-store','data')
+            [
+                State('tools-tabs','active_tab'),
+                State('viewport-data-update','checked'),
+                State({'type':'viewport-values-drop','index':ALL},'value'),
+                State({'type':'viewport-label-drop','index':ALL},'value'),
+                State({'type':'viewport-store-data','index':ALL},'data'),
+                State('user-store','data'),
+                State('slide-info-store','data')
              ],
             prevent_initial_call = True
         )(self.update_viewport_data)      
@@ -1011,14 +1012,19 @@ class FUSION:
         # Grabbing points from current viewport umap (CODEX) and plotting other properties
         self.app.callback(
             [
-                Output('marker-add-div','children')
+                Output('marker-add-div','children'),
+                Output({'type': 'cell-marker-count','index': ALL},'children'),
+                Output({'type':'cell-marker-source','index': ALL},'children')
             ],
             [
                 Input({'type':'ftu-cell-pie','index':ALL},'selectedData'),
+                Input({'type':'cell-marker-apply','index': ALL},'n_clicks')
             ],
             [
-                State({'type':'cell-checkbox','index':ALL},'value'),
+                State({'type':'cell-marker-label','index':ALL},'value'),
+                State({'type': 'cell-marker-rationale','index': ALL},'value'),
                 State({'type':'ftu-cell-pie','index':ALL},'selectedData'),
+                State({'type':'viewport-values-drop','index':ALL},'value'),
                 State('slide-info-store','data')
             ],
             prevent_initial_call = True
@@ -1028,6 +1034,7 @@ class FUSION:
         self.app.callback(
             [
                 Output('marker-add-div','children'),
+                Output({'type':'cell-marker-count','index': ALL},'children')
             ],
             [
                 Input({'type':'cell-marker-butt','index': ALL},'n_clicks')
@@ -2135,7 +2142,6 @@ class FUSION:
                     cell_sub_select_children = no_update
 
                 if cell_sub_val is None:
-
                     overlay_prop = {
                         'name': m_prop,
                         'value': cell_name,
@@ -2169,51 +2175,14 @@ class FUSION:
             
             elif m_prop == 'Cell_Subtypes':
 
-                if cell_val in self.cell_names_key:
-                    cell_name = self.cell_names_key[cell_val]
-                else:
-                    cell_name = cell_val
+                cell_sub_select_children = []
 
-                if cell_name in self.cell_graphics_key:
+                overlay_prop = {
+                    'name': m_prop,
+                    'value':cell_val,
+                    'sub_value': None
+                }
 
-                    if ctx.triggered_id=='cell-drop':
-                        cell_sub_val = None
-                        # Getting all possible cell sub-types:
-                        possible_cell_subtypes = np.unique(self.cell_graphics_key[cell_name]['subtypes'])
-
-                        cell_sub_select_children = [
-                            dcc.Dropdown(
-                                options = [{'label':p,'value':p,'disabled':False} for p in possible_cell_subtypes] + [{'label':'All','value':'All','disabled':False}],
-                                placeholder = 'Select A Cell Subtype Value',
-                                id = {'type':'cell-sub-drop','index':0}
-                            )
-                        ]
-                    else:
-                        cell_sub_select_children = no_update
-                else:
-                    cell_sub_select_children = []
-
-                if cell_sub_val == 'All':
-                    overlay_prop = {
-                        'name': 'Main_Cell_Types',
-                        'value':cell_name,
-                        'sub_value':None
-                    }
-
-                elif not cell_sub_val is None:
-                    overlay_prop = {
-                        'name': m_prop,
-                        'value':cell_name,
-                        'sub_value': cell_sub_val
-                    }
-
-                else:
-                    overlay_prop = {
-                        'name': 'Main_Cell_Types',
-                        'value': cell_name,
-                        'sub_value': None
-                    }
-                
                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                 if len(list(hex_color_key.keys()))==0:
@@ -2239,10 +2208,25 @@ class FUSION:
                 filter_max_val = np.max(list(hex_color_key.keys()))
                 filter_disable = False
 
-            elif m_prop == 'Max Cell Type':
+            elif m_prop == 'Max Main Cell Type':
                 # Getting the maximum cell type present for each structure
                 overlay_prop = {
                     'name': 'Main_Cell_Types',
+                    'value':'max',
+                    'sub_value': None
+                }
+                hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
+
+                cell_sub_select_children = []
+
+                filter_min_val = 0.0
+                filter_max_val = 1.0
+                filter_disable = True
+
+            elif m_prop == 'Max Cell Subtypes':
+                # Getting the maximum cell type present for each structure
+                overlay_prop = {
+                    'name': 'Cell_Subtypes',
                     'value':'max',
                     'sub_value': None
                 }
@@ -2395,7 +2379,6 @@ class FUSION:
 
         color_bar_width = round(0.25*window_width)
         if all([not type(i)==str for i in list(hex_color_key.keys())]) and not overlay_prop['value']=='max':
-        
             if len(list(hex_color_key.values()))>0:
                 color_bar = dl.Colorbar(
                     colorscale = list(hex_color_key.values()),
@@ -2419,10 +2402,12 @@ class FUSION:
                     style = color_bar_style
                 )
         else:
+            """
             if overlay_prop['value']=='max':
                 categories = [i.split(' --> ')[-1] for i in all_overlay_options if overlay_prop['name'] in i]
             else:
-                categories = list(hex_color_key.keys())
+            """
+            categories = list(hex_color_key.keys())
 
             color_bar = dlx.categorical_colorbar(
                 categories = sorted(categories),
@@ -6239,7 +6224,7 @@ class FUSION:
         if ctx.triggered_id is None:
             raise exceptions.PreventUpdate
         
-        if not ctx.triggered_id['value']:
+        if not ctx.triggered['value']:
             raise exceptions.PreventUpdate
 
         if ctx.triggered_id['type']=='start-feat':
@@ -7395,7 +7380,7 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def cell_labeling_initialize(self, selectedData, checked_cells, current_selectedData,slide_info_store):
+    def cell_labeling_initialize(self, selectedData, label_butt, label_label, label_rationale, current_selectedData, viewport_data_features, slide_info_store):
         """
         Takes as input some selected cells, a frame to plot their distribution of intensities, and then a Set button that labels those cells
         """
@@ -7404,9 +7389,20 @@ class FUSION:
             raise exceptions.PreventUpdate
         
         slide_info_store = json.loads(slide_info_store)
+        viewport_data_features = get_pattern_matching_value(viewport_data_features)
+
+        if slide_info_store['slide_type']=='CODEX':
+            viewport_data_features = [slide_info_store['frame_names'][i] for i in viewport_data_features]
+        else:
+            raise exceptions.PreventUpdate
+
+
+        if ctx.triggered_id['type'] in ['ftu-cell-pie','cell-marker-apply']:
             
-        if ctx.triggered_id['type'] in ['ftu-cell-pie', 'cell-labeling-channel-drop']:
-            
+            # Pulling current selected data if caused by another trigger
+            if ctx.triggered_id['type']=='cell-marker-apply':
+                selectedData = current_selectedData
+
             all_cell_markers = []
             for sD in selectedData:
                 if not sD is None:
@@ -7417,7 +7413,11 @@ class FUSION:
                         None
                     )
                     all_cell_markers.extend(cell_markers)
-            return all_cell_markers
+
+            updated_count = [f'Selected Cells: {len(all_cell_markers)}']*len(ctx.outputs_list[1])
+            updated_rationale = [f'`{", ".join(viewport_data_features)}`']*len(ctx.outputs_list[2])
+
+            return all_cell_markers, updated_count, updated_rationale
         else:
             raise exceptions.PreventUpdate
 
@@ -7531,7 +7531,10 @@ class FUSION:
         for v in values_to_remove:
             del patched_list[v]
 
-        return patched_list
+        # Updating number of cells
+        updated_count = [f'Selected Cells: {len(cell_marker_click)-len(values_to_remove)}']*len(ctx.outputs_list[1])
+
+        return patched_list, updated_count
 
     def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data, viewport_store_data, slide_info_store):
         """

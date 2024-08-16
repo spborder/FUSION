@@ -58,7 +58,7 @@ def extract_overlay_value(structure_list,overlay_prop):
             if overlay_prop['name'] in st:
                 if not overlay_prop['value'] is None:
                     if overlay_prop['value'] in st[overlay_prop['name']]:
-                        if not overlay_prop['sub_value'] is None and not type(st[overlay_prop['value']]) in [int,float,str]:
+                        if not overlay_prop['sub_value'] is None and not type(st[overlay_prop['name']][overlay_prop['value']]) in [int,float,str]:
                             if overlay_prop['sub_value'] in st[overlay_prop['name']][overlay_prop['value']]:
                                 if not type(st[overlay_prop['name']][overlay_prop['value']][overlay_prop['sub_value']])==str:
                                     # Converting all numbers to float
@@ -77,9 +77,17 @@ def extract_overlay_value(structure_list,overlay_prop):
                                 # Appending a value/count of 1
                                 raw_values_list.append(1)
                     elif overlay_prop['value']=='max':
-                        # Getting the max index of st[overlay_prop['name']][overlay_prop['value']]
-                        check_values = list(st[overlay_prop['name']].values())
-                        raw_values_list.append(np.argmax(check_values))
+                        # Getting the key associated with the maximum value
+                        max_val = 0
+                        max_key = None
+                        for key,val in st[overlay_prop['name']].items():
+                            if val>max_val:
+                                max_val = val
+                                max_key = key
+                        
+                        if not max_key is None:
+                            raw_values_list.append(max_key)
+
                     else:
                         raw_values_list.append(0)
                 else:
@@ -88,6 +96,9 @@ def extract_overlay_value(structure_list,overlay_prop):
                             raw_values_list.append(float(st[overlay_prop['name']]))
                         else:
                             raw_values_list.append(st[overlay_prop['name']])
+
+    if overlay_prop['value']=='max':
+        raw_values_list = sorted(raw_values_list)
 
     return raw_values_list
 

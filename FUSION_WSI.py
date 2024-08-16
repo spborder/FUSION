@@ -683,6 +683,7 @@ class SlideHandler:
 
             for f_idx, f in enumerate(list(intersecting_ftus.keys())):
                 viewport_data[f] = {}
+                cell_label_div = html.Div()
                 if len(intersecting_ftus[f])==0:
                     continue
                 
@@ -812,11 +813,11 @@ class SlideHandler:
                     histogram_df = pd.DataFrame.from_records(viewport_data[f]['data'])
                     histogram_df = histogram_df[histogram_df['Frequency']>=0.01]
                     #bar_width = (1/100)*(histogram_df['Intensity'].max() - histogram_df['Intensity'].min())
-                    f_tab_plot = px.bar(
+                    f_tab_plot = px.histogram(
                         data_frame = histogram_df,
                         x = 'Intensity',
-                        y = 'Frequency',
-                        color = 'Channel'
+                        color = 'Channel',
+                        barmode='overlay'
                     )
                     #f_tab_plot.update_traces(width = bar_width)
 
@@ -824,11 +825,11 @@ class SlideHandler:
                     chart_label = 'Pathway Expression Histogram'
                     if len(viewport_data[f]['data'])>0:
                         pathway_histogram_df = self.pathway_expression_histogram(pd.DataFrame.from_records(viewport_data[f]['data']),f_values)
-                        f_tab_plot = px.bar(
+                        f_tab_plot = px.histogram(
                             data_frame = pathway_histogram_df,
                             x = 'Expression',
-                            y = 'Frequency',
-                            color = 'Pathway'
+                            color = 'Pathway',
+                            barmode='overlay'
                         )
                         f_values = [possible_values.index(i) for i in pathway_histogram_df['Pathway'].unique().tolist()]
                     else:
@@ -960,6 +961,68 @@ class SlideHandler:
                             custom_data = 'Hidden' if 'Hidden' in f_umap_data else None
                         )
 
+                    # Adding cell labeling div 
+                    if slide_info['slide_type']=='CODEX':
+                        cell_label_div = html.Div([
+                            dbc.Row([
+                                html.H3('Cell Type Annotation')
+                            ]),
+                            dbc.Row([
+                                dbc.Col(
+                                    'Selected Cells: 0',
+                                    id = {'type': 'cell-marker-count','index': f_idx},
+                                    md = 3
+                                ),
+                                dbc.Col([
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Label(
+                                                'Cell Type',
+                                                html_for = {'type': 'cell-marker-label','index': f_idx}
+                                            ),
+                                            md = 2
+                                        ),
+                                        dbc.Col(
+                                            dcc.Textarea(
+                                                placeholder = 'Cell Type',
+                                                id = {'type': 'cell-marker-label','index': f_idx},
+                                                style = {'width': '100%'}
+                                            ),
+                                            md = 10
+                                        )
+                                    ]),
+                                    html.Hr(),
+                                    dbc.Row(
+                                        dcc.Textarea(
+                                            placeholder = 'Additional Rationale (Optional)',
+                                            id = {'type': 'cell-marker-rationale','index': f_idx},
+                                            style = {'width': '100%'}
+                                        )
+                                    ),
+                                    html.Hr(),
+                                    dbc.Row(
+                                        dcc.Markdown(
+                                            '`Label Source Data`',
+                                            id = {'type': 'cell-marker-source','index': f_idx},
+                                            style = {'width': '100%'}
+                                        )
+                                    ),
+                                    html.Hr(),
+                                    dbc.Row(
+                                        dbc.Button(
+                                            'Apply Label!',
+                                            n_clicks = 0,
+                                            className = 'd-grid col-12 mx-auto',
+                                            color = 'primary',
+                                            style = {'height': '50px'},
+                                            id = {'type': 'cell-marker-apply','index': f_idx}
+                                        )
+                                    )
+                                ], md = 9)
+                            ],align='center')
+                        ])
+
+
                 # Creating the tab for this structure:
                 f_tab = dbc.Tab([
                     dbc.Row([
@@ -1029,6 +1092,9 @@ class SlideHandler:
                                 )
                             ],md=6,style = {'display': 'none'} if state_bar is None else {'display': 'inline-block'})
                         ]
+                    ),
+                    dbc.Row(
+                        cell_label_div
                     )
                 ], label = f+f' ({viewport_data[f]["count"]})', tab_id = f'tab_{len(tab_list)}')
 
@@ -1174,45 +1240,48 @@ class SlideHandler:
         if len(structures)>0:
             for st_idx, st in enumerate(structures):
 
-                structure_name = [i for i in slide_info['annotations'] if i['_id']+'.json'==st][0]['annotation']['name']
-                overlay_children.append(
-                    dl.Overlay(
-                        dl.LayerGroup(
-                            dl.GeoJSON(
-                                url = f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/{st}',
-                                id = {'type': 'ftu-bounds','index': st_idx},
-                                options = {
-                                    'style': style_handler
-                                },
-                                filter = filter_handler,
-                                hideout = {
-                                    'color_key': color_key,
-                                    'overlay_prop': slide_info['overlay_prop'],
-                                    'fillOpacity': slide_info['cell_vis_val'],
-                                    'ftu_colors': slide_info['ftu_colors'],
-                                    'filter_vals': slide_info['filter_vals']
-                                },
-                                hoverStyle = arrow_function(
-                                    {
-                                        'weight': 5,
-                                        'color': '#9caf00',
-                                        'dashArray':''
-                                    }
-                                ),
-                                zoomToBounds = False,
-                                children = [
-                                    dl.Popup(
-                                        id = {'type': 'ftu-popup','index': st_idx},
-                                        autoPan = False,
-                                        #maxHeight = 800
-                                    )
-                                ]
-                            )
-                        ),
-                        name = structure_name, checked = True, id = st.replace('.json','')
+                structure_name = [i for i in slide_info['annotations'] if i['_id']+'.json'==st]
+                if len(structure_name)>0:
+                    structure_name = structure_name[0]['annotation']['name']
+                    overlay_children.append(
+                        dl.Overlay(
+                            dl.LayerGroup(
+                                dl.GeoJSON(
+                                    url = f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/{st}',
+                                    id = {'type': 'ftu-bounds','index': st_idx},
+                                    options = {
+                                        'style': style_handler
+                                    },
+                                    filter = filter_handler,
+                                    hideout = {
+                                        'color_key': color_key,
+                                        'overlay_prop': slide_info['overlay_prop'],
+                                        'fillOpacity': slide_info['cell_vis_val'],
+                                        'ftu_colors': slide_info['ftu_colors'],
+                                        'filter_vals': slide_info['filter_vals']
+                                    },
+                                    hoverStyle = arrow_function(
+                                        {
+                                            'weight': 5,
+                                            'color': '#9caf00',
+                                            'dashArray':''
+                                        }
+                                    ),
+                                    zoomToBounds = False,
+                                    children = [
+                                        dl.Popup(
+                                            id = {'type': 'ftu-popup','index': st_idx},
+                                            autoPan = False,
+                                            #maxHeight = 800
+                                        )
+                                    ]
+                                )
+                            ),
+                            name = structure_name, checked = True, id = st.replace('.json','')
+                        )
                     )
-                )
-
+                else:
+                    continue
         if len(slide_info['manual_ROIs'])>0:
             for m_idx, m in enumerate(slide_info['manual_ROIs']):
                 overlay_children.append(
@@ -1284,7 +1353,10 @@ class SlideHandler:
                         property_list = list(set(sub_props) | set(property_list))
 
         if any(['Main_Cell_Types' in i for i in property_list]):
-            property_list.append('Max Cell Type')
+            property_list.append('Max Main Cell Type')
+        
+        if any(['Cell_Subtypes' in i for i in property_list]):
+            property_list.append('Max Cell Subtype')
 
         return property_list
 

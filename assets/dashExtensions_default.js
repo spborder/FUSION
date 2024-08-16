@@ -35,13 +35,11 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                                     // Finding max represented sub-value
                                     var overlay_value = Number.Nan;
                                     var test_value = 0.0;
-                                    var overlay_idx = -1.0;
                                     for (var key in feature.properties.user[overlay_prop.name]) {
                                         var tester = feature.properties.user[overlay_prop.name][key];
-                                        overlay_idx += 1.0;
                                         if (tester > test_value) {
                                             test_value = tester;
-                                            overlay_value = overlay_idx;
+                                            overlay_value = key;
                                         }
                                     }
                                 } else {
