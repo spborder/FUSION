@@ -969,7 +969,7 @@ class SlideHandler:
                             ]),
                             dbc.Row([
                                 dbc.Col(
-                                    'Selected Cells: 0',
+                                    html.H4('Selected Cells: 0'),
                                     id = {'type': 'cell-marker-count','index': f_idx},
                                     md = 3
                                 ),
@@ -1375,8 +1375,15 @@ class SlideHandler:
                 f.close()
 
             structure_properties = [i['properties']['user'] for i in structure_data['features'] if 'user' in i['properties']]
+            try:
+                raw_values_list.extend(extract_overlay_value(structure_properties, overlay_prop))
+            except Exception as e:
+                print(e)
+                print(overlay_prop)
+                print(structure_properties[0])
 
-            raw_values_list.extend(extract_overlay_value(structure_properties, overlay_prop))
+
+
 
         for m in slide_info['manual_ROIs']:
             m_properties = m['geojson']['features'][0]['properties']['user']

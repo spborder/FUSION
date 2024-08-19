@@ -258,7 +258,7 @@ def path_to_mask(path, shape):
     mask = ndimage.binary_fill_holes(mask)
     return mask
 
-def make_marker_geojson(bbox_list:list,prop_list:Union[list,None]):
+def make_marker_geojson(bbox_list:list,prop_list:Union[list,dict,None]):
     """
     Make GeoJSON-formatted markers where the coordinates are equal to the center point of the bounding boxes
 
@@ -276,11 +276,18 @@ def make_marker_geojson(bbox_list:list,prop_list:Union[list,None]):
         # Finding average of extrema
         bbox_center = [(bbox[0]+bbox[2])/2, (bbox[1]+bbox[3])/2]
 
+        if type(prop_list)==list:
+            marker_properties = prop_list[idx]
+        elif type(prop_list)==dict:
+            marker_properties = prop_list
+        elif prop_list is None:
+            marker_properties = {}
+
         marker_geojson['features'].append({
             'type': 'Feature',
             'properties':{
                 'type':'marker'
-            } | prop_list[idx] if not prop_list is None else {'type': 'marker'},
+            } | marker_properties,
             'geometry':{
                 'type':'Point',
                 'coordinates': bbox_center

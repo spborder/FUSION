@@ -781,7 +781,8 @@ class FUSION:
              Output('cell-drop','options'),
              Output('ftu-bound-opts','children'),
              Output('special-overlays','children'),
-             Output('cell-annotation-tab','disabled')],
+             Output('cell-annotation-tab','disabled'),
+             Output('marker-add-div','children')],
             Input('slide-load-interval','disabled'),
             State('slide-info-store','data'),
             prevent_initial_call=True,
@@ -1013,6 +1014,7 @@ class FUSION:
         self.app.callback(
             [
                 Output('marker-add-div','children'),
+                Output('marker-add-geojson','data'),
                 Output({'type': 'cell-marker-count','index': ALL},'children'),
                 Output({'type':'cell-marker-source','index': ALL},'children')
             ],
@@ -1025,7 +1027,8 @@ class FUSION:
                 State({'type': 'cell-marker-rationale','index': ALL},'value'),
                 State({'type':'ftu-cell-pie','index':ALL},'selectedData'),
                 State({'type':'viewport-values-drop','index':ALL},'value'),
-                State('slide-info-store','data')
+                State('slide-info-store','data'),
+                State('marker-add-geojson','data')
             ],
             prevent_initial_call = True
         )(self.cell_labeling_initialize)
@@ -2223,7 +2226,7 @@ class FUSION:
                 filter_max_val = 1.0
                 filter_disable = True
 
-            elif m_prop == 'Max Cell Subtypes':
+            elif m_prop == 'Max Cell Subtype':
                 # Getting the maximum cell type present for each structure
                 overlay_prop = {
                     'name': 'Cell_Subtypes',
@@ -3498,7 +3501,10 @@ class FUSION:
                 children = current_overlays
             )
 
-            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, visualizable_properties_list, boundary_options_children, special_overlays_opts, cell_annotation_tab_disable
+            # Clearing marker-add-div
+            new_marker_div_children = []
+
+            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, visualizable_properties_list, boundary_options_children, special_overlays_opts, cell_annotation_tab_disable, new_marker_div_children
         else:
             raise exceptions.PreventUpdate
 
@@ -7380,7 +7386,7 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def cell_labeling_initialize(self, selectedData, label_butt, label_label, label_rationale, current_selectedData, viewport_data_features, slide_info_store):
+    def cell_labeling_initialize(self, selectedData, label_butt, label_label, label_rationale, current_selectedData, viewport_data_features, slide_info_store, all_cell_geojson):
         """
         Takes as input some selected cells, a frame to plot their distribution of intensities, and then a Set button that labels those cells
         """
@@ -7389,13 +7395,18 @@ class FUSION:
             raise exceptions.PreventUpdate
         
         slide_info_store = json.loads(slide_info_store)
-        viewport_data_features = get_pattern_matching_value(viewport_data_features)
+        all_cell_geojson = json.loads(all_cell_geojson)
+        if all_cell_geojson is None:
+            all_cell_geojson = {}
+
+        label_label = get_pattern_matching_value(label_label)
+        label_rationale = get_pattern_matching_value(label_rationale)
+        viewport_data_features = get_pattern_matching_value(viewport_data_features)      
 
         if slide_info_store['slide_type']=='CODEX':
             viewport_data_features = [slide_info_store['frame_names'][i] for i in viewport_data_features]
         else:
             raise exceptions.PreventUpdate
-
 
         if ctx.triggered_id['type'] in ['ftu-cell-pie','cell-marker-apply']:
             
@@ -7403,21 +7414,35 @@ class FUSION:
             if ctx.triggered_id['type']=='cell-marker-apply':
                 selectedData = current_selectedData
 
+            cell_properties = {
+                'label': label_label,
+                'rationale': label_rationale,
+                'features': viewport_data_features
+            }
+
             all_cell_markers = []
             for sD in selectedData:
                 if not sD is None:
+                    #print(sD)
                     # Pulling customdata from each point object
                     labeling_cells = [i['customdata'] for i in sD['points']]
                     updated_cell_geojson, cell_markers = make_marker_geojson(
                         [i[0]['Bounding_Box'] if type(i)==list else i['Bounding_Box'] for i in labeling_cells],
-                        None
+                        cell_properties
                     )
                     all_cell_markers.extend(cell_markers)
 
-            updated_count = [f'Selected Cells: {len(all_cell_markers)}']*len(ctx.outputs_list[1])
-            updated_rationale = [f'`{", ".join(viewport_data_features)}`']*len(ctx.outputs_list[2])
+                    if len(list(all_cell_geojson.keys()))==0:
+                        all_cell_geojson = updated_cell_geojson
+                    else:
+                        all_cell_geojson = all_cell_geojson['features'].extend(updated_cell_geojson['features'])
 
-            return all_cell_markers, updated_count, updated_rationale
+            all_cell_geojson = json.dumps(all_cell_geojson)
+            print(all_cell_geojson)
+            updated_count = [html.H4(f'Selected Cells: {len(all_cell_markers)}')]*len(ctx.outputs_list[2])
+            updated_rationale = [f'`{", ".join(viewport_data_features)}`']*len(ctx.outputs_list[3])
+
+            return all_cell_markers, all_cell_geojson, updated_count, updated_rationale
         else:
             raise exceptions.PreventUpdate
 
@@ -7532,7 +7557,7 @@ class FUSION:
             del patched_list[v]
 
         # Updating number of cells
-        updated_count = [f'Selected Cells: {len(cell_marker_click)-len(values_to_remove)}']*len(ctx.outputs_list[1])
+        updated_count = [html.H4(f'Selected Cells: {len(cell_marker_click)-len(values_to_remove)}')]*len(ctx.outputs_list[1])
 
         return patched_list, updated_count
 

@@ -215,6 +215,15 @@ class LayoutHandler:
             dbc.Row([
                 html.Div(
                     map_layer
+                ),
+                html.Div(
+                    children = [
+                        dcc.Store(
+                            id = 'marker-add-geojson',
+                            storage_type = 'memory',
+                            data = json.dumps({})
+                        )
+                    ]
                 )
             ])
         ])
