@@ -7438,7 +7438,6 @@ class FUSION:
                         all_cell_geojson = all_cell_geojson['features'].extend(updated_cell_geojson['features'])
 
             all_cell_geojson = json.dumps(all_cell_geojson)
-            print(all_cell_geojson)
             updated_count = [html.H4(f'Selected Cells: {len(all_cell_markers)}')]*len(ctx.outputs_list[2])
             updated_rationale = [f'`{", ".join(viewport_data_features)}`']*len(ctx.outputs_list[3])
 
