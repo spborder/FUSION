@@ -1017,6 +1017,10 @@ class SlideHandler:
                                             style = {'height': '50px'},
                                             id = {'type': 'cell-marker-apply','index': f_idx}
                                         )
+                                    ),
+                                    dbc.Row(
+                                        children = [],
+                                        id = {'type': 'cell-marker-summary','index': f_idx}
                                     )
                                 ], md = 9)
                             ],align='center')
@@ -1218,7 +1222,11 @@ class SlideHandler:
         """
 
         slide_annotation_dir = f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/'
-        structures = [i for i in os.listdir(slide_annotation_dir) if 'json' in i]
+        if os.path.exists(slide_annotation_dir):
+            structures = [i for i in os.listdir(slide_annotation_dir) if 'json' in i]
+        else:
+            structures = []
+            
         overlay_children = []
         if len(slide_info['frame_names'])>0:
             for frame, f_url in zip(slide_info['frame_names'],slide_info['tile_url']):
@@ -1329,34 +1337,38 @@ class SlideHandler:
         """
 
         slide_annotation_dir = f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/'
-        structures = [i for i in os.listdir(slide_annotation_dir) if 'json' in i]
-
-        property_list = []
-        for st in structures:
-            with open(slide_annotation_dir+st,'r') as f:
-                structure_data = geojson.load(f)
-
-                f.close()
-            
-            structure_properties = [i['properties']['user'] for i in structure_data['features'] if 'user' in i['properties']]
-            for s_p in structure_properties:
-                # This is one structure's properties
-                for p in s_p:
-                    # This is one property
-                    if p in self.visualization_properties:
-                        if type(s_p[p])==dict:
-                            # Adding sub-properties
-                            sub_props = [f'{p} --> {u}' for u in list(s_p[p].keys())]
-                        else:
-                            sub_props = [p]
-                    
-                        property_list = list(set(sub_props) | set(property_list))
-
-        if any(['Main_Cell_Types' in i for i in property_list]):
-            property_list.append('Max Main Cell Type')
         
-        if any(['Cell_Subtypes' in i for i in property_list]):
-            property_list.append('Max Cell Subtype')
+        if os.path.exists(slide_annotation_dir):
+            structures = [i for i in os.listdir(slide_annotation_dir) if 'json' in i]
+
+            property_list = []
+            for st in structures:
+                with open(slide_annotation_dir+st,'r') as f:
+                    structure_data = geojson.load(f)
+
+                    f.close()
+                
+                structure_properties = [i['properties']['user'] for i in structure_data['features'] if 'user' in i['properties']]
+                for s_p in structure_properties:
+                    # This is one structure's properties
+                    for p in s_p:
+                        # This is one property
+                        if p in self.visualization_properties:
+                            if type(s_p[p])==dict:
+                                # Adding sub-properties
+                                sub_props = [f'{p} --> {u}' for u in list(s_p[p].keys())]
+                            else:
+                                sub_props = [p]
+                        
+                            property_list = list(set(sub_props) | set(property_list))
+
+            if any(['Main_Cell_Types' in i for i in property_list]):
+                property_list.append('Max Main Cell Type')
+            
+            if any(['Cell_Subtypes' in i for i in property_list]):
+                property_list.append('Max Cell Subtype')
+        else:
+            property_list = []
 
         return property_list
 
@@ -1427,6 +1439,19 @@ class SlideHandler:
             return_coords.append([i[0]*slide_info['scale'][0],i[1]*slide_info['scale'][1]])
 
         return return_coords
+
+    def check_markers(self, current_marker_geojson: dict, new_marker_geojson:dict):
+        """
+        Checking for any overlapping members of the current markers geojson
+        """
+
+        current_gdf = geopandas.GeoDataFrame.from_features(current_marker_geojson['features'])
+        new_gdf = geopandas.GeoDataFrame.from_features(new_marker_geojson['features'])
+
+        current_intersects = current_gdf[current_gdf.intersects(new_gdf)]
+
+        return current_intersects
+
 
 
 

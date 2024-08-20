@@ -380,7 +380,7 @@ class FUSION:
             available_datasets_store = None
         user_data = json.loads(user_data)
         pathname = pathname[1:]
-        print(f'Navigating to {pathname}')
+        #print(f'Navigating to {pathname}')
 
         slide_select_value = ''
 
@@ -774,15 +774,18 @@ class FUSION:
 
         # Loading new WSI from dropdown selection
         self.app.callback(
-            [Output('slide-tile-holder','children'),
-             Output('layer-control-holder','children'),
-             Output({'type':'edit-control','index':ALL},'editToolbar'),
-             Output('slide-map','center'),
-             Output('cell-drop','options'),
-             Output('ftu-bound-opts','children'),
-             Output('special-overlays','children'),
-             Output('cell-annotation-tab','disabled'),
-             Output('marker-add-div','children')],
+            [
+                Output('slide-tile-holder','children'),
+                Output('layer-control-holder','children'),
+                Output({'type':'edit-control','index':ALL},'editToolbar'),
+                Output('slide-map','center'),
+                Output('cell-drop','options'),
+                Output('ftu-bound-opts','children'),
+                Output('special-overlays','children'),
+                Output('cell-annotation-tab','disabled'),
+                Output('marker-add-div','children'),
+                Output('marker-add-geojson','data')
+            ],
             Input('slide-load-interval','disabled'),
             State('slide-info-store','data'),
             prevent_initial_call=True,
@@ -1016,7 +1019,10 @@ class FUSION:
                 Output('marker-add-div','children'),
                 Output('marker-add-geojson','data'),
                 Output({'type': 'cell-marker-count','index': ALL},'children'),
-                Output({'type':'cell-marker-source','index': ALL},'children')
+                Output({'type':'cell-marker-source','index': ALL},'children'),
+                Output({'type':'cell-marker-summary','index':ALL},'children'),
+                Output({'type': 'cell-marker-label','index': ALL},'value'),
+                Output({'type': 'cell-marker-rationale','index': ALL},'value')
             ],
             [
                 Input({'type':'ftu-cell-pie','index':ALL},'selectedData'),
@@ -3503,8 +3509,10 @@ class FUSION:
 
             # Clearing marker-add-div
             new_marker_div_children = []
+            # Clearing marker-add-geojson
+            new_marker_add_geojson = json.dumps({'type': 'FeatureCollection','features': []})
 
-            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, visualizable_properties_list, boundary_options_children, special_overlays_opts, cell_annotation_tab_disable, new_marker_div_children
+            return slide_tile_layer, new_layer_control, remove_old_edits, map_center, visualizable_properties_list, boundary_options_children, special_overlays_opts, cell_annotation_tab_disable, new_marker_div_children, new_marker_add_geojson
         else:
             raise exceptions.PreventUpdate
 
@@ -7396,34 +7404,40 @@ class FUSION:
         
         slide_info_store = json.loads(slide_info_store)
         all_cell_geojson = json.loads(all_cell_geojson)
-        if all_cell_geojson is None:
-            all_cell_geojson = {}
+        if all_cell_geojson is None or len(list(all_cell_geojson.keys()))==0:
+            all_cell_geojson = {'type': 'FeatureCollection','features': []}
 
         label_label = get_pattern_matching_value(label_label)
         label_rationale = get_pattern_matching_value(label_rationale)
-        viewport_data_features = get_pattern_matching_value(viewport_data_features)      
+        viewport_data_features = get_pattern_matching_value(viewport_data_features)    
+        updated_summary = [no_update]*len(ctx.outputs_list[4])
+
+        new_label_label = ['']*len(ctx.outputs_list[5])
+        new_label_rationale = ['']*len(ctx.outputs_list[6])
 
         if slide_info_store['slide_type']=='CODEX':
             viewport_data_features = [slide_info_store['frame_names'][i] for i in viewport_data_features]
         else:
             raise exceptions.PreventUpdate
-
+        
         if ctx.triggered_id['type'] in ['ftu-cell-pie','cell-marker-apply']:
             
             # Pulling current selected data if caused by another trigger
             if ctx.triggered_id['type']=='cell-marker-apply':
                 selectedData = current_selectedData
 
-            cell_properties = {
-                'label': label_label,
-                'rationale': label_rationale,
-                'features': viewport_data_features
-            }
+            if not label_label is None:
+                cell_properties = {
+                    'label': label_label,
+                    'rationale': label_rationale,
+                    'features': viewport_data_features
+                }
+            else:
+                cell_properties = None
 
             all_cell_markers = []
             for sD in selectedData:
                 if not sD is None:
-                    #print(sD)
                     # Pulling customdata from each point object
                     labeling_cells = [i['customdata'] for i in sD['points']]
                     updated_cell_geojson, cell_markers = make_marker_geojson(
@@ -7432,16 +7446,63 @@ class FUSION:
                     )
                     all_cell_markers.extend(cell_markers)
 
-                    if len(list(all_cell_geojson.keys()))==0:
-                        all_cell_geojson = updated_cell_geojson
-                    else:
-                        all_cell_geojson = all_cell_geojson['features'].extend(updated_cell_geojson['features'])
+                    if not label_label is None and ctx.triggered_id['type'] in ['cell-marker-apply']:
+                        if len(list(all_cell_geojson.keys()))==0:
+                            all_cell_geojson = updated_cell_geojson
+                        else:
+                            all_cell_geojson['features'].extend(updated_cell_geojson['features'])
+                    
+
+            # Generating cell labels summary
+            if 'features' in all_cell_geojson:
+                if len(all_cell_geojson['features'])>0:
+                    cell_label_info = [i['properties'] for i in all_cell_geojson['features']]
+                    cell_label_df = pd.DataFrame.from_records(cell_label_info)
+                    cell_label_df.drop(columns = ['type','rationale'],inplace=True)
+                    cell_label_df = cell_label_df.value_counts(subset = ['label'],ascending = False).to_frame()
+                    cell_label_df = cell_label_df.reset_index()
+                    cell_label_df.columns = ['Cell Type', 'Count']
+
+                    # Generating dash_table and returning underneath cell labeling portion:
+                    cell_label_dash_table = dash_table.DataTable(
+                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in cell_label_df],
+                        data = cell_label_df.to_dict('records'),
+                        editable=False,                                        
+                        sort_mode='multi',
+                        page_current=0,
+                        page_size=5,
+                        style_cell = {
+                            'overflow':'hidden',
+                            'textOverflow':'ellipsis',
+                            'maxWidth':0
+                        },
+                        tooltip_data = [
+                            {
+                                column: {'value':str(value),'type':'markdown'}
+                                for column, value in row.items()
+                            } for row in cell_label_df.to_dict('records')
+                        ],
+                        tooltip_duration = None
+                    )
+
+                    updated_summary = [
+                        html.Div([
+                            dbc.Row(
+                                html.H5('Cell Labels Summary')
+                            ),
+                            html.Hr(),
+                            dbc.Row(
+                                cell_label_dash_table
+                            )
+                        ])
+                    ] * len(ctx.outputs_list[4])
+
 
             all_cell_geojson = json.dumps(all_cell_geojson)
             updated_count = [html.H4(f'Selected Cells: {len(all_cell_markers)}')]*len(ctx.outputs_list[2])
             updated_rationale = [f'`{", ".join(viewport_data_features)}`']*len(ctx.outputs_list[3])
 
-            return all_cell_markers, all_cell_geojson, updated_count, updated_rationale
+            return all_cell_markers, all_cell_geojson, updated_count, updated_rationale, updated_summary, new_label_label, new_label_rationale
         else:
             raise exceptions.PreventUpdate
 

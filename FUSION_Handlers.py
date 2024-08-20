@@ -4306,7 +4306,11 @@ class GirderHandler:
                 print('Found clustering data')
                 cluster_data_id = public_folder_contents[public_folder_names.index('FUSION_Clustering_data.json')]['_id']
 
-                cluster_json = json.loads(requests.get(f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={user_info["token"]}').content)
+                cluster_json = json.loads(
+                    requests.get(
+                        f'{self.gc.urlBase}/item/{cluster_data_id}/download?token={user_info["token"]}'
+                        ).content
+                    )
                 try:
                     cluster_data = pd.DataFrame.from_dict(cluster_json)
 
