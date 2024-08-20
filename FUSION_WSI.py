@@ -544,7 +544,8 @@ class SlideHandler:
             ]
         elif slide_info['slide_type']=='Xenium':
             available_views = [
-                {'label': 'Cell Type', 'value': 'Cell Type'},
+                {'label': 'Main Cell Type', 'value': 'Main_Cell_Types'},
+                {'label': 'Cell Subtype', 'value': 'Cell_Subtypes'},
                 {'label': 'Pathway Expression','value': 'Pathway Expression'},
                 {'label': 'Features','value': 'features','disabled': True}
             ]
@@ -1226,7 +1227,7 @@ class SlideHandler:
             structures = [i for i in os.listdir(slide_annotation_dir) if 'json' in i]
         else:
             structures = []
-            
+
         overlay_children = []
         if len(slide_info['frame_names'])>0:
             for frame, f_url in zip(slide_info['frame_names'],slide_info['tile_url']):
