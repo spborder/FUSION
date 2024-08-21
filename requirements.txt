@@ -1,5 +1,6 @@
 dash==2.13.0
 dash_bootstrap_components==1.4.2
+dash-breakpoints==0.1.0
 dash_cytoscape==0.3.0
 dash_extensions==1.0.4
 dash_leaflet==1.0.5
