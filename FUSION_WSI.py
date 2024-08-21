@@ -751,12 +751,10 @@ class SlideHandler:
                                             structure_dict['states'] = {}
 
                                     elif view_type['name']=='Cell_Subtypes':
-                                        main_types = list(st[view_type['name']].keys())
                                         sub_type_dict = {}
-                                        for m in main_types:
-                                            for s_t in st[view_type['name']][m]:
-                                                sub_type_dict[s_t] = st[view_type['name']][m][s_t] * st['Main_Cell_Types'][m]
-                                        
+                                        for s_t in st[view_type['name']]:
+                                            sub_type_dict[s_t] = st[view_type['name']][s_t]
+                                    
                                         structure_dict[view_type['name']] = sub_type_dict
 
                             elif type(st[view_type['name']])==str:
