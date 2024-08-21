@@ -1993,7 +1993,12 @@ class FUSION:
             current_ftu_data = viewport_data_store['data']
             pie_ftu = list(current_ftu_data.keys())[ctx.triggered_id['index']]
 
-            pct_states = pd.DataFrame.from_records([i['states'][pie_cell] for i in current_ftu_data[pie_ftu]['data'] if 'states' in i]).sum(axis=0).to_frame()
+            assembled_state_data = []
+            for i in current_ftu_data[pie_ftu]['data']:
+                if 'states' in i:
+                    if pie_cell in i['states']:
+                        assembled_state_data.append(i['states'][pie_cell])
+            pct_states = pd.DataFrame.from_records(assembled_state_data).sum(axis=0).to_frame()
             pct_states = pct_states.reset_index()
             pct_states.columns = ['Cell State','Proportion']
             pct_states['Proportion'] = pct_states['Proportion']/pct_states['Proportion'].sum()
