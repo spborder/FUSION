@@ -361,31 +361,11 @@ class SlideHandler:
                     
                     # Test for single nested dictionary
                     sub_values = list(col_values[0].keys())
-                    if not type(col_values[0][sub_values[0]])==dict:
-                        if len(sub_values)>1:
-                            feature_idxes = [i for i in range(len(col_values)) if isinstance(col_values[i],dict)]
-                            col_df = pd.DataFrame.from_records([col_values[i] for i in feature_idxes]).astype(float)
-                            # Scaling by intersection area
-                            for row_idx, area in enumerate([overlap_area[i] for i in feature_idxes]):
-                                col_df.iloc[row_idx,:] *= area
-
-                            col_df_norm = col_df.sum(axis=0).to_frame()
-                            col_df_norm = (col_df_norm/col_df_norm.sum()).fillna(0.000).round(decimals=18)
-                            col_df_norm[0] = col_df_norm[0].map('{:.19f}'.format)
-                            col_vals_dict[col_name] = col_df_norm.astype(float).to_dict()[0]
-                        elif len(sub_values)==1:
-                            feature_idxes = [i for i in range(len(col_values)) if isinstance(col_values[i],dict)]
-                            col_df = pd.DataFrame.from_records([col_values[i] for i in feature_idxes]).astype(float)
-                            col_vals_dict[col_name] = col_df.astype(float).mean().to_dict()
-                    
-                    else:
-                        for sub_val in sub_values:
-                            if type(col_values[0][sub_val])==dict:
-
-                                feature_pre_idxes = [i for i in range(len(col_values)) if sub_val in col_values[i]]
-                                feature_idxes = [i for i in feature_pre_idxes if isinstance(col_values[i][sub_val],dict)]
-                                col_df = pd.DataFrame.from_records([col_values[i][sub_val] for i in feature_idxes]).astype(float)
-                                
+                    if len(sub_values)>0:
+                        if not type(col_values[0][sub_values[0]])==dict:
+                            if len(sub_values)>1:
+                                feature_idxes = [i for i in range(len(col_values)) if isinstance(col_values[i],dict)]
+                                col_df = pd.DataFrame.from_records([col_values[i] for i in feature_idxes]).astype(float)
                                 # Scaling by intersection area
                                 for row_idx, area in enumerate([overlap_area[i] for i in feature_idxes]):
                                     col_df.iloc[row_idx,:] *= area
@@ -393,29 +373,50 @@ class SlideHandler:
                                 col_df_norm = col_df.sum(axis=0).to_frame()
                                 col_df_norm = (col_df_norm/col_df_norm.sum()).fillna(0.000).round(decimals=18)
                                 col_df_norm[0] = col_df_norm[0].map('{:.19f}'.format)
-                                col_vals_dict[col_name][sub_val] = col_df_norm.astype(float).to_dict()[0]
+                                col_vals_dict[col_name] = col_df_norm.astype(float).to_dict()[0]
+                            elif len(sub_values)==1:
+                                feature_idxes = [i for i in range(len(col_values)) if isinstance(col_values[i],dict)]
+                                col_df = pd.DataFrame.from_records([col_values[i] for i in feature_idxes]).astype(float)
+                                col_vals_dict[col_name] = col_df.astype(float).mean().to_dict()
+                        
+                        else:
+                            for sub_val in sub_values:
+                                if type(col_values[0][sub_val])==dict:
 
-                            elif type(col_values[0][sub_val])==str:
-                                print(f'{col_name} {sub_val} has str count aggregation')
-                                all_str_sub_vals = [i[sub_val] for i in col_values]
-                                col_vals_dict[col_name] = {
-                                    i: all_str_sub_vals.count(i)
-                                    for i in np.unique(all_str_sub_vals).tolist()
-                                }
-                            
-                            elif type(col_values[0][sub_val]) in [int,float]:
-                                # Taking the mean of numerical sub values
-                                print(f'{col_name} {sub_val} has numeric mean aggregation')
-                                col_vals_dict[col_name][sub_val] = np.mean(np.array([i[sub_val] for i in col_values]))
-                            
-                            elif type(col_values[0][sub_val])==list:
-                                print(f'{col_name} {sub_val} has list mean aggregation')
-                                mean_list_vals = np.mean(np.array([i[sub_val] for i in col_values]),axis=0)
-                                col_vals_dict[col_name] = {
-                                    f'Value {i}': j
-                                    for i,j in enumerate(mean_list_vals.tolist())
-                                }
-                    
+                                    feature_pre_idxes = [i for i in range(len(col_values)) if sub_val in col_values[i]]
+                                    feature_idxes = [i for i in feature_pre_idxes if isinstance(col_values[i][sub_val],dict)]
+                                    col_df = pd.DataFrame.from_records([col_values[i][sub_val] for i in feature_idxes]).astype(float)
+                                    
+                                    # Scaling by intersection area
+                                    for row_idx, area in enumerate([overlap_area[i] for i in feature_idxes]):
+                                        col_df.iloc[row_idx,:] *= area
+
+                                    col_df_norm = col_df.sum(axis=0).to_frame()
+                                    col_df_norm = (col_df_norm/col_df_norm.sum()).fillna(0.000).round(decimals=18)
+                                    col_df_norm[0] = col_df_norm[0].map('{:.19f}'.format)
+                                    col_vals_dict[col_name][sub_val] = col_df_norm.astype(float).to_dict()[0]
+
+                                elif type(col_values[0][sub_val])==str:
+                                    print(f'{col_name} {sub_val} has str count aggregation')
+                                    all_str_sub_vals = [i[sub_val] for i in col_values]
+                                    col_vals_dict[col_name] = {
+                                        i: all_str_sub_vals.count(i)
+                                        for i in np.unique(all_str_sub_vals).tolist()
+                                    }
+                                
+                                elif type(col_values[0][sub_val]) in [int,float]:
+                                    # Taking the mean of numerical sub values
+                                    print(f'{col_name} {sub_val} has numeric mean aggregation')
+                                    col_vals_dict[col_name][sub_val] = np.mean(np.array([i[sub_val] for i in col_values]))
+                                
+                                elif type(col_values[0][sub_val])==list:
+                                    print(f'{col_name} {sub_val} has list mean aggregation')
+                                    mean_list_vals = np.mean(np.array([i[sub_val] for i in col_values]),axis=0)
+                                    col_vals_dict[col_name] = {
+                                        f'Value {i}': j
+                                        for i,j in enumerate(mean_list_vals.tolist())
+                                    }
+                        
                 elif type(col_values[0])==str:
                     # Just getting the count of each unique value here
                     col_vals_dict[col_name] = {i:col_values.count(i) for i in np.unique(col_values).tolist()}
@@ -876,19 +877,30 @@ class SlideHandler:
 
                     if view_type['name']=='Main_Cell_Types':
                         # Getting the cell state information
-                        top_cell = list(viewport_data[f]['data'][0]['Main_Cell_Types'].keys())[0]
-                        second_chart_label = f'{top_cell} Cell States Proportions'
-                        
-                        pct_states = pd.DataFrame.from_records([i['states'][top_cell] for i in viewport_data[f]['data'] if top_cell in i['states']]).sum(axis=0).to_frame()
-                        pct_states = pct_states.reset_index()
-                        pct_states.columns = ['Cell State','Proportion']
-                        pct_states['Proportion'] = pct_states['Proportion']/(pct_states['Proportion'].sum())
-                        state_bar = px.bar(
-                            data_frame = pct_states,
-                            x = 'Cell State',
-                            y = 'Proportion',
-                            title = f'Cell State Proportions for: <br><sup>{top_cell} in </sup><br><sup>{f}</sup>'
-                        )
+                        first_structure = list(viewport_data[f]['data'][0]['Main_Cell_Types'].keys())
+                        if len(first_structure)>0:
+                            top_cell = first_structure[0]
+                            second_chart_label = f'{top_cell} Cell States Proportions'
+                            
+                            include_state_data = []
+                            for i in viewport_data[f]['data']:
+                                if 'states' in i:
+                                    if top_cell in i['states']:
+                                        include_state_data.append(i['states'][top_cell])
+
+                            pct_states = pd.DataFrame.from_records(include_state_data).sum(axis=0).to_frame()
+                            pct_states = pct_states.reset_index()
+                            pct_states.columns = ['Cell State','Proportion']
+                            pct_states['Proportion'] = pct_states['Proportion']/(pct_states['Proportion'].sum())
+                            state_bar = px.bar(
+                                data_frame = pct_states,
+                                x = 'Cell State',
+                                y = 'Proportion',
+                                title = f'Cell State Proportions for: <br><sup>{top_cell} in </sup><br><sup>{f}</sup>'
+                            )
+                        else:
+                            second_chart_label = 'Select a Main Cell Type to view Cell State proportions'
+                            state_bar = px.bar()
 
                 else:
 
