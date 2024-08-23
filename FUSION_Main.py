@@ -900,7 +900,7 @@ class FUSION:
             [
                 State('user-store','data'),
                 State('slide-info-store','data')
-            ]
+            ],
             prevent_initial_call = True
         )(self.download_data)
 
@@ -1047,11 +1047,13 @@ class FUSION:
         self.app.callback(
             [
                 Output('marker-add-div','children'),
-                Output({'type':'cell-marker-count','index': ALL},'children')
+                Output({'type':'cell-marker-count','index': ALL},'children'),
+                Output('marker-add-geojson','data')
             ],
             [
                 Input({'type':'cell-marker-butt','index': ALL},'n_clicks')
             ],
+            State('marker-add-geojson','data'),
             prevent_initial_call = True
         )(self.remove_cell_label)
 
@@ -3232,7 +3234,7 @@ class FUSION:
 
                 if f'{clicked["col"]}/NOTES' in table_data.columns.tolist():
                     notes = table_data[f'{clicked["col"]}/NOTES'].tolist()[0]
-                    if np.isnan(notes):
+                    if not notes:
                         notes = 'No notes.'
                 else:
                     notes = 'No notes.'
@@ -7490,6 +7492,15 @@ class FUSION:
                             html.Hr(),
                             dbc.Row(
                                 cell_label_dash_table
+                            ),
+                            html.Hr(),
+                            dbc.Row(
+                                dbc.Button(
+                                    'Export Cell Annotations',
+                                    id = {'type': 'cell-marker-export','index': 0},
+                                    className = 'd-grid col-12 mx-auto',
+                                    disabled = True
+                                )
                             )
                         ])
                     ] * len(ctx.outputs_list[4])
@@ -7596,7 +7607,7 @@ class FUSION:
         
         return return_div, new_annotation_tab_group, json.dumps(user_data_store)
     
-    def remove_cell_label(self,cell_marker_click):
+    def remove_cell_label(self,cell_marker_click, current_marker_geojson):
         """
         Removing marked cell prior to assigning specific cell type label
         """
@@ -7616,7 +7627,10 @@ class FUSION:
         # Updating number of cells
         updated_count = [html.H4(f'Selected Cells: {len(cell_marker_click)-len(values_to_remove)}')]*len(ctx.outputs_list[1])
 
-        return patched_list, updated_count
+        #TODO: Update the cell-marker-geojson with the updated cells
+        updated_geojson = current_marker_geojson
+        
+        return patched_list, updated_count, updated_geojson
 
     def update_current_annotation(self, ftus, prev_click, next_click, save_click, set_click, delete_click,  line_slide, ann_class, all_annotations, class_label, image_label, ftu_names, ftu_idx, user_store_data, viewport_store_data, slide_info_store):
         """

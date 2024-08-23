@@ -704,7 +704,7 @@ class LayoutHandler:
                 dbc.Row([
                     html.Div(id='data-options')
                 ])
-            ])
+            ],style={'height': '30vh'})
         ])
 
         # Test CLI tab
