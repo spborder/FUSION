@@ -1982,6 +1982,7 @@ class LayoutHandler:
             - Either personally created or shared
         """
         # Checking for current annotation sessions:
+
         current_ann_sessions = dataset_handler.check_user_folder(folder_name='FUSION Annotation Sessions', user_info=user_info)
         if not current_ann_sessions is None:
             # Checking annotation session folder for current sessions
@@ -4221,6 +4222,9 @@ class GirderHandler:
 
         self.filter_keys.append({'title':'Folder Names','key':f'0-{l_i+2}'})
         label_filter_children.append(folder_names_children)
+
+        
+
 
         self.label_filter_dict = {
             'title':'Filter Labels',

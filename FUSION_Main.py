@@ -897,6 +897,10 @@ class FUSION:
             [Input({'type':'download-opts','index':MATCH},'value'),
             Input({'type':'download-butt','index':MATCH},'n_clicks')],
             Output({'type':'download-data','index':MATCH},'data'),
+            [
+                State('user-store','data'),
+                State('slide-info-store','data')
+            ]
             prevent_initial_call = True
         )(self.download_data)
 
@@ -2740,14 +2744,11 @@ class FUSION:
                         shared_name_sub = np.unique([i['sub_name'] for i in shared_name_trunk]).tolist()
                         sub_accordion_list = []
                         for u_sub in shared_name_sub:
-                            print(u_sub)
                             sub_prop_data = [i for i in shared_name_trunk if i['sub_name']==u_sub]
                             sub_tab_list = []
                             for sub_tab in sub_prop_data:
                                 sub_tab_data = sub_tab['table']
-                                print(sub_tab_data)
                                 sub_tab_data = sub_tab_data[sub_tab_data['Value']!=0]
-                                print(sub_tab_data)
 
                                 if not sub_tab_data.empty:
                                     sub_tab_list.append(
@@ -4456,20 +4457,11 @@ class FUSION:
                 overlay_prop = slide_info_store['overlay_prop']
             else:
                 overlay_prop = None
-            if 'cell_vis_val' in slide_info_store:
-                cell_vis_val = slide_info_store['cell_vis_val']
-            else:
-                cell_vis_val = 0.5
             
             if 'hex_color_key' in slide_info_store:
                 hex_color_key = slide_info_store['hex_color_key']
             else:
                 hex_color_key = {}
-
-            if 'filter_vals' in slide_info_store:
-                filter_vals = slide_info_store['filter_vals']
-            else:
-                filter_vals = []
 
             try:
                 # Used for pattern-matching callbacks
@@ -7671,6 +7663,8 @@ class FUSION:
             'marginBottom':'15px'
         }
 
+        ignore_ftus = ['Spots','Cells']
+
         if ctx.triggered_id['type']=='annotation-station-ftu':
             ftu_styles = [{'display':'inline-block','marginBottom':'15px'} if not i==ctx.triggered_id['index'] else selected_style for i in range(len(ctx.outputs_list[1]))]
 
@@ -7681,6 +7675,10 @@ class FUSION:
                 clicked_ftu_name = 'Marked:'+clicked_ftu_name.split(':')[1].strip()
             else:
                 clicked_ftu_name = clicked_ftu_name.split(':')[0]
+
+            if clicked_ftu_name in ignore_ftus:
+                raise exceptions.PreventUpdate
+            
             ftu_idx = 0
 
             # Clearing image labels
@@ -8219,6 +8217,7 @@ def app(*args):
         username = ''
         p_word = ''
         print(f'Be sure to set an initial user dummy!')
+        sys.exit(1)
 
     # Initializing GirderHandler
     dataset_handler = GirderHandler(
