@@ -36,7 +36,9 @@ import plotly.graph_objects as go
 #from skimage.draw import polygon_perimeter
 
 from wsi_annotations_kit import wsi_annotations_kit as wak
-from shapely import Polygon
+from shapely.geometry import Polygon, box, shape
+
+import geopandas
 
 from dash import dcc, ctx, Dash, dash_table
 import dash_bootstrap_components as dbc
@@ -670,17 +672,6 @@ class LayoutHandler:
             ])
         ])
 
-        # Tools for selecting regions, transparency, and cells
-
-        # Converting the cell_types list into a dictionary to disable some
-        disable_list = []
-        cell_types_list = []
-        for c in slide_properties:
-            if c not in disable_list:
-                cell_types_list.append({'label':c,'value':c,'disabled':False})
-            else:
-                cell_types_list.append({'label':c+' (In Progress)','value':c,'disabled':True})
-
         # Extracting data tab
         self.data_options = [
             {'label':'Annotations','value':'Annotations','disabled':False},
@@ -690,22 +681,164 @@ class LayoutHandler:
             {'label':'Manual ROIs','value':'Manual ROIs','disabled':True},
             {'label':'FTU User Labels','value':'FTU User Labels','disabled':True}
         ]
+
+        download_options = dbc.Tabs(
+            children = [
+                dbc.Tab(
+                    dbc.Card([
+                        dbc.CardBody([
+                            dbc.Label('Annotations format: ',html_for={'type':'download-ann-format','index': 0}),
+                            dbc.Row(
+                                dcc.RadioItems(
+                                    [
+                                        {'label': html.Div(['Aperio (XML)'],style = {'padding-left': '50px','padding-right':'50px'}),'value': 'XML'},
+                                        {'label': html.Div(['Histomics (JSON)'],style={'padding-left': '50px','padding-right':'10px'}),'value': 'Histomics'},
+                                        {'label':html.Div(['GeoJSON'],style={'padding-left':'50px','padding-right':'10px'}),'value':'GeoJSON'}
+                                    ],
+                                    value = 'XML',
+                                    inline=True,
+                                    id = {'type': 'download-ann-format','index':0},
+                                    labelStyle={'display': 'flex'},
+                                    style = {'marginBottom':'20px'}
+                                )
+                            ),
+                            html.Hr(),
+                            html.B(),
+                            dcc.Loading(
+                                children = [
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Button(
+                                                'Download ALL Annotations',
+                                                color = 'primary',
+                                                n_clicks = 0,
+                                                id = {'type': 'download-annotations-butt','index': 0},
+                                                className = 'd-grid col-12 mx-auto'
+                                            )
+                                        ],md=6),
+                                        dbc.Col([
+                                            dbc.Button(
+                                                'Download Current Viewport Annotations',
+                                                color = 'secondary',
+                                                n_clicks = 0,
+                                                id = {'type': 'download-annotations-butt','index': 1},
+                                                className = 'd-grid col-12 mx-auto'
+                                            )
+                                        ],md=6)
+                                    ])
+                                ]
+                            )
+                        ])
+                    ]),
+                    label = 'Annotations',
+                    tab_id = 'annotations'
+                ),
+                dbc.Tab(
+                    dbc.Card([
+                        dbc.CardBody([
+                            dbc.Label('Format for Cell Composition Data: ',html_for = {'type':'download-cell-format','index': 0}),
+                            dbc.Row(
+                                dcc.RadioItems(
+                                    options = [
+                                        {'label': html.Div(['CSV Files'],style = {'padding-left': '50px','padding-right': '10px'}),'value': 'CSV'},
+                                        {'label': html.Div(['Excel File'],style = {'padding-left': '50px','padding-right':'10px'}),'value':'XLSX'},
+                                        {'label': html.Div(['RDS File'],style = {'padding-left':'50px','padding-right':'10px'}),'value':'RDS','disabled': True},
+                                        {'label': html.Div(['H5AD File'],style = {'padding-left':'50px','padding-right':'10px'}),'value':'H5AD','disabled': True}
+                                    ],
+                                    value = 'CSV',
+                                    inline=True,
+                                    id = {'type': 'download-cell-format','index':0},
+                                    labelStyle={'display':'flex'},
+                                    style = {'marginBottom':'20px'}
+                                )
+                            ),
+                            dcc.Loading(dbc.Row([
+                                dbc.Col(
+                                    dbc.Button(
+                                        'Download ALL Cell Composition Data',
+                                        color = 'primary',
+                                        id = {'type': 'download-cell-butt','index': 0},
+                                        className = 'd-grid col-12 mx-auto',
+                                        n_clicks = 0
+                                    ),
+                                    md = 6
+                                ),
+                                dbc.Col(
+                                    dbc.Button(
+                                        'Download Current Viewport Cell Composition',
+                                        color = 'secondary',
+                                        n_clicks = 0,
+                                        id = {'type': 'download-cell-butt','index': 1},
+                                        className = 'd-grid col-12 mx-auto'
+                                    ),
+                                    md = 6
+                                )
+                            ]))
+                        ])
+                    ]),
+                    label = 'Cell Composition',
+                    tab_id = 'cell-composition'
+                ),
+                dbc.Tab(
+                    dbc.Card(
+                        dbc.CardBody([
+                            dbc.Label('Download Metadata for Current Slide',html_for ={'type':'download-meta-butt','index': 0}),
+                            html.Hr(),
+                            dbc.Row([
+                                dcc.Loading(
+                                    dbc.Button(
+                                        'Download Slide Metadata',
+                                        color = 'primary',
+                                        n_clicks = 0,
+                                        id = {'type': 'download-meta-butt','index': 0},
+                                        className = 'd-grid col-12 mx-auto'
+                                    )
+                                )
+                            ])
+                        ])
+                    ),
+                    label = 'Slide Metadata',
+                    tab_id = 'slide-metadata'
+                ),
+                dbc.Tab(
+                    dbc.Card(
+                        dbc.CardBody([
+                            dbc.Label('Download data associated with Manual ROIs (GeoJSON)',html_for={'type':'download-manual-butt','index': 0}),
+                            html.Hr(),
+                            dbc.Row([
+                                dcc.Loading(
+                                    dbc.Button(
+                                        'Download Manual ROIs',
+                                        n_clicks = 0,
+                                        color = 'primary',
+                                        id = {'type': 'download-manual-butt','index': 0},
+                                        className = 'd-grid col-12 mx-auto'
+                                    )
+                                )
+                            ])
+                        ])
+                    ),
+                    label = 'Manual ROIs',
+                    tab_id = 'manual-rois'
+                )
+            ]
+        )
+
         extract_card = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
-                    html.P('Use this tab for exporting data from current views')
+                    html.H3('Use this tab for exporting data from current views')
                 ]),
                 html.Hr(),
-                dbc.Row([
-                    dbc.Label('Select data for download',html_for = 'data-select'),
-                    dcc.Dropdown(self.data_options,placeholder = 'Select Data for Download',multi=True,id='data-select')
-                ]),
                 dbc.Row([dbc.Label('Download options',html_for = 'data-options')]),
                 dbc.Row([
-                    html.Div(id='data-options')
+                    download_options,
+                    dcc.Download(
+                        id = {'type': 'download-data','index': 0}
+                    )
                 ])
-            ],style={'height': '30vh'})
-        ])
+            ])
+        ],style = {'height': '60vh'})
 
         # Test CLI tab
         # Accessing analyses/cli plugins for applying to data in FUSION
@@ -768,7 +901,7 @@ class LayoutHandler:
                         html.Div(
                             id = 'cell-select-div',
                             children=[
-                                dcc.Dropdown(options = cell_types_list, placeholder='Select Property for Overlaid Heatmap',id='cell-drop'),
+                                dcc.Dropdown(options = slide_properties, placeholder='Select Property for Overlaid Heatmap',id='cell-drop'),
                                 html.Div(id='cell-sub-select-div',children = [],style={'marginTop':'5px'})
                             ]
                         ),
@@ -4618,64 +4751,171 @@ class DownloadHandler:
         except OSError as e:
             print(f'OSError removing FUSION_Download directory: {e.strerror}')
 
-    def extract_annotations(self, slide, box_poly, format):
-        
-        # Extracting annotations from the current slide object
-        intersecting_annotations = wak.Annotation()
-        intersecting_annotations.add_names(slide.ftu_names)
-        width_scale = slide.x_scale
-        height_scale = slide.y_scale
-        for ftu in slide.ftu_names:
-        
-            # Finding which members of a specfied ftu group intersect with the provided box_poly
-            if not ftu=='Spots':
-                ftu_intersect_idx = [i for i in range(0,len(slide.ftu_polys[ftu])) if slide.ftu_polys[ftu][i].intersects(box_poly)]
-                intersecting_polys = [slide.ftu_polys[ftu][i] for i in ftu_intersect_idx]
-                intersecting_props = [slide.ftu_props[ftu][i] for i in ftu_intersect_idx]
+    def prep_annotations(self, ann_format: str, slide_info: dict, region: Union[str,list]):
+        """Prepare annotations for downloading in specific foramt
+
+        :param ann_format: Either XML, Histomics, or GeoJSON
+        :type ann_format: str
+        :param slide_info: Dictionary containing slide item id and annotation information
+        :type slide_info: dict
+        :param region: Either 'all' or a bounding box (map coordinates) containing region where annotations should be downloaded from
+        :type region: Union[str,list]
+        """
+
+        ann_folder = f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/'
+        ann_files = [i for i in os.listdir(ann_folder) if 'json' in i]
+        if len(ann_files)>0:
+            scales = slide_info["scale"]
+            x_scale = scales[0]
+            y_scale = scales[1]
+
+            # First getting combined geojson and then converting if necessary
+            combined_geojson = {
+                'type': 'FeatureCollection',
+                'features': []
+            }
+
+            if region=='all':
+                for ann in ann_files:
+
+                    with open(f'{ann_folder}/{ann}','r') as f:
+                        ann_geo = json.load(f)
+                        f.close()
+                    
+                    scaled_annotation = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale, c[2]), g), ann_geo)
+                    combined_geojson['features'].extend(scaled_annotation['features'])
+            
             else:
-                ftu_intersect_idx = [i for i in range(0,len(slide.spot_polys)) if slide.spot_polys[i].intersects(box_poly)]
-                intersecting_polys = [slide.spot_polys[i] for i in ftu_intersect_idx]
-                intersecting_props = [slide.spot_polys[i] for i in ftu_intersect_idx]
+                query_poly = box(region[0][1],region[0][1],region[1][1],region[1][0])
+                for ann in ann_files:
+                    with open(f'{ann_folder}/{ann}','r') as f:
+                        ann_geo = json.load(f)
+                        f.close()
 
-            if len(intersecting_polys)>0:
+                    geo_df = geopandas.GeoDataFrame.from_features(ann_geo['features'])
+                    intersect_ftus = geo_df[geo_df.intersects(query_poly)]
 
-                # Adjusting coordinates for polygons based on width and height scale
-                #scaled_polys = []
-                for i_p_idx,i_p in enumerate(intersecting_polys):
-                    og_coords = list(i_p.exterior.coords)
-                    scaled_coords = [(i[1]/height_scale,i[0]/width_scale) for i in og_coords]
-
-                    intersecting_annotations.add_shape(
-                        poly = Polygon(scaled_coords),
-                        box_crs=[0,0],
-                        structure = ftu,
-                        name = f'{ftu}_{ftu_intersect_idx[i_p_idx]}',
-                        properties=intersecting_props[i_p_idx]
-                    )
-
-        if format=='GeoJSON':
+                    scaled_annotation = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale, c[2]), g),json.loads(intersect_ftus.to_json()))
+                    combined_geojson['features'].extend(scaled_annotation['features'])
             
-            save_name = slide.slide_name.replace('.'+slide.slide_ext,'.geojson')
-            final_ann = wak.GeoJSON(intersecting_annotations,verbose=False).geojson
+            slide_name = slide_info["slide_info"]["name"]
+            if '.' in slide_name:
+                save_name = '.'.join(slide_name.split('.')[:-1])
+            else:
+                save_name = slide_name
 
-        elif format == 'Aperio XML':
-            
-            save_name = slide.slide_name.replace('.'+slide.slide_ext,'.xml')
+            if ann_format=='GeoJSON':
+                return_dict = {'content': json.dumps(combined_geojson), 'filename': f'{save_name}.geojson'}
+            elif ann_format=='Histomics':
 
-            final_ann = wak.AperioXML(intersecting_annotations,verbose=False).xml
-            final_ann = ET.tostring(final_ann,encoding='unicode',pretty_print=True)
+                histomics_ann = []
+                for ann_name in [i['annotation']['name'] for i in slide_info["annotations"]]:
+                    ann_features = [i for i in combined_geojson['features'] if i['properties']['name']==ann_name]
 
-        elif format == 'Histomics JSON':
-            
-            save_name = slide.slide_name.replace('.'+slide.slide_ext,'.json')
-            final_ann = wak.Histomics(intersecting_annotations,verbose=False).json       
+                    histomics_ann.append({
+                        "annotation": {
+                            "name": ann_name,
+                            "elements": [
+                                {
+                                    "type": "polyline",
+                                    "points": i['geometry']['coordinates'],
+                                    "user": i['properties']
+                                }
+                                for i in ann_features
+                            ]
+                        }
+                    })
 
-        return [{'filename': save_name, 'content':final_ann}]
+                return_dict = {'content': json.dumps(histomics_ann),'filename': f'{save_name}.json'}
+            elif ann_format=="XML":
+
+                wak_anns = wak.Annotation()
+                for ann_name in [i['annotation']['name'] for i in slide_info["annotations"]]:
+                    ann_features = [i for i in combined_geojson['features'] if i['properties']['name']==ann_name]
+                    
+                    for a in ann_features:
+                        wak_anns.add_shape(
+                            poly = shape(a["geometry"]),
+                            box_crs = [0,0],
+                            structure = ann_name
+                        )
+
+                final_ann = wak.AperioXML(wak_anns,verbose=False).xml
+
+                return_dict = {'content': ET.tostring(final_ann,encoding='unicode',pretty_print=True),'filename': f'{save_name}.xml'}
+
+        else:
+            return_dict = {'content': '','filename': ''}
+
+        return return_dict
     
-    """
-    def extract_metadata(self,slides, include_meta):
-    
-    """
+    def prep_cell(self, cell_format: str, slide_info:dict,region: Union[str,list]):
+        """Prepare cell composition information for a given region in a specific format
+
+        :param cell_format: Either CSV or XLSX (if CSV return multiple CSVs, if XLSX add sheets)
+        :type cell_format: str
+        :param slide_info: Dictionary containing slide item id and annotation info
+        :type slide_info: dict
+        :param region: Either 'all' or a bounding box containing desired region to extract cell info from
+        :type region: Union[str,list]
+        """
+        ann_folder = f'./assets/slide_annotations/{slide_info["slide_info"]["_id"]}/'
+        ann_files = [i for i in os.listdir(ann_folder) if 'json' in i]
+        
+        if len(ann_files)>0:
+            intermediate_path = './assets/download/FUSION_Download/'
+            if not os.path.exists(intermediate_path):
+                os.makedirs(intermediate_path)
+
+            for ann in ann_files:
+                save_name = [i for i in slide_info['annotations'] if i['_id']==ann.replace('.json','')]
+                if len(save_name)>0:
+                    ann_name = save_name[0]['annotation']['name']
+                    
+                    if not os.path.exists(intermediate_path+ann_name):
+                        os.makedirs(intermediate_path+ann_name)
+
+                    with open(f'{ann_folder}/{ann}','r') as f:
+                        ann_geo = json.load(f)
+                        f.close()
+
+                    if not region=='all':
+                        query_poly = box(*region)
+                        geo_df = geopandas.GeoDataFrame.from_features(ann_geo['features'])
+                        ann_geo = geo_df[geo_df.intersects(query_poly)]
+                        ann_geo = json.loads(ann_geo.to_json())
+
+                    main_cell_types_data = [i['properties']['Main_Cell_Types'] for i in ann_geo['features'] if 'Main_Cell_Types' in i['properties']]
+                    cell_subtypes_data = [i['properties']['Cell_Subtypes'] for i in ann_geo['features'] if 'Cell_Subtypes' in i['properties']]
+                    cell_states_data = [i['properties']['Cell_States'] for i in ann_geo['features'] if 'Cell_States' in i['properties']]
+
+                    if cell_format=='CSV':
+                        pd.DataFrame.from_records(main_cell_types_data).to_csv(intermediate_path+ann_name+'/Main_Cell_Types.csv')
+                        pd.DataFrame.from_records(cell_subtypes_data).to_csv(intermediate_path+ann_name+'/Cell_Subtypes.csv')
+                        pd.DataFrame.from_records(cell_states_data).to_csv(intermediate_path+ann_name+'/Cell_States.csv')
+                    
+                    elif cell_format=='XLSX':
+                        with pd.ExcelWriter(intermediate_path+ann_name+'/Cell_Composition.xlsx') as writer:
+                            pd.DataFrame.from_records(main_cell_types_data).to_excel(writer,sheet_name='Main_Cell_Types',engine='openpyxl')
+                            pd.DataFrame.from_records(cell_subtypes_data).to_excel(writer,sheet_name='Cell_Subtypes',engine='openpyxl')
+                            pd.DataFrame.from_records(cell_states_data).to_excel(writer,sheet_name='Cell_States',engine='openpyxl')
+
+
+            # Zipping data
+            # Writing temporary data to a zip file
+            with zipfile.ZipFile('./assets/download/FUSION_Download','w', zipfile.ZIP_DEFLATED) as zip:
+                for path,subdirs,files in os.walk('./assets/download/FUSION_Download/'):
+                    for name in files:
+                        zip.write(os.path.join(path,name))
+
+
+            try:
+                shutil.rmtree('./assets/FUSION_Download/')
+            except OSError as e:
+                print(f'OSError removing FUSION_Download directory: {e.strerror}')
+
+
+
     def extract_cell(self, intersecting_ftus, file_name):
         # Output here is a dictionary containing Main_Cell_Types and Cell_States for each FTU
         # Main_Cell_Types is a pd.DataFrame with a column for every cell type and an index of the FTU label

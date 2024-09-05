@@ -142,7 +142,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                                     return_feature = return_feature & false;
                                 }
                             } else {
-                                if (filter.range.includes(return_feature)) {
+                                if (filter.range.includes(test_val)) {
                                     return_feature = return_feature & true;
                                 } else {
                                     return_feature = return_feature & false;

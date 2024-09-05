@@ -297,7 +297,7 @@ class FUSION:
                                     return_feature = return_feature & false;
                                 }   
                             } else {
-                                if (filter.range.includes(return_feature)) {
+                                if (filter.range.includes(test_val)) {
                                     return_feature = return_feature & true;
                                 } else {
                                     return_feature = return_feature & false;
@@ -868,7 +868,6 @@ class FUSION:
         self.app.callback(
             Input({'type':'edit-control','index':ALL},'geojson'),
             [Output({'type': 'layer-control','index': ALL},'children'),
-             Output('data-select','options'),
              Output('user-annotations-div', 'children')],
             State('slide-info-store','data'),
             prevent_initial_call=True
@@ -884,22 +883,21 @@ class FUSION:
             prevent_initial_call=True
         )(self.add_marker_from_cluster)
 
-        # Updating options for downloads
-        self.app.callback(
-            Input('data-select','value'),
-            State('visualization-session-store','data'),
-            Output('data-options','children'),
-            prevent_initial_call = True
-        )(self.update_download_options)
-
         # Downloading data
         self.app.callback(
-            [Input({'type':'download-opts','index':MATCH},'value'),
-            Input({'type':'download-butt','index':MATCH},'n_clicks')],
-            Output({'type':'download-data','index':MATCH},'data'),
+            [
+                Input({'type':'download-annotations-butt','index':ALL},'n_clicks'),
+                Input({'type':'download-cell-butt','index':ALL},'n_clicks'),
+                Input({'type':'download-meta-butt','index': ALL},'n_clicks'),
+                Input({'type':'download-manual-butt','index': ALL},'n_clicks')
+            ],
+            Output({'type':'download-data','index':ALL},'data'),
             [
                 State('user-store','data'),
-                State('slide-info-store','data')
+                State('slide-map','bounds'),
+                State('slide-info-store','data'),
+                State({'type': 'download-ann-format','index': ALL},'value'),
+                State({'type': 'download-cell-format','index': ALL},'value')
             ],
             prevent_initial_call = True
         )(self.download_data)
@@ -4572,15 +4570,6 @@ class FUSION:
                                                             }
                                                         )
 
-                                if len(slide_info_store['manual_ROIs'])>0:
-                                    data_select_options = self.layout_handler.data_options
-                                    data_select_options[4]['disabled'] = False
-                                else:
-                                    data_select_options = self.layout_handler.data_options
-
-                                if len(slide_info_store['marked_FTUs'])>0:
-                                    data_select_options[3]['disabled'] = False
-
                                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
 
                                 current_overlays = self.slide_handler.generate_annotation_overlays(
@@ -4601,7 +4590,6 @@ class FUSION:
                                 slide_info_store['manual_ROIs'] = []
                                 slide_info_store['marked_FTUs'] = []
 
-                                data_select_options = self.layout_handler.data_options
                                 hex_color_key = self.update_hex_color_key(overlay_prop,slide_info_store)
                                 user_ann_tracking = no_update
 
@@ -4614,10 +4602,9 @@ class FUSION:
                                                                                     
                         else:
                             
-                            data_select_options = self.layout_handler.data_options
                             user_ann_tracking = no_update
 
-                    return [current_overlays], data_select_options, user_ann_tracking
+                    return [current_overlays], user_ann_tracking
                 else:
                     raise exceptions.PreventUpdate
             else:
@@ -4644,8 +4631,8 @@ class FUSION:
         # index != 0 == mark a specific sample in the current slide
 
         if ctx.triggered[0]['value']:
-            
-            if ctx.triggered_id[0]['index']==0:
+            print(ctx.triggered_id)
+            if ctx.triggered_id['index']==0:
                 # Add marker for all samples in the current slide
                 mark_geojson = {'type':'FeatureCollection','features':[]}
 
@@ -4717,247 +4704,56 @@ class FUSION:
         else:
             raise exceptions.PreventUpdate
 
-    def update_download_options(self,selected_data,vis_sess_store):
-        
-        print(f'selected_data: {selected_data}')
-        new_children = []
-        tab_labels = []
-
-        vis_sess_store = json.loads(vis_sess_store)
-
-        options_idx = 0
-        for d in selected_data:
-            if d == 'Annotations':
-                # After selecting annotations, users can select whether they want the annotations in
-                # JSON, GeoJSON, or Aperio XML format (eventually also OME-TIFF but that might be too large).
-                # They can also select whether they want the cell types/states info to be included with the annotations or
-                # saved as a spreadsheet with some row labels for each FTU.
-                child = dbc.Card([
-                    dbc.Label('Format for annotations:'),
-                    dbc.Row(
-                        dcc.RadioItems(
-                            [{'label':html.Div(['Aperio XML'],style = {'padding-left':'50px','padding-right':'10px'}),'value':'Aperio XML'},
-                             {'label':html.Div(['Histomics JSON'],style={'padding-left':'50px','padding-right':'10px'}),'value':'Histomics JSON'},
-                             {'label':html.Div(['GeoJSON'],style={'padding-left':'50px','padding-right':'10px'}),'value':'GeoJSON'}],
-                            value = 'Aperio XML',
-                            inline=True,
-                            id = {'type':'download-opts','index':options_idx},
-                            labelStyle={'display':'flex'}),
-                            style = {'marginBottom':'20px'}
-                        ),
-                    html.Hr(),
-                    html.B(),
-                    dcc.Loading(
-                        children = html.Div([
-                            dbc.Button('Download Annotations',color='primary',id={'type':'download-butt','index':options_idx}),
-                            dcc.Download(id={'type':'download-data','index':options_idx})
-                            ])
-                    )                    
-                ])
-
-                new_children.append(child)
-                tab_labels.append(d)
-                options_idx+=1
-
-            if d == 'Slide Metadata':
-                # After selecting slide metadata, users select which labels they want to keep slide-level metadata
-                # names of slides, disease label (if there), numbers and names of FTUs, tissue type, omics type, per-FTU properties
-
-                child = dbc.Card([
-                    dbc.Label('Select per-slide properties:'),
-                    dbc.Row(
-                        dcc.Dropdown(
-                            [i['name'] for i in vis_sess_store],
-                            [i['name'] for i in vis_sess_store],
-                            multi=True,
-                            id = {'type':'download-opts','index':options_idx} 
-                        ),style = {'marginBottom':'20px'}
-                    ),
-                    html.Hr(),
-                    html.B(),
-                    dcc.Loading(
-                        children = [
-                            dbc.Button('Download Slide Data',color='primary',id={'type':'download-butt','index':options_idx}),
-                            dcc.Download(id={'type':'download-data','index':options_idx})
-                        ]
-                    )                    
-                ])
-
-                new_children.append(child)
-                tab_labels.append(d)
-                options_idx+=1
-
-            if d == 'Cell Type and State':
-                # Outputting cell type and state info in different formats
-                cell_type_items = [
-                    {'label':html.Div(['CSV Files'],style = {'padding-left':'50px','padding-right':'10px'}),'value':'CSV Files'},
-                    {'label':html.Div(['Excel File'],style = {'padding-left':'50px','padding-right':'10px'}),'value':'Excel File'},
-                    {'label':html.Div(['RDS File'],style = {'padding-left':'50px','padding-right':'10px'}),'value':'RDS File','disabled':True}
-                ]
-                child = dbc.Card([
-                    dbc.Label('Format for Cell Types and States:'),
-                    dbc.Row(
-                        dcc.RadioItems(cell_type_items,
-                        value = 'CSV Files',
-                        inline=True,
-                        id = {'type':'download-opts','index':options_idx},
-                        labelStyle={'display':'flex'}),
-                        style = {'marginBottom':'20px'}
-                    ),
-                    html.Hr(),
-                    html.B(),
-                    dcc.Loading(
-                        children = [
-                            dbc.Button('Download Cell Type Data',color='primary',id={'type':'download-butt','index':options_idx}),
-                            dcc.Download(id={'type':'download-data','index':options_idx})
-                        ]
-                    )                    
-                ])
-
-                new_children.append(child)
-                tab_labels.append(d)
-                options_idx+=1
-
-            if d == 'Selected FTUs and Metadata':
-                # Saving selected FTU image regions and cell type/state info
-                include_opts = ['Image & Cell Type/State Information','Image Only','Cell Type/State Only']
-                select_ftu_list = []
-                for i in include_opts:
-                    select_ftu_list.append(
-                        {'label':html.Div([i],style={'padding-left':'50px','padding-right':'10px'}),'value':i}
-                    )          
-
-                child = dbc.Card([
-                    dbc.Label('Selected FTU Data to Save'),
-                    dbc.Row(
-                        dcc.RadioItems(select_ftu_list,
-                        include_opts[0],
-                        inline = True,
-                        id = {'type':'download-opts','index':options_idx},
-                        labelStyle={'display':'flex'}),
-                        style = {'marginBottom':'20px'}
-                    ),
-                    html.Hr(),
-                    html.B(),
-                    dcc.Loading(
-                        children = [
-                            dbc.Button('Download Selected FTUs Data',color='primary',id={'type':'download-butt','index':options_idx}),
-                            dcc.Download(id={'type':'download-data','index':options_idx})
-                        ]
-                    )
-                ])
-
-                new_children.append(child)
-                tab_labels.append(d)
-                options_idx+=1
-
-            if d == 'Manual ROIs':
-                # Saving manually generated ROIs and cell type/state info
-                include_opts = ['Image & Cell Type/State Information','Image Only','Cell Type/State Only']
-                select_ftu_list = []
-                for i in include_opts:
-                    select_ftu_list.append(
-                        {'label':html.Div([i],style={'padding-left':'50px','padding-right':'10px'}),'value':i+'_man'}
-                    )          
-
-                child = dbc.Card([
-                    dbc.Label('Manual ROI Data to Save'),
-                    dbc.Row(
-                        dcc.RadioItems(select_ftu_list,
-                        include_opts[0],
-                        inline=True,
-                        id = {'type':'download-opts','index':options_idx},
-                        labelStyle={'display':'flex'}),
-                        style = {'marginBottom':'20px'}
-                    ),
-                    html.Hr(),
-                    html.B(),
-                    dcc.Loading(
-                        children = [
-                            dbc.Button('Download Manual ROI Data', color = 'primary', id = {'type':'download-butt','index':options_idx}),
-                            dcc.Download(id={'type':'download-data','index':options_idx})
-                        ]
-                    )                    
-                ])    
-
-                new_children.append(child)
-                tab_labels.append(d)
-                options_idx+=1
-
-        tab_data = []
-        id_count = 0
-        for t,l in zip(new_children,tab_labels):
-            tab_data.append(dbc.Tab(t,label=l,id=f'tab_{id_count}'))
-            id_count+=1
-        
-        new_children = dbc.Tabs(tab_data,active_tab = 'tab_0')
-
-        return new_children
-
-    def download_data(self,options,button_click,user_store_data,slide_info_store):
+    def download_data(self,ann_click, cell_click, meta_click, manual_click, user_store_data,slide_bounds,slide_info_store_data, ann_format, cell_format):
         """
         Download data for external secondary analysis
         """
-        #TODO: Update procedure for downloading data (make it accessible from the whole visualization session)
-
         user_store_data = json.loads(user_store_data)
-        slide_info_store = json.loads(slide_info_store)
+        slide_info_store = json.loads(slide_info_store_data)
 
-        if not len(list(slide_info_store.keys()))==0:
-            if button_click:
-                if ctx.triggered_id['type'] == 'download-butt':
-                    # Download data has to be a dictionary with content and filename keys. The filename extension will vary
-                    try:
-                        os.remove('./assets/FUSION_Download.zip')
-                    except OSError:
-                        print('No previous download zip file to remove')
-
-                    print(f'Download type: {self.download_handler.what_data(options)}')
-                    download_type = self.download_handler.what_data(options)
-
-                    if download_type == 'annotations':
-                        #TODO: Update extracting annotations 
-                        download_list = self.download_handler.extract_annotations(
-                            self.wsi,
-                            self.current_slide_bounds,
-                            options
-                        )
-                    elif download_type == 'cell':
-                        #TODO: Update extracting cell information
-                        download_list = self.download_handler.extract_cell(
-                            self.current_ftus,
-                            options
-                        )
-                    elif download_type == 'manual_rois':
-                        #TODO: Find bounding box of all manually annotated regions for current slide, create new image,
-                        # get those files as well as annotations for manual ROIs
-                        download_list = self.download_handler.extract_manual_rois(
-                            self.wsi,
-                            options,
-                            user_store_data
-                        )
-
-                    elif download_type == 'select_ftus':
-                        #TODO: Find all manually selected FTUs, extract image bounding box of those regions,
-                        # create binary mask for each one, save along with cell data if needed
-                        download_list = []
-
-                    else:
-                        print('Working on it!')
-                        download_list = []
-
-                    self.download_handler.zip_data(download_list)
-                    
-                    return dcc.send_file('./assets/FUSION_Download.zip')
-
-                else:
-                    raise exceptions.PreventUpdate
-            else:
-                raise exceptions.PreventUpdate
-        else:
-            #TODO: Add some error handling here for if there isn't anything to save
-            # Or just make this tab not enabled
+        ann_format = get_pattern_matching_value(ann_format)
+        cell_format = get_pattern_matching_value(cell_format)
+        
+        if not any([i['value'] for i in ctx.triggered]) or len(list(slide_info_store.keys()))==0:
             raise exceptions.PreventUpdate
+        
+        if ctx.triggered_id['type']=='download-annotations-butt':
+            if ctx.triggered_id['index']==0:
+                return_dict = self.download_handler.prep_annotations(ann_format,slide_info_store,'all')
+            else:
+                current_region = slide_bounds
+
+                return_dict = self.download_handler.prep_annotations(ann_format,slide_info_store,current_region)
+
+            return [return_dict]
+
+        elif ctx.triggered_id['type']=='download-cell-butt':
+            if ctx.triggered_id['index']==0:
+                # Grabbing cell info for everywhere
+                return_dict = self.download_handler.prep_cell(cell_format,slide_info_store,'all')
+            else:
+                # Grabbing current region
+                current_region = slide_bounds
+                return_dict = self.download_handler.prep_cell(cell_format, slide_info_store, current_region)
+
+            return [dcc.send_file(path = './assets/download/FUSION_Download.zip')]
+
+        elif ctx.triggered_id['type']=='download-meta-butt':
+            print(f'Downloading metadata')
+
+            slide_metadata = json.dumps(slide_info_store['slide_info']['meta'])
+
+            return [dict(content = slide_metadata, filename = f"{slide_info_store['slide_info']['name']}_Metadata.json")]
+        
+        elif ctx.triggered_id['type']=='download-manual-butt':
+            print(f'Downloading manual rois')
+            print(f'found: {len(slide_info_store["manual_ROIs"])} manual rois')
+            if len(slide_info_store['manual_ROIs'])==0:
+                raise exceptions.PreventUpdate
+            else:
+
+                manual_roi_geojson = json.dumps(slide_info_store['manual_ROIs']['geojson'])
+                return [dict(content = manual_roi_geojson,filename = f'{slide_info_store["slide_info"]["name"]}_manual_rois.geojson')]
 
     def run_analysis(self,cli_name,cli_butt,slide_info_store):
 
@@ -7645,7 +7441,7 @@ class FUSION:
         session_ftu_progress_label = [no_update]*len(ctx.outputs_list[7])
 
         user_store_data = json.loads(user_store_data)
-        viewport_store_data = json.loads(viewport_store_data)
+        viewport_store_data = json.loads(get_pattern_matching_value(viewport_store_data))
         slide_info_store = json.loads(slide_info_store)
 
         line_slide = get_pattern_matching_value(line_slide)
