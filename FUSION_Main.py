@@ -1076,7 +1076,8 @@ class FUSION:
                 State({'type':'new-annotation-label','index':ALL},'value'),
                 State({'type':'new-annotation-user','index':ALL},'value'),
                 State({'type':'new-user-type','index':ALL},'value'),
-                State('user-store','data')
+                State('user-store','data'),
+                State('slide-info-store','data')
             ],
             prevent_initial_call = True
         )(self.update_annotation_session)
@@ -7967,7 +7968,10 @@ class FUSION:
                     total += len(files)
                 
                 # Compare with total needed
-                session_files = user_data_store['current_ann_session']['session_progress']
+                if not 'session_progress' in user_data_store['current_ann_session']:
+                    session_files, current_ann_session = self.dataset_handler.get_annotation_session_progress(user_data_store['current_ann_session']['name'],user_data_store)
+                else:
+                    session_files = user_data_store['current_ann_session']['session_progress']
                 n_session_files = 2*session_files['annotations'] if session_files['labels']==0 else session_files['labels']
 
                 progress_val = np.minimum(int(100*(total/n_session_files)),100)

@@ -4880,14 +4880,14 @@ class DownloadHandler:
                         f.close()
 
                     if not region=='all':
-                        query_poly = box(*region)
+                        query_poly = box(region[0][1],region[0][1],region[1][1],region[1][0])
                         geo_df = geopandas.GeoDataFrame.from_features(ann_geo['features'])
                         ann_geo = geo_df[geo_df.intersects(query_poly)]
                         ann_geo = json.loads(ann_geo.to_json())
 
-                    main_cell_types_data = [i['properties']['Main_Cell_Types'] for i in ann_geo['features'] if 'Main_Cell_Types' in i['properties']]
-                    cell_subtypes_data = [i['properties']['Cell_Subtypes'] for i in ann_geo['features'] if 'Cell_Subtypes' in i['properties']]
-                    cell_states_data = [i['properties']['Cell_States'] for i in ann_geo['features'] if 'Cell_States' in i['properties']]
+                    main_cell_types_data = [i['properties']['user']['Main_Cell_Types'] for i in ann_geo['features'] if 'Main_Cell_Types' in i['properties']['user']]
+                    cell_subtypes_data = [i['properties']['user']['Cell_Subtypes'] for i in ann_geo['features'] if 'Cell_Subtypes' in i['properties']['user']]
+                    cell_states_data = [i['properties']['user']['Cell_States'] for i in ann_geo['features'] if 'Cell_States' in i['properties']['user']]
 
                     if cell_format=='CSV':
                         pd.DataFrame.from_records(main_cell_types_data).to_csv(intermediate_path+ann_name+'/Main_Cell_Types.csv')
@@ -4903,14 +4903,14 @@ class DownloadHandler:
 
             # Zipping data
             # Writing temporary data to a zip file
-            with zipfile.ZipFile('./assets/download/FUSION_Download','w', zipfile.ZIP_DEFLATED) as zip:
+            with zipfile.ZipFile('./assets/download/FUSION_Download.zip','w', zipfile.ZIP_DEFLATED) as zip:
                 for path,subdirs,files in os.walk('./assets/download/FUSION_Download/'):
                     for name in files:
                         zip.write(os.path.join(path,name))
 
 
             try:
-                shutil.rmtree('./assets/FUSION_Download/')
+                shutil.rmtree('./assets/download/FUSION_Download/')
             except OSError as e:
                 print(f'OSError removing FUSION_Download directory: {e.strerror}')
 
