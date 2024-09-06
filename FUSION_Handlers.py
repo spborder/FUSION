@@ -4786,7 +4786,7 @@ class DownloadHandler:
                     combined_geojson['features'].extend(scaled_annotation['features'])
             
             else:
-                query_poly = box(region[0][1],region[0][1],region[1][1],region[1][0])
+                query_poly = box(region[0][1],region[0][0],region[1][1],region[1][0])
                 for ann in ann_files:
                     with open(f'{ann_folder}/{ann}','r') as f:
                         ann_geo = json.load(f)
@@ -4880,14 +4880,16 @@ class DownloadHandler:
                         f.close()
 
                     if not region=='all':
-                        query_poly = box(region[0][1],region[0][1],region[1][1],region[1][0])
+                        query_poly = box(region[0][1],region[0][0],region[1][1],region[1][0])
                         geo_df = geopandas.GeoDataFrame.from_features(ann_geo['features'])
                         ann_geo = geo_df[geo_df.intersects(query_poly)]
                         ann_geo = json.loads(ann_geo.to_json())
 
+
                     main_cell_types_data = [i['properties']['user']['Main_Cell_Types'] for i in ann_geo['features'] if 'Main_Cell_Types' in i['properties']['user']]
                     cell_subtypes_data = [i['properties']['user']['Cell_Subtypes'] for i in ann_geo['features'] if 'Cell_Subtypes' in i['properties']['user']]
                     cell_states_data = [i['properties']['user']['Cell_States'] for i in ann_geo['features'] if 'Cell_States' in i['properties']['user']]
+
 
                     if cell_format=='CSV':
                         pd.DataFrame.from_records(main_cell_types_data).to_csv(intermediate_path+ann_name+'/Main_Cell_Types.csv')
