@@ -946,7 +946,6 @@ class FUSION:
              Output('label-select','value'),
              Output('filter-select-tree','data'),
              Output('download-plot-data-div','style'),
-             Output('plugin-ga-track', 'children'),
              Output('cluster-store','data')],
             [Input('tools-tabs','active_tab'),
              Input({'type':'get-clustering-butt','index':ALL},'n_clicks')],
@@ -6264,6 +6263,33 @@ class FUSION:
 
         return output_list
 
+    def populate_cluster_tab(self, active_tab, cluster_butt, cluster_data_store, vis_sess_store, user_data_store):
+
+        cluster_data_store = json.loads(cluster_data_store)
+        vis_sess_store = json.loads(vis_sess_store)
+        user_data_store = json.loads(user_data_store)
+
+        get_data_div_children = dbc.Alert(
+            'Data Aligned!',
+            color = 'success',
+            dismissable = True,
+            is_open = True,
+            className='d-grid col-12 mx-auto'
+        )
+
+        if active_tab == 'clustering-tab':
+            if len(list(cluster_data_store.keys()))==0:
+                current_ids = [i['_id'] for i in vis_sess_store]
+                
+                feature_select_data, feature_keys, label_select_options, filter_keys, filter_select_data = self.dataset_handler.get_plottable_keys(current_ids)
+                label_select_value = []
+                label_select_disable = False
+                download_plot_data_style = {'display':'inline-block'}
+
+            return get_data_div_children, feature_select_data, label_select_disable, label_select_options, label_select_value, filter_select_data, download_plot_data_style, cluster_data_store
+        else:
+            raise exceptions.PreventUpdate
+
     def populate_cluster_tab(self,active_tab, cluster_butt,cluster_data_store,vis_sess_store,user_data_store):
 
         cluster_data_store = json.loads(cluster_data_store)
@@ -6352,20 +6378,21 @@ class FUSION:
             else:
 
                 # Retrieving clustering data
-                data_getting_response = self.dataset_handler.get_collection_annotation_meta([i['_id'] for i in vis_sess_store if i['included']])
+                #data_getting_response = self.dataset_handler.get_collection_annotation_meta([i['_id'] for i in vis_sess_store if i['included']])
 
                 used_get_cluster_data_plugin = True
             
                 self.dataset_handler.generate_feature_dict([i for i in vis_sess_store if i['included']])
                 # Monitoring getting the data:
-                data_get_status = 0
-                while data_get_status<3:
-                    data_status, data_log = self.dataset_handler.get_job_status(data_getting_response['_id'])
-                    data_get_status=data_status
-                    print(f'data_get_status: {data_get_status}')
-                    time.sleep(1)
+                #data_get_status = 0
+                #while data_get_status<3:
+                #    data_status, data_log = self.dataset_handler.get_job_status(data_getting_response['_id'])
+                #    data_get_status=data_status
+                #    print(f'data_get_status: {data_get_status}')
+                #    time.sleep(1)
 
-                cluster_data_store['clustering_data'] = self.dataset_handler.load_clustering_data(user_data_store).to_dict('index')
+                #cluster_data_store['clustering_data'] = self.dataset_handler.load_clustering_data(user_data_store).to_dict('index')
+                cluster_data_store['clustering_data'] = self.dataset_handler.get_clustering_data([i['_id'] for i in vis_sess_store if i['included']]).to_dict('index')
 
                 get_data_div_children = dbc.Alert(
                     'Clustering data aligned!',
