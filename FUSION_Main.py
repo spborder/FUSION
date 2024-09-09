@@ -401,7 +401,7 @@ class FUSION:
                 else:
                     # Checking if there was any new slides added via uploader (or just added externally)
                     #self.dataset_handler.update_folder_structure(user_data['login'])
-                    self.layout_handler.gen_builder_layout(self.dataset_handler,user_data,available_datasets_store)
+                    available_datasets_store = self.layout_handler.gen_builder_layout(self.dataset_handler,user_data,available_datasets_store)
                     container_content = self.layout_handler.layout_dict[pathname]
 
             else:
@@ -8121,7 +8121,7 @@ def app(*args):
     layout_handler = LayoutHandler()
     layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides, slide_dataset)
     layout_handler.gen_vis_layout(GeneHandler(),None)
-    layout_handler.gen_builder_layout(dataset_handler,initial_user_info, None)
+    _ = layout_handler.gen_builder_layout(dataset_handler,initial_user_info, None)
     layout_handler.gen_uploader_layout()
 
     download_handler = DownloadHandler(dataset_handler)

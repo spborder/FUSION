@@ -2686,6 +2686,8 @@ class LayoutHandler:
         self.layout_dict['dataset-builder'] = builder_layout
         self.description_dict['dataset-builder'] = builder_description
 
+        return slide_datasets
+
     def gen_uploader_prep_type(self,upload_type,components_values):
 
         # Getting specific layouts for different types of pre-processing.
