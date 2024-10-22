@@ -72,7 +72,7 @@ In collaboration with:
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 
-## Installation:
+## Running from source:
 
 ### Step 1: *Digital Slide Archive (DSA)*
 *FUSION* is run in conjunction with a running instance of [Digital Slide Archive (DSA)](https://github.com/DigitalSlideArchive/digital_slide_archive). For more information on how to initialize DSA, see [here](https://github.com/DigitalSlideArchive/digital_slide_archive/tree/master/devops/dsa).
@@ -113,6 +113,17 @@ $(venv_name) ~/ export DSA_URL="http://dsa_url:8080/api/v1"
 ```bash
 $(venv_name) ~/ python install_plugins.py
 ```
+
+- Now you're good to go! Start up *FUSION* by running the main script:
+
+```bash
+$(venv_name) ~/ python FUSION_Main.py
+```
+
+Then open a browser to [http://localhost:8000](http://localhost:8000) to view the running instance.
+
+## Running from *Docker*:
+See the included Dockerfile (*Dockerfile.dockerfile*) and modify as needed to point to your preferred instance of *DSA*.
 
 
 
