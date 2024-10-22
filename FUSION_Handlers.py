@@ -46,7 +46,6 @@ import dash_cytoscape as cyto
 import dash_leaflet as dl
 import dash_mantine_components as dmc
 import dash_treeview_antd as dta
-import dash_draggable as drag
 import dash_breakpoints as dbp
 
 from dash_extensions.enrich import html
@@ -1096,64 +1095,22 @@ class LayoutHandler:
             )
         ]
 
-        # Separately outputting the functional components of the application for later reference when switching pages
-        use_drag_layout = False
-        
-        if use_drag_layout:
-            vis_content = [
-                dbc.Row(
-                    id="app-content",
-                    children=[
-                        html.Div(
-                            children = [
-                                drag.ResponsiveGridLayout(
-                                    children = [
-                                        dbc.Col(
-                                            wsi_view,
-                                            style = {
-                                                'min-height':"0",
-                                                "flex-grow":"1",
-                                                'height':'100%'
-                                            }),
-                                        dbc.Col(
-                                            tools,
-                                            style = {
-                                                "min-height":"0",
-                                                "flex-grow":"1",
-                                                'height':'100%'
-                                            })
-                                    ],
-                                    style = {
-                                        'height':'100%',
-                                        'width':'100%',
-                                        'display':'flex',
-                                        'flex-direction':'row',
-                                        'flex-grow':'0'
-                                    }
-                                )
-                            ]
-                        )
-                    ],style={"height":"90vh",'marginBottom':'10px'}
-                )
-            ]
-
-        else:
-            vis_content = [
-                dbc.Row(
-                    id="app-content",
-                    children=[
-                        dbc.Col(
-                            wsi_view,
-                            md = 6
-                        ),
-                        dbc.Col(
-                            tools,
-                            md = 6
-                        )
-                    ],
-                    style={"height":"90vh",'marginBottom':'10px'}
-                )
-            ]
+        vis_content = [
+            dbc.Row(
+                id="app-content",
+                children=[
+                    dbc.Col(
+                        wsi_view,
+                        md = 6
+                    ),
+                    dbc.Col(
+                        tools,
+                        md = 6
+                    )
+                ],
+                style={"height":"90vh",'marginBottom':'10px'}
+            )
+        ]
 
         self.current_vis_layout = vis_content
         self.validation_layout.append(vis_content)
@@ -3907,7 +3864,7 @@ class GirderHandler:
             collection_items = []
             try:
                 if not c["_id"]==user_public_folder["_id"]:
-                        collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'collection'})
+                    collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'collection'})
                 else:
                     collection_items = self.gc.get(f'/resource/{c["_id"]}/items',parameters={'limit': 1000,'type':'folder'})
             except json.JSONDecodeError:
