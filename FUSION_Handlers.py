@@ -4379,7 +4379,6 @@ class GirderHandler:
             ]
         }
 
-
     def load_clustering_data(self,user_info):
         # Grabbing feature clustering info from user's public folder
         try:
@@ -4424,7 +4423,7 @@ class GirderHandler:
         unique_plottable_keys = []
         unique_plottable_titles = []
         for item in item_ids:
-            plottable_data_info = self.gc.get(
+            plottable_data_info = self.gc.post(
                 f'/annotation/item/{item}',
                 parameters = {
                     'adjacentItems': False,
@@ -4525,13 +4524,7 @@ class GirderHandler:
         :param annotations: If only getting data for a subset of annotations, pass their names here (id will vary per item)
         :type annotations: list
         """
-
-
-
-
-
-
-
+        pass
 
 
     def save_to_user_folder(self,save_object, user_info, output_path = None):

@@ -1310,7 +1310,8 @@ class FUSION:
             [
                 Output('post-segment-row','style'),
                 Output('structure-type','disabled'),
-                Output({'type':'prep-div','index':ALL},'children')
+                Output({'type':'prep-div','index':ALL},'children'),
+                Output('user-store','data')
             ],
             [
                 Input({'type':'seg-log-interval','index':ALL},'disabled'),
@@ -1328,22 +1329,29 @@ class FUSION:
 
         # Updating sub-compartment segmentation
         self.app.callback(
-            [Input({'type':'ftu-select','index':ALL},'value'),
-             Input({'type':'prev-butt','index':ALL},'n_clicks'),
-             Input({'type':'next-butt','index':ALL},'n_clicks'),
-             Input({'type':'go-to-feat','index':ALL},'n_clicks'),
-             Input({'type':'ex-ftu-view','index':ALL},'value'),
-             Input({'type':'ex-ftu-slider','index':ALL},'value'),
-             Input({'type':'sub-thresh-slider','index':ALL},'value'),
-             Input({'type':'sub-comp-method','index':ALL},'value')],
-             [State({'type':'go-to-feat','index':ALL},'disabled'),
-              State('user-store','data')],
-             [Output({'type':'ex-ftu-img','index':ALL},'figure'),
-              Output({'type':'sub-thresh-slider','index':ALL},'marks'),
-              Output({'type':'feature-items','index':ALL},'children'),
-              Output({'type':'sub-thresh-slider','index':ALL},'disabled'),
-              Output({'type':'sub-comp-method','index':ALL},'disabled'),
-              Output({'type':'go-to-feat','index':ALL},'disabled')],
+            [
+                Input({'type':'ftu-select','index':ALL},'value'),
+                Input({'type':'prev-butt','index':ALL},'n_clicks'),
+                Input({'type':'next-butt','index':ALL},'n_clicks'),
+                Input({'type':'go-to-feat','index':ALL},'n_clicks'),
+                Input({'type':'ex-ftu-view','index':ALL},'value'),
+                Input({'type':'ex-ftu-slider','index':ALL},'value'),
+                Input({'type':'sub-thresh-slider','index':ALL},'value'),
+                Input({'type':'sub-comp-method','index':ALL},'value')
+             ],
+             [
+                State({'type':'go-to-feat','index':ALL},'disabled'),
+                State('user-store','data')
+            ],
+            [
+                Output({'type':'ex-ftu-img','index':ALL},'figure'),
+                Output({'type':'sub-thresh-slider','index':ALL},'marks'),
+                Output({'type':'feature-items','index':ALL},'children'),
+                Output({'type':'sub-thresh-slider','index':ALL},'disabled'),
+                Output({'type':'sub-comp-method','index':ALL},'disabled'),
+                Output({'type':'go-to-feat','index':ALL},'disabled'),
+                Output('user-store','data')
+            ],
             prevent_initial_call = True
         )(self.update_sub_compartment)
 
@@ -3445,7 +3453,6 @@ class FUSION:
             visualizable_properties_list = self.slide_handler.get_properties_list(slide_info_store)
 
             if slide_info_store['slide_type']=='CODEX':
-
                 # Enabling cell annotation tab
                 cell_annotation_tab_disable = False
                 slide_tile_layer = []
@@ -5848,20 +5855,20 @@ class FUSION:
 
             if user_data_store['upload_type'] == 'Regular':
                 # Extracting annotations and initilaiz sub-compartment mask
-                self.upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
+                upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
 
                 # Running post-segmentation worfklow from Prepper
-                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id'],self.upload_annotations)
+                feature_extract_ftus, layer_ann = self.prep_handler.post_segmentation(user_data_store['upload_wsi_id'],upload_annotations)
 
             elif user_data_store['upload_type'] == 'Visium':
                 # Extracting annotations and initial sub-compartment mask
-                self.upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
+                upload_annotations = self.dataset_handler.get_annotations(user_data_store['upload_wsi_id'])
                 
                 # Running post-segmentation workflowfrom VisiumPrep
-                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(
+                feature_extract_ftus, layer_ann = self.prep_handler.post_segmentation(
                     user_data_store['upload_wsi_id'], 
                     user_data_store['upload_omics_id'], 
-                    self.upload_annotations,
+                    upload_annotations,
                     organ,
                     gene_method,
                     gene_n,
@@ -5876,36 +5883,36 @@ class FUSION:
             elif user_data_store['upload_type'] == 'Xenium':
 
                 # Running post-segmentation workflow from XeniumPrep
-                self.feature_extract_ftus, self.layer_ann = self.prep_handler.post_segmentation(
+                feature_extract_ftus, layer_ann = self.prep_handler.post_segmentation(
                     user_data_store['upload_wsi_id']
                 )
 
             # Populate with default sub-compartment parameters
-            self.sub_compartment_params = self.prep_handler.initial_segmentation_parameters
+            sub_compartment_params = self.prep_handler.initial_segmentation_parameters
 
             sub_comp_method = 'Manual'
 
             if user_data_store['upload_type'] in ['Visium','Regular','Xenium']:
 
-                if not self.layer_ann is None:
+                if not layer_ann is None:
 
-                    ftu_value = self.feature_extract_ftus[self.layer_ann['current_layer']]
-                    image, mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_data_store,self.upload_annotations, self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
+                    ftu_value = feature_extract_ftus[layer_ann['current_layer']]
+                    image, mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_data_store,upload_annotations, layer_ann['current_layer'],layer_ann['current_annotation'])
 
-                    self.layer_ann['current_image'] = image
-                    self.layer_ann['current_mask'] = mask
+                    #layer_ann['current_image'] = image
+                    #layer_ann['current_mask'] = mask
  
                 else:
                     ftu_value = ''
                     image = np.ones((10,10))
 
                 prep_values = {
-                    'ftu_names': self.feature_extract_ftus,
+                    'ftu_names': feature_extract_ftus,
                     'image': image
                 }
 
             elif user_data_store['upload_type'] == 'CODEX':
-                self.feature_extract_ftus = None
+                feature_extract_ftus = None
 
                 prep_values = {
                     'frames': frame_names
@@ -5915,13 +5922,28 @@ class FUSION:
             # Generating upload preprocessing row
             prep_row = self.layout_handler.gen_uploader_prep_type(user_data_store['upload_type'],prep_values)
                 
-            return sub_comp_style, disable_organ, [prep_row]
+            user_data_store['upload_annotations'] = upload_annotations
+            user_data_store['feature_extract_ftus'] = feature_extract_ftus
+            user_data_store['layer_ann'] = layer_ann
+            user_data_store['sub_compartment_params'] = sub_compartment_params
+
+            user_data_store = json.dumps(user_data_store)
+
+            return sub_comp_style, disable_organ, [prep_row], user_data_store
         else:
-            return no_update, no_update, [no_update]
+            raise exceptions.PreventUpdate
     
     def update_sub_compartment(self,select_ftu,prev,next,go_to_feat,ex_ftu_view,ftu_slider,thresh_slider,sub_method,go_to_feat_state,user_data_store):
 
         user_data_store = json.loads(user_data_store)
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        layer_ann = user_data_store['layer_ann']
+        sub_compartment_params = user_data_store['sub_compartment_params']
+        feature_extract_ftus = user_data_store['feature_extract_ftus']
+        upload_annotations = user_data_store['upload_annotations']
 
         new_ex_ftu = [go.Figure()]
         feature_extract_children = [[]]
@@ -5943,54 +5965,56 @@ class FUSION:
         except KeyError:
             ctx_triggered_id = ctx.triggered_id
 
-        if not self.layer_ann is None:
+        if not layer_ann is None:
 
             slider_marks = [{
                 val:{'label':f'{sub_comp["name"]}: {val}','style':{'color':sub_comp["marks_color"]}}
-                for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
+                for val,sub_comp in zip(thresh_slider[::-1],sub_compartment_params)
             }]
 
-            for idx,ftu,thresh in zip(list(range(len(self.sub_compartment_params))),self.sub_compartment_params,thresh_slider[::-1]):
+            for idx,ftu,thresh in zip(list(range(len(sub_compartment_params))),sub_compartment_params,thresh_slider[::-1]):
                 ftu['threshold'] = thresh
-                self.sub_compartment_params[idx] = ftu
+                sub_compartment_params[idx] = ftu
+
+            user_data_store['sub_compartment_params'] = sub_compartment_params
 
             if ctx_triggered_id=='next-butt':
                 # Moving to next annotation in current layer
-                self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+                layer_ann['previous_annotation'] = layer_ann['current_annotation']
 
-                if self.layer_ann['current_annotation']+1>=self.layer_ann['max_layers'][self.layer_ann['current_layer']]:
-                    self.layer_ann['current_annotation'] = 0
+                if layer_ann['current_annotation']+1>=layer_ann['max_layers'][layer_ann['current_layer']]:
+                    layer_ann['current_annotation'] = 0
                 else:
-                    self.layer_ann['current_annotation'] += 1
+                    layer_ann['current_annotation'] += 1
 
             elif ctx_triggered_id=='prev-butt':
                 # Moving back to previous annotation in current layer
-                self.layer_ann['previous_annotation'] = self.layer_ann['current_annotation']
+                layer_ann['previous_annotation'] = layer_ann['current_annotation']
 
-                if self.layer_ann['current_annotation']==0:
-                    self.layer_ann['current_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]-1
+                if layer_ann['current_annotation']==0:
+                    layer_ann['current_annotation'] = layer_ann['max_layers'][layer_ann['current_layer']]-1
                 else:
-                    self.layer_ann['current_annotation'] -= 1
+                    layer_ann['current_annotation'] -= 1
             
             elif ctx_triggered_id=='ftu-select':
                 # Moving to next annotation layer, restarting annotation count
                 if type(select_ftu)==dict:
-                    self.layer_ann['current_layer']=select_ftu['value']
+                    layer_ann['current_layer']=select_ftu['value']
                 elif type(select_ftu)==int:
-                    self.layer_ann['current_layer'] = select_ftu
+                    layer_ann['current_layer'] = select_ftu
 
-                self.layer_ann['current_annotation'] = 0
-                self.layer_ann['previous_annotation'] = self.layer_ann['max_layers'][self.layer_ann['current_layer']]
+                layer_ann['current_annotation'] = 0
+                layer_ann['previous_annotation'] = layer_ann['max_layers'][layer_ann['current_layer']]
+
+            user_data_store['layer_ann'] = layer_ann
 
             if ctx_triggered_id not in ['go-to-feat','ex-ftu-slider','sub-comp-method']:
                 
-                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_data_store,self.upload_annotations,self.layer_ann['current_layer'],self.layer_ann['current_annotation'])
-                self.layer_ann['current_image'] = new_image
-                self.layer_ann['current_mask'] = new_mask
+                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_data_store,upload_annotations,layer_ann['current_layer'],layer_ann['current_annotation'])
 
             if ctx_triggered_id not in ['go-to-feat']:
-                
-                sub_compartment_image = self.prep_handler.sub_segment_image(self.layer_ann['current_image'],self.layer_ann['current_mask'],self.sub_compartment_params,ex_ftu_view,ftu_slider)
+                new_image, new_mask = self.prep_handler.get_annotation_image_mask(user_data_store['upload_wsi_id'],user_data_store,upload_annotations,layer_ann['current_layer'],layer_ann['current_annotation'])
+                sub_compartment_image = self.prep_handler.sub_segment_image(new_image,new_mask,sub_compartment_params,ex_ftu_view,ftu_slider)
 
                 new_ex_ftu = [go.Figure(
                     data = px.imshow(sub_compartment_image)['data'],
@@ -6006,45 +6030,44 @@ class FUSION:
                     layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
                 )]
 
-                feature_extract_children = [self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)]
+                feature_extract_children = [self.prep_handler.gen_feat_extract_card(feature_extract_ftus)]
 
             if go_to_feat_state[0]:
-                return new_ex_ftu, slider_marks, [no_update], disable_slider, disable_method, go_to_feat_disabled
+                return new_ex_ftu, slider_marks, [no_update], disable_slider, disable_method, go_to_feat_disabled, json.dumps(user_data_store)
             else:
-                return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
+                return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled, json.dumps(user_data_store)
         else:
             slider_marks = [{
                 val:{'label':f'{sub_comp["name"]}: {val}','style':{'color':sub_comp["marks_color"]}}
-                for val,sub_comp in zip(thresh_slider[::-1],self.sub_compartment_params)
+                for val,sub_comp in zip(thresh_slider[::-1],sub_compartment_params)
             }]
             
             go_to_feat_disabled = [True]
             disable_slider = [True]
             disable_method = [True]
             new_ex_ftu = [go.Figure()]
-            feature_extract_children = [self.prep_handler.gen_feat_extract_card(self.feature_extract_ftus)]
+            feature_extract_children = [self.prep_handler.gen_feat_extract_card(feature_extract_ftus)]
 
-            return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled
+            return new_ex_ftu, slider_marks, feature_extract_children, disable_slider, disable_method, go_to_feat_disabled, json.dumps(user_data_store)
 
     def run_feature_extraction(self,feat_butt,skip_feat,include_ftus,include_features,user_data_store):
 
         user_data_store = json.loads(user_data_store)
-
-        if ctx.triggered_id is None:
-            raise exceptions.PreventUpdate
+        sub_compartment_params = user_data_store['sub_compartment_params']
+        feature_extract_ftus = user_data_store['feature_extract_ftus']
         
-        if not ctx.triggered['value']:
+        if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
         if ctx.triggered_id['type']=='start-feat':
             # Prepping input arguments to feature extraction
             include_ftus = get_pattern_matching_value(include_ftus)
-            include_ftus = [self.feature_extract_ftus[i]['label'].split(' (')[0] for i in include_ftus]
+            include_ftus = [feature_extract_ftus[i]['label'].split(' (')[0] for i in include_ftus]
             include_features = get_pattern_matching_value(include_features)
             include_features = ','.join(include_features)
-            ignore_ftus = ','.join([i['label'].split(' (')[0] for i in self.feature_extract_ftus if not i['label'].split(' (')[0] in include_ftus])
+            ignore_ftus = ','.join([i['label'].split(' (')[0] for i in feature_extract_ftus if not i['label'].split(' (')[0] in include_ftus])
 
-            user_data_store['feat_ext_job'] = self.prep_handler.run_feature_extraction(user_data_store['upload_wsi_id'],self.sub_compartment_params,include_features,ignore_ftus)
+            user_data_store['feat_ext_job'] = self.prep_handler.run_feature_extraction(user_data_store['upload_wsi_id'],sub_compartment_params,include_features,ignore_ftus)
 
             # Returning a dcc.Interval object to check logs for feature extraction
             feat_log_interval = [
@@ -6082,7 +6105,7 @@ class FUSION:
 
         user_data_store = json.loads(user_data_store)
 
-        if not ctx.triggered_id['value']:
+        if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         # Updating logs for feature extraction job, disabling when the job is done
@@ -6263,6 +6286,7 @@ class FUSION:
 
         return output_list
 
+    """
     def populate_cluster_tab(self, active_tab, cluster_butt, cluster_data_store, vis_sess_store, user_data_store):
 
         cluster_data_store = json.loads(cluster_data_store)
@@ -6289,7 +6313,7 @@ class FUSION:
             return get_data_div_children, feature_select_data, label_select_disable, label_select_options, label_select_value, filter_select_data, download_plot_data_style, cluster_data_store
         else:
             raise exceptions.PreventUpdate
-
+    """
     def populate_cluster_tab(self,active_tab, cluster_butt,cluster_data_store,vis_sess_store,user_data_store):
 
         cluster_data_store = json.loads(cluster_data_store)
