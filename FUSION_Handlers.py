@@ -3199,7 +3199,7 @@ class LayoutHandler:
         self.layout_dict['welcome'] = welcome_layout
         self.description_dict['welcome'] = welcome_description
 
-    def gen_initial_layout(self,slide_names,initial_user,default_slides,available_datasets):
+    def gen_initial_layout(self,slide_names,initial_user,default_slides,available_datasets, include_usability):
 
         # welcome layout after initialization and information and buttons to go to other areas
         # Header
@@ -3219,28 +3219,6 @@ class LayoutHandler:
                         dbc.NavbarToggler(id='navbar-toggler'),
                         dbc.Collapse(
                             dbc.Nav([
-                                dbc.NavItem(
-                                    dbc.Button(
-                                        'User Survey',
-                                        id = 'user-survey-button',
-                                        outline = True,
-                                        color = 'primary',
-                                        href = 'https://ufl.qualtrics.com/jfe/form/SV_1A0CcKNLhTnFCHI',
-                                        target='_blank',
-                                        style = {'textTransform':'none'}
-                                    )
-                                ),
-                                dbc.NavItem(
-                                    dbc.Button(
-                                        "Cell Cards",
-                                        id='cell-cards-button',
-                                        outline=True,
-                                        color="primary",
-                                        href="https://cellcards.org/index.php",
-                                        target='_blank',
-                                        style={"textTransform":"none"}
-                                    )
-                                ),
                                 dbc.NavItem(
                                     dbc.Button(
                                         "Lab Website",
@@ -3335,7 +3313,6 @@ class LayoutHandler:
 
         description = dbc.Card(
             children = [
-                #dbc.CardHeader("Description and Instructions"),
                 dbc.CardBody([
                     dbc.Button('Menu',id={'type':'sidebar-button','index':0},className='mb-3',color='primary',n_clicks=0),
                     dbc.Button("View/Hide Description",id={'type':'collapse-descrip','index':0},className='mb-3',color='primary',n_clicks=0,style={'marginLeft':'5px','display':'none'}),
@@ -3348,7 +3325,7 @@ class LayoutHandler:
                         target = '_blank',
                         n_clicks = 0,
                         href = 'https://ufl.qualtrics.com/jfe/form/SV_ag9QzBmvG5qEce2',
-                        style = {'marginLeft':'5px','display':'inline-block'}
+                        style = {'marginLeft':'5px','display':'inline-block'} if include_usability else {'display': 'none'}
                     ),
                     dbc.Button(
                         'Start Usability Study',
@@ -3356,7 +3333,7 @@ class LayoutHandler:
                         className='mb-3',
                         color = 'primary',
                         n_clicks=0,
-                        style={'marginLeft':'5px','display':'none'},
+                        style={'marginLeft':'5px','display':'none'} if include_usability else {'display': 'none'},
                         disabled=False
                     ),
                     html.Div(id='logged-in-user',children = [
@@ -4190,18 +4167,19 @@ class GirderHandler:
 
                 self.usability_users = updated_info
         except girder_client.HttpError:
-            self.usability_users = {}
+            self.usability_users = None
 
     def check_usability(self,username):
 
         # Checking if a given username is involved in the usability study. Returning info.
         user_info = None
-        if username in self.usability_users['usability_study_admins']:
-            user_info = {
-                'type':'admin'
-            }
-        elif username in list(self.usability_users['usability_study_users'].keys()):
-            user_info = self.usability_users['usability_study_users'][username]
+        if self.usability_users is not None:
+            if username in self.usability_users['usability_study_admins']:
+                user_info = {
+                    'type':'admin'
+                }
+            elif username in list(self.usability_users['usability_study_users'].keys()):
+                user_info = self.usability_users['usability_study_users'][username]
 
         return user_info
 

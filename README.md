@@ -72,6 +72,49 @@ In collaboration with:
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 
+## Installation:
+
+### Step 1: *Digital Slide Archive (DSA)*
+*FUSION* is run in conjunction with a running instance of [Digital Slide Archive (DSA)](https://github.com/DigitalSlideArchive/digital_slide_archive). For more information on how to initialize DSA, see [here](https://github.com/DigitalSlideArchive/digital_slide_archive/tree/master/devops/dsa).
+
+Create a user "fusionguest" either through the UI tools or through the included WebAPI.
+
+
+### Step 2: *FUSION Set Up*
+- Start by cloning the Github repo:
+
+```bash
+$ gh repo clone spborder/FUSION 
+```
+
+- Create a virtual environment and install packages in *requirements.txt*
+
+```bash
+$(venv_name) ~/ python -m pip install -r requirements.txt
+```
+
+- Assign environment variables corresponding to the URL of your desired *DSA* instance and the username and password for your *fusionguest* account.
+
+*Windows*
+```bash
+$(venv_name) ~/ $Env:DSA_USER="fusionguest"
+$(venv_name) ~/ $Env:DSA_PWORD="guestpassword"
+$(venv_name) ~/ $Env:DSA_URL="http://dsa_url:8080/api/v1" 
+```
+
+*Linux*
+```bash
+$(venv_name) ~/ export DSA_USER="fusionguest"
+$(venv_name) ~/ export DSA_PWORD="guestpassword"
+$(venv_name) ~/ export DSA_URL="http://dsa_url:8080/api/v1"
+```
+
+- Add the recommended plugins to your *DSA* instance. Note: This must be done using login for an admin-privileged account.
+```bash
+$(venv_name) ~/ python install_plugins.py
+```
+
+
 
 <!-- GETTING STARTED -->
 ## Release History:

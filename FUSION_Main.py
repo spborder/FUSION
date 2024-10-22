@@ -353,8 +353,11 @@ class FUSION:
             if n2:
                 self.dataset_handler.update_usability()
                 usability_info = self.dataset_handler.check_usability(user_data_store['login'])
-                usability_info['login'] = user_data_store['login']
-                collapse_children = self.layout_handler.gen_usability_report(usability_info,self.dataset_handler.usability_users)
+                if not usability_info is None:
+                    usability_info['login'] = user_data_store['login']
+                    collapse_children = self.layout_handler.gen_usability_report(usability_info,self.dataset_handler.usability_users)
+                else:
+                    collapse_children = no_update
                 if not is_open[-1]:
                     usability_color = ['success']
                 else:
@@ -5174,8 +5177,12 @@ class FUSION:
                 user_data_output['token'] = self.dataset_handler.user_token
 
                 if not user_info is None:
-                    usability_signup_style = {'display':'none'}
-                    usability_butt_style = {'marginLeft':'5px','display':'inline-block'}
+                    if not self.dataset_handler.usability_users is None:
+                        usability_signup_style = {'display':'none'}
+                        usability_butt_style = {'marginLeft':'5px','display':'inline-block'}
+                    else:
+                        usability_signup_style = {'display': 'none'}
+                        usability_butt_style = {'display': 'none'}
 
                 user_data_output = json.dumps(user_data_output)
 
@@ -5229,8 +5236,6 @@ class FUSION:
 
                 return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], no_update, long_plugin_components
 
-                return button_color, button_text, logged_in_user, upload_disabled, create_user_children, no_update, [usability_signup_style],[usability_butt_style], user_data_output
-
             else:
                 create_user_children = no_update
                 try:
@@ -5257,8 +5262,12 @@ class FUSION:
                     user_data_output = json.dumps(user_data_output)
 
                     if not user_info is None:
-                        usability_signup_style = {'display':'none'}
-                        usability_butt_style = {'marginLeft':'5px','display':'inline-block'}
+                        if not self.dataset_handler.usability_users is None:
+                            usability_signup_style = {'display':'none'}
+                            usability_butt_style = {'marginLeft':'5px','display':'inline-block'}
+                        else:
+                            usability_signup_style = {'display': 'none'}
+                            usability_butt_style = {'display': 'none'}
 
                     user_data_output = json.dumps(user_data_output)
 
@@ -8094,6 +8103,12 @@ def app(*args):
     assets_path = '/collection/FUSION Assets/'
     dataset_handler.get_asset_items(assets_path)
 
+    # Whether or not to include usability study components
+    if dataset_handler.usability_users is not None:
+        include_usability = True
+    else:
+        include_usability = False
+
     # Getting the slide data for DSASlide()
     slide_names = [
         {'label': i['name'],'value':i['_id']}
@@ -8113,7 +8128,7 @@ def app(*args):
 
     print(f'Generating layouts')
     layout_handler = LayoutHandler()
-    layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides, slide_dataset)
+    layout_handler.gen_initial_layout(slide_names,initial_user_info,dataset_handler.default_slides, slide_dataset,include_usability)
     layout_handler.gen_vis_layout(GeneHandler(),None)
     layout_handler.gen_builder_layout(dataset_handler,initial_user_info, None)
     layout_handler.gen_uploader_layout()
