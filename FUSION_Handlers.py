@@ -2624,7 +2624,6 @@ class LayoutHandler:
                     html.H3('Select a Dataset to add slides to current session'),
                     html.Hr(),
                     self.gen_info_button('Click on one of the circles in the far left of the table to load metadata for that dataset. You can also filter/sort the rows using the arrow icons in the column names and the text input in the first row'),
-
                     table_layout,
                     html.B(),
                     html.H3('Select Slides to include in current session'),

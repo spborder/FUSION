@@ -4878,7 +4878,7 @@ class FUSION:
                                 baseurl=self.dataset_handler.apiUrl,
                                 girderToken = user_data_store['token'],
                                 parentId=parentId,
-                                filetypes=['rds','h5ad']                 
+                                filetypes=['rds','h5ad', 'h5']                 
                             )
                         ],
                         style = {'marginTop':'10px','display':'inline-block'}
