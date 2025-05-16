@@ -24,4 +24,4 @@ RUN python3 -m pip freeze > pip_installed_packages.txt
 EXPOSE 8000
 
 ENTRYPOINT [ "python3" ]
-CMD ["FUSION_Main.py"]
+CMD ["FUSION.py"]
