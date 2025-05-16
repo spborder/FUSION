@@ -61,6 +61,7 @@
 
 ### Built With
 
+* [fusion-tools](https://github.com/spborder/fusion-tools/)
 * [Digital Slide Archive](https://digitalslidearchive.github.io/digital_slide_archive/)
 * [Dash](https://dash.plotly.com)
 * [Dash-Leaflet](https://dash-leaflet.com)
@@ -93,7 +94,7 @@ $ gh repo clone spborder/FUSION
 $(venv_name) ~/ python -m pip install -r requirements.txt
 ```
 
-- Assign environment variables corresponding to the URL of your desired *DSA* instance and the username and password for your *fusionguest* account.
+- For setting up linkage to a *DSA* instance, either set environment variables or modify the *FUSION.py* script to refer to the API URL, username, and password for guest users.
 
 *Windows*
 ```bash
@@ -117,7 +118,7 @@ $(venv_name) ~/ python install_plugins.py
 - Now you're good to go! Start up *FUSION* by running the main script:
 
 ```bash
-$(venv_name) ~/ python FUSION_Main.py
+$(venv_name) ~/ python FUSION.py
 ```
 
 Then open a browser to [http://localhost:8000](http://localhost:8000) to view the running instance.
@@ -129,6 +130,10 @@ See the included Dockerfile (*Dockerfile.dockerfile*) and modify as needed to po
 
 <!-- GETTING STARTED -->
 ## Release History:
+- 05/16/2025:
+    ### Major updates:
+    - Navigating *FUSION* to using components from *fusion-tools*
+
 - 05/02/2024:
     ### Major updates:
     - Progress bars (in a dcc.Modal component) indicating when annotations are currently being processed.
