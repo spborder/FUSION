@@ -14,7 +14,7 @@ def main():
     #dsa_url = os.environ.get('DSA_URL')
     #dsa_user = os.environ.get('DSA_USER')
     #dsa_pword = os.environ.get('DSA_PWORD')
-    dsa_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1/'
+    dsa_url = 'https://3-230-122-132.nip.io/api/v1'
     dsa_user = 'fusionguest'
     dsa_pword = 'Fus3yWasHere'
 
