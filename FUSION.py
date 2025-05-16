@@ -11,9 +11,15 @@ from fusion_tools.fusion import vis
 
 def main():
 
-    dsa_url = os.environ.get('DSA_URL')
-    dsa_user = os.environ.get('DSA_USER')
-    dsa_pword = os.environ.get('DSA_PWORD')
+    #dsa_url = os.environ.get('DSA_URL')
+    #dsa_user = os.environ.get('DSA_USER')
+    #dsa_pword = os.environ.get('DSA_PWORD')
+    dsa_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1/'
+    dsa_user = 'fusionguest'
+    dsa_pword = 'Fus3yWasHere'
+
+    host = os.environ.get('FUSION_HOST','0.0.0.0')
+    port = os.environ.get('FUSION_PORT',8000)
 
     if all([i is None for i in [dsa_url,dsa_user,dsa_pword]]):
         raise Exception('Need to initialize with at least the environment variable: DSA_URL')
@@ -29,7 +35,8 @@ def main():
         'pword': dsa_pword,# Optional
         'initialItems': initial_items,
         'app_options': {
-            'port': 8000
+            'host': host,
+            'port': port
         }
     }
 
