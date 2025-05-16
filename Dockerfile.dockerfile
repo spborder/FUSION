@@ -17,7 +17,6 @@ WORKDIR /
 RUN git clone https://github.com/spborder/FUSION.git
 RUN echo "Listing contents:" && ls -al /
 
-WORKDIR /FUSION
 RUN python3 -m pip install -r requirements.txt --no-cache-dir
 RUN python3 -m pip freeze > pip_installed_packages.txt
 
