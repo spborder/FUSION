@@ -8,12 +8,11 @@ import os
 
 from fusion_tools.fusion import vis
 
+import waitress
+
 
 def main():
 
-    #dsa_url = os.environ.get('DSA_URL')
-    #dsa_user = os.environ.get('DSA_USER')
-    #dsa_pword = os.environ.get('DSA_PWORD')
     dsa_url = 'https://3-230-122-132.nip.io/api/v1'
     dsa_user = 'fusionguest'
     dsa_pword = 'Fus3yWasHere'
@@ -41,7 +40,9 @@ def main():
     }
 
     fusion_vis = vis.get_layout(args_dict)
-    fusion_vis.start()
+    #fusion_vis.start()
+
+    waitress.serve(fusion_vis.viewer_app.server,host = host, port = port, threads = 16)
 
 if __name__=='__main__':
     main()
