@@ -8,8 +8,6 @@ import os
 
 from fusion_tools.fusion import vis
 
-import waitress
-
 
 def main():
 
@@ -19,19 +17,23 @@ def main():
 
     host = os.environ.get('FUSION_HOST','0.0.0.0')
     port = os.environ.get('FUSION_PORT',8000)
+    db_path = os.environ.get('DATABASE_PATH','./.fusion_assets/fusion_database.db')
 
     if all([i is None for i in [dsa_url,dsa_user,dsa_pword]]):
         raise Exception('Need to initialize with at least the environment variable: DSA_URL')
 
     initial_items = [
-        '6495a4e03e6ae3107da10dc5',
-        '6495a4df3e6ae3107da10dc2'
+        '64ef9c712d82d04be3e2b330',
+        '64f542322d82d04be3e39e94',
+        '6495a4df3e6ae3107da10dc2',
+        '6495a4e03e6ae3107da10dc5'
     ] 
 
     args_dict = {
         'girderApiUrl': dsa_url,
         'user': dsa_user,# Optional
-        'pword': dsa_pword,# Optional
+        'pword': dsa_pword,# Optional,
+        'database': db_path,
         'initialItems': initial_items,
         'app_options': {
             'host': host,
@@ -40,9 +42,7 @@ def main():
     }
 
     fusion_vis = vis.get_layout(args_dict)
-    #fusion_vis.start()
-
-    waitress.serve(fusion_vis.viewer_app.server,host = host, port = port, threads = 16)
+    fusion_vis.start()
 
 if __name__=='__main__':
     main()
