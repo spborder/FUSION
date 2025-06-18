@@ -1,1 +1,1 @@
-fusion-tools[interactive]==3.6.7
+fusion-tools[interactive]==3.6.8
