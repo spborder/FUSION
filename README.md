@@ -45,7 +45,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/spborder/FUSION">
-    <img src="assets/Example_Pic.jpeg" alt="Screenshot" width="100%">
+    <img src="assets/example_screenshot.PNG" alt="Screenshot" width="100%">
   </a>
 
 <h3 align="center">FUSION</h3>
