@@ -162,7 +162,7 @@ See the included Dockerfile (*Dockerfile.dockerfile*) and modify as needed to po
 
 Distributed under the MIT License. See `LICENSE` for more information.
 
-“©Copyright 2023 University of Florida Research Foundation, Inc. All Rights Reserved.”
+“©Copyright 2023-2025 University of Florida Research Foundation, Inc. All Rights Reserved.” (For T19165, FUSION)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
